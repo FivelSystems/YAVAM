@@ -1,4 +1,4 @@
-# YAVAM (Yet Another VAR Manager)
+# YAVAM (Yet Another VaM Addon Manager)
 
 **YAVAM** is a desktop tool designed to manage `.var` files (Virt-A-Mate archives). It provides a modern, grid-based dashboard to browse, filter, and organize your package collection.
 
