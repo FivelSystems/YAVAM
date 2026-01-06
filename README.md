@@ -58,6 +58,14 @@ We have included batch scripts for convenience:
     ```
     The output binary will be in `build/bin/`.
 
+## Screenshots
+
+![Dashboard](docs/images/dashboard.png)
+*The main dashboard view showing the responsive grid and sidebar.*
+
+![Context Menu](docs/images/context_menu.png)
+*Right-click context menu for quick actions like Favorites and Hiding.*
+
 ## Important Notes
 
 *   **AI Development**: This software was written with the assistance of an AI coding agent.
