@@ -1,0 +1,21 @@
+
+// Context Menu State
+interface ContextMenuState {
+    open: boolean;
+    x: number;
+    y: number;
+    pkg: VarPackage | null;
+}
+const [contextMenu, setContextMenu] = useState<ContextMenuState>({ open: false, x: 0, y: 0, pkg: null });
+
+const handleContextMenu = (e: React.MouseEvent, pkg: VarPackage) => {
+    e.preventDefault();
+    setContextMenu({
+        open: true,
+        x: e.clientX,
+        y: e.clientY,
+        pkg: pkg
+    });
+};
+
+const closeContextMenu = () => setContextMenu({ ...contextMenu, open: false });

@@ -1,0 +1,21 @@
+{
+    "name": "varmanager",
+    "outputfilename": "varmanager",
+    "frontend:install": "npm install",
+    "frontend:build": "npm run build",
+    "frontend:dev:watcher": "npm run dev",
+    "frontend:dev:serverUrl": "auto",
+    "author": {
+        "name": "User",
+        "email": "user@example.com"
+    },
+    "info": {
+        "companyName": "User",
+        "productName": "VAR Manager",
+        "productVersion": "1.0.0",
+        "copyright": "Copyright \u00a9 2024",
+        "comments": "Manage your Virt-A-Mate addon packages"
+    },
+    "wailsjsdir": "./frontend/src",
+    "version": "2"
+}

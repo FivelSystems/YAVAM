@@ -1,0 +1,31 @@
+# Wails
+build/bin
+frontend/dist
+frontend/node_modules
+
+# Go
+go.work
+go.work.sum
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Node
+node_modules
+npm-debug.log
+yarn-error.log
+.env
+.env.local
+
+# IDEs
+.vscode
+.idea
+*.swp
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Local App Data
+user_preferences.json
