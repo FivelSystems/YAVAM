@@ -1,36 +1,25 @@
 package manager
 
 import (
+	"archive/zip"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
-	"strings"
-
 	"strconv"
+	"strings"
 	"sync"
 	"varmanager/pkg/models"
 	"varmanager/pkg/parser"
 	"varmanager/pkg/scanner"
 )
 
-type UserPreferences struct {
-	Favorites []string `json:"favorites"`
-	Hidden    []string `json:"hidden"`
-}
-
-type ScanResult struct {
-	Packages []models.VarPackage `json:"packages"`
-	Tags     []string            `json:"tags"`
-}
-
 type Manager struct {
-	scanner     *scanner.Scanner
-	preferences UserPreferences
-	prefPath    string
-	mu          sync.Mutex
+	scanner *scanner.Scanner
+	mu      sync.Mutex
 }
 
 func NewManager() *Manager {
@@ -39,34 +28,18 @@ func NewManager() *Manager {
 	os.MkdirAll(appDir, 0755)
 
 	m := &Manager{
-		scanner:  scanner.NewScanner(),
-		prefPath: filepath.Join(appDir, "user_preferences.json"),
+		scanner: scanner.NewScanner(),
 	}
-	m.loadPreferences()
 	return m
 }
 
-// ScanAndAnalyze performs scanning, parsing, duplicate detection, and dependency checking
-func (m *Manager) ScanAndAnalyze(vamPath string) (ScanResult, error) {
-	// 1. Scan files
-	rawPkgs, err := m.scanner.ScanForPackages(vamPath)
+// ScanAndAnalyze scans the directory and returns metadata
+func (m *Manager) ScanAndAnalyze(rootPath string) (models.ScanResult, error) {
+	rawPkgs, err := m.scanner.ScanForPackages(rootPath)
 	if err != nil {
-		return ScanResult{}, err
+		return models.ScanResult{}, err
 	}
 
-	// Snapshot preferences for fast lookup
-	m.mu.Lock()
-	favMap := make(map[string]bool)
-	hideMap := make(map[string]bool)
-	for _, f := range m.preferences.Favorites {
-		favMap[f] = true
-	}
-	for _, h := range m.preferences.Hidden {
-		hideMap[h] = true
-	}
-	m.mu.Unlock()
-
-	// 2. Parse Metadata (Concurrent)
 	var processedPkgs []models.VarPackage
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -143,8 +116,9 @@ func (m *Manager) ScanAndAnalyze(vamPath string) (ScanResult, error) {
 			}
 
 			// Apply User Preferences
-			p.IsFavorite = favMap[p.FileName]
-			p.IsHidden = hideMap[p.FileName]
+			// Removed features
+			// p.IsFavorite = favMap[p.FileName]
+			// p.IsHidden = hideMap[p.FileName]
 
 			// Collect tags (assuming generic description search for now,
 			// checking if dependencies have categories or if we extract from specific json)
@@ -182,7 +156,7 @@ func (m *Manager) ScanAndAnalyze(vamPath string) (ScanResult, error) {
 	}
 	sort.Strings(tags)
 
-	return ScanResult{Packages: processedPkgs, Tags: tags}, nil
+	return models.ScanResult{Packages: processedPkgs, Tags: tags}, nil
 }
 
 func (m *Manager) resolveDuplicates(pkgs []models.VarPackage) []models.VarPackage {
@@ -425,85 +399,178 @@ func (m *Manager) validatePath(path string, root string) bool {
 
 // User Configuration Methods
 
-func (m *Manager) loadPreferences() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	data, err := os.ReadFile(m.prefPath)
-	if err != nil {
-		return // Ignore error, start empty
-	}
-	json.Unmarshal(data, &m.preferences)
+// OpenFolder opens the folder containing the file in File Explorer
+func (m *Manager) OpenFolder(path string) error {
+	// windows: explorer /select,"path"
+	cmd := exec.Command("explorer", "/select,", path)
+	return cmd.Start()
 }
 
-func (m *Manager) savePreferences() error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+// DeleteToTrash moves the file to the Recycle Bin using PowerShell
+func (m *Manager) DeleteToTrash(path string) error {
+	// PowerShell command to delete to recycle bin
+	// Add-Type -AssemblyName Microsoft.VisualBasic
+	// [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($path, 'OnlyErrorDialogs', 'SendToRecycleBin')
 
-	data, err := json.MarshalIndent(m.preferences, "", "  ")
+	// Safety check: path exist?
+	if _, err := os.Stat(path); err != nil {
+		return err
+	}
+
+	psCmd := fmt.Sprintf(`
+        Add-Type -AssemblyName Microsoft.VisualBasic;
+        [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile('%s', 'OnlyErrorDialogs', 'SendToRecycleBin')
+    `, path)
+
+	cmd := exec.Command("powershell", "-NoProfile", "-Command", psCmd)
+	return cmd.Run()
+}
+
+// CopyFileToClipboard copies the file object to the clipboard (so it can be pasted in Explorer)
+func (m *Manager) CopyFileToClipboard(path string) error {
+	// PowerShell: Set-Clipboard -Path "path"
+	// Note: Set-Clipboard -Path is available in PS 5.0+
+	cmd := exec.Command("powershell", "-NoProfile", "-Command", fmt.Sprintf("Set-Clipboard -Path '%s'", path))
+	return cmd.Run()
+}
+
+// CutFileToClipboard copies the file to clipboard with "Move" effect (Cut)
+func (m *Manager) CutFileToClipboard(path string) error {
+	// To perform a "Cut", we need to set the "Preferred DropEffect" to "Move" (2).
+	// PowerShell's Set-Clipboard doesn't support this native flag easily.
+	// We use C# via Add-Type.
+
+	psCmd := fmt.Sprintf(`
+		Add-Type -AssemblyName System.Windows.Forms
+		$paths = [System.Collections.Specialized.StringCollection]::new()
+		$paths.Add('%s')
+		$data = [System.Windows.Forms.DataObject]::new()
+		$data.SetFileDropList($paths)
+		
+		# 2 = Move, 5 = Copy
+		$moveEffect = [byte[]](2, 0, 0, 0)
+		$ms = [System.IO.MemoryStream]::new($moveEffect)
+		$data.SetData("Preferred DropEffect", $ms)
+		
+		[System.Windows.Forms.Clipboard]::SetDataObject($data, $true)
+	`, path)
+
+	cmd := exec.Command("powershell", "-NoProfile", "-Command", psCmd)
+	return cmd.Run()
+}
+
+// DownloadPackage copies the package to the destination folder
+func (m *Manager) DownloadPackage(pkgPath string, destDir string) error {
+	// Check source
+	sourceFile, err := os.Open(pkgPath)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(m.prefPath, data, 0644)
+	defer sourceFile.Close()
+
+	// Ensure destination directory exists
+	// os.Stat returns error if not exists
+	if _, err := os.Stat(destDir); os.IsNotExist(err) {
+		return fmt.Errorf("destination directory does not exist: %s", destDir)
+	}
+
+	// Create destination file
+	fileName := filepath.Base(pkgPath)
+	destPath := filepath.Join(destDir, fileName)
+
+	destFile, err := os.Create(destPath)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	_, err = io.Copy(destFile, sourceFile)
+	return err
 }
 
-func (m *Manager) ToggleFavorite(pkgName string) error {
-	m.mu.Lock()
-	exists := false
-	for i, name := range m.preferences.Favorites {
-		if name == pkgName {
-			// Remove
-			m.preferences.Favorites = append(m.preferences.Favorites[:i], m.preferences.Favorites[i+1:]...)
-			exists = true
-			break
-		}
+// GetPackageContents scans a .var file and returns a list of its displayable contents
+func (m *Manager) GetPackageContents(pkgPath string) ([]models.PackageContent, error) {
+	r, err := zip.OpenReader(pkgPath)
+	if err != nil {
+		return nil, err
 	}
-	if !exists {
-		m.preferences.Favorites = append(m.preferences.Favorites, pkgName)
-	}
-	m.mu.Unlock() // Unlock before save to avoid deadlock if save uses lock (it does)
-	return m.savePreferences()
-}
+	defer r.Close()
 
-func (m *Manager) ToggleHidden(pkgName string) error {
-	m.mu.Lock()
-	exists := false
-	for i, name := range m.preferences.Hidden {
-		if name == pkgName {
-			// Remove
-			m.preferences.Hidden = append(m.preferences.Hidden[:i], m.preferences.Hidden[i+1:]...)
-			exists = true
-			break
-		}
-	}
-	if !exists {
-		m.preferences.Hidden = append(m.preferences.Hidden, pkgName)
-	}
-	m.mu.Unlock()
-	return m.savePreferences()
-}
+	var contents []models.PackageContent
+	// Map to store thumbnails found to match them later
+	// key: generic path without extension, value: *zip.File
+	thumbnails := make(map[string]*zip.File)
 
-func (m *Manager) isFavorite(pkgName string) bool {
-	// m.mu.Lock() // Caller usually holds lock? No, ScanAndAnalyze doesn't hold m.mu for the whole time.
-	// But preferences might be read concurrently?
-	// For now, let's just lock briefly.
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for _, name := range m.preferences.Favorites {
-		if name == pkgName {
-			return true
+	// First pass: Index files and find potential content
+	for _, f := range r.File {
+		if f.FileInfo().IsDir() {
+			continue
 		}
-	}
-	return false
-}
 
-func (m *Manager) isHidden(pkgName string) bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for _, name := range m.preferences.Hidden {
-		if name == pkgName {
-			return true
+		lowerName := strings.ToLower(f.Name) // internal zip paths are usually forward slashes
+
+		// Index thumbnails
+		if strings.HasSuffix(lowerName, ".jpg") || strings.HasSuffix(lowerName, ".png") {
+			noExt := strings.TrimSuffix(lowerName, filepath.Ext(lowerName))
+			thumbnails[noExt] = f
 		}
 	}
-	return false
+
+	// Second pass: Identify Content
+	for _, f := range r.File {
+		if f.FileInfo().IsDir() {
+			continue
+		}
+
+		lowerName := strings.ToLower(f.Name)
+		contentType := ""
+
+		// Scenes
+		if strings.HasPrefix(lowerName, "saves/scene/") && strings.HasSuffix(lowerName, ".json") {
+			contentType = "Scene"
+		} else if strings.HasPrefix(lowerName, "saves/person/appearance/") && strings.HasSuffix(lowerName, ".vap") {
+			contentType = "Look"
+		} else if strings.HasPrefix(lowerName, "custom/clothing/") && strings.HasSuffix(lowerName, ".vap") {
+			contentType = "Clothing"
+		} else if strings.HasPrefix(lowerName, "custom/hair/") && strings.HasSuffix(lowerName, ".vap") {
+			contentType = "Hair"
+			// } else if strings.HasPrefix(lowerName, "custom/assets/") {
+			// 	contentType = "Asset" // Too noisy usually
+		}
+
+		if contentType != "" {
+			pc := models.PackageContent{
+				FilePath: f.Name,
+				FileName: filepath.Base(f.Name),
+				Type:     contentType,
+				Size:     f.FileInfo().Size(),
+			}
+
+			// Look for matching thumbnail
+			noExt := strings.TrimSuffix(lowerName, filepath.Ext(lowerName))
+			if thumbFile, ok := thumbnails[noExt]; ok {
+				rc, err := thumbFile.Open()
+				if err == nil {
+					data, err := io.ReadAll(rc)
+					rc.Close()
+					if err == nil {
+						pc.ThumbnailBase64 = base64.StdEncoding.EncodeToString(data)
+					}
+				}
+			}
+
+			contents = append(contents, pc)
+		}
+	}
+
+	// Sort contents: Scenes first, then Looks, then others
+	sort.Slice(contents, func(i, j int) bool {
+		order := map[string]int{"Scene": 0, "Look": 1, "Clothing": 2, "Hair": 3}
+		if order[contents[i].Type] != order[contents[j].Type] {
+			return order[contents[i].Type] < order[contents[j].Type]
+		}
+		return contents[i].FileName < contents[j].FileName
+	})
+
+	return contents, nil
 }

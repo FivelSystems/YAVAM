@@ -1,14 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Package, Search, RefreshCw, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { RefreshCw, Search, X, ChevronLeft, ChevronRight, Package, PanelLeft, LayoutGrid, List } from 'lucide-react';
+import clsx from 'clsx';
+import DragDropOverlay from './components/DragDropOverlay';
+import ContextMenu from './components/ContextMenu';
+import LoadingToast from './components/LoadingToast';
 import CardGrid from './components/CardGrid';
 import Sidebar from './components/Sidebar';
-import DragDropOverlay from './components/DragDropOverlay';
-import SettingsModal from './components/SettingsModal';
-import LoadingToast from './components/LoadingToast';
-import MissingDepsModal from './components/MissingDepsModal';
+
 import VersionResolutionModal from './components/VersionResolutionModal';
-import ContextMenu from './components/ContextMenu';
+import SettingsModal from './components/SettingsModal';
+import ConfirmationModal from './components/ConfirmationModal';
 import TagSearch from './components/TagSearch';
+import RightSidebar from './components/RightSidebar';
 
 // Define types based on our Go models
 export interface VarPackage {
@@ -28,13 +32,14 @@ export interface VarPackage {
     hasThumbnail: boolean;
     missingDeps: string[];
     isDuplicate: boolean;
-    isFavorite: boolean;
-    isHidden: boolean;
     type?: string;
     tags?: string[];
 }
 
 function App() {
+    // New Handler for Sidebar Selection
+
+    const [selectedPackage, setSelectedPackage] = useState<VarPackage | null>(null);
     const [vamPath, setVamPath] = useState<string>(localStorage.getItem("vamPath") || "");
     const [packages, setPackages] = useState<VarPackage[]>([]);
     const [filteredPkgs, setFilteredPkgs] = useState<VarPackage[]>([]);
@@ -54,16 +59,51 @@ function App() {
 
     // Settings
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    // const [showHidden, setShowHidden] = useState(false); // Removed for now as we use filter tabs
+    const [downloadPath, setDownloadPath] = useState<string>(localStorage.getItem("downloadPath") || "");
+    const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768);
+    const [viewMode, setViewMode] = useState<'grid' | 'list'>(window.innerWidth < 768 ? 'list' : 'grid');
 
-    // Missing Dependencies Modal State
-    const [missingDepsData, setMissingDepsData] = useState<{ open: boolean, pkgName: string, deps: string[] }>({ open: false, pkgName: "", deps: [] });
+    useEffect(() => {
+        const handleResize = () => {
+            const width = window.innerWidth;
+
+            // Sidebar Logic
+            if (width < 768) setIsSidebarOpen(false);
+            else setIsSidebarOpen(true);
+
+            // View Mode Logic - Mobile Phone Check
+            if (width < 768) {
+                setViewMode('list');
+            } else {
+                setViewMode('grid');
+            }
+        };
+
+        // Run once on mount to ensure correct state
+        // handleResize(); // intentionally skipped to respect initial state, but listener handles changes.
+
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+
 
     // Version Resolution State
     const [resolveData, setResolveData] = useState<{ open: boolean, duplicates: VarPackage[] }>({ open: false, duplicates: [] });
 
     // Context Menu State
     const [contextMenu, setContextMenu] = useState<{ open: boolean, x: number, y: number, pkg: VarPackage | null }>({ open: false, x: 0, y: 0, pkg: null });
+
+    // Delete Confirmation State
+    const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean, pkg: VarPackage | null }>({ open: false, pkg: null });
+
+    const handlePackageClick = (pkg: VarPackage) => {
+        if (selectedPackage?.filePath === pkg.filePath) {
+            setSelectedPackage(null);
+        } else {
+            setSelectedPackage(pkg);
+        }
+    };
 
     const handleContextMenu = (e: React.MouseEvent, pkg: VarPackage) => {
         e.preventDefault();
@@ -75,7 +115,7 @@ function App() {
         });
     };
 
-    // Filters (Moved to top state)
+    // Filters
 
     useEffect(() => {
         if (vamPath) {
@@ -111,13 +151,6 @@ function App() {
         if (currentFilter === "disabled") res = res.filter(p => !p.isEnabled);
         if (currentFilter === "missing-deps") res = res.filter(p => p.missingDeps && p.missingDeps.length > 0);
         if (currentFilter === "duplicates") res = res.filter(p => p.isDuplicate);
-        if (currentFilter === "favorites") res = res.filter(p => p.isFavorite);
-        if (currentFilter === "hidden") res = res.filter(p => p.isHidden);
-
-        // Hide hidden packages by default unless looking at Hidden tab
-        if (currentFilter !== "hidden") {
-            res = res.filter(p => !p.isHidden);
-        }
 
         // Creator Filter
         if (selectedCreator) res = res.filter(p => p.meta?.creator === selectedCreator);
@@ -193,29 +226,70 @@ function App() {
         }
     };
 
-    const toggleFavorite = async (pkg: VarPackage) => {
+    // Context Menu Handlers
+    const handleOpenFolder = async (pkg: VarPackage) => {
         try {
             // @ts-ignore
-            await window.go.main.App.ToggleFavorite(pkg.fileName);
-            setPackages(prev => prev.map(p => p.fileName === pkg.fileName ? { ...p, isFavorite: !p.isFavorite } : p));
+            await window.go.main.App.OpenFolderInExplorer(pkg.filePath);
         } catch (e) { console.error(e); }
     };
 
-    const toggleHidden = async (pkg: VarPackage) => {
+    // Updated to use Copy Path
+    const handleCopyPath = async (pkg: VarPackage) => {
         try {
-            // @ts-ignore
-            await window.go.main.App.ToggleHidden(pkg.fileName);
-            setPackages(prev => prev.map(p => p.fileName === pkg.fileName ? { ...p, isHidden: !p.isHidden } : p));
+            await navigator.clipboard.writeText(pkg.filePath);
+            // Optional: Toast feedback?
         } catch (e) { console.error(e); }
     };
 
-    const handleShowMissingDeps = (pkg: VarPackage) => {
-        setMissingDepsData({
-            open: true,
-            pkgName: pkg.meta.packageName || pkg.fileName,
-            deps: pkg.missingDeps
-        });
+    const handleCopyFile = async (pkg: VarPackage) => {
+        try {
+            // @ts-ignore
+            await window.go.main.App.CopyFileToClipboard(pkg.filePath);
+        } catch (e) { console.error(e); }
     };
+
+    const handleCutFile = async (pkg: VarPackage) => {
+        try {
+            // @ts-ignore
+            await window.go.main.App.CutFileToClipboard(pkg.filePath);
+        } catch (e) { console.error(e); }
+    };
+
+    const handleDownloadPackage = async (pkg: VarPackage) => {
+        try {
+            // @ts-ignore
+            await window.go.main.App.DownloadPackage(pkg.filePath, downloadPath);
+            // Optional: Toast or notification here
+        } catch (e) {
+            console.error(e);
+            alert("Failed to download: " + e);
+        }
+    };
+
+    const handleDeleteClick = (pkg: VarPackage) => {
+        setDeleteConfirm({ open: true, pkg });
+    };
+
+    // ...
+
+
+
+    const handleConfirmDelete = async () => {
+        if (deleteConfirm.pkg) {
+            try {
+                // @ts-ignore
+                await window.go.main.App.DeleteFileToRecycleBin(deleteConfirm.pkg.filePath);
+                setDeleteConfirm({ open: false, pkg: null });
+                scanPackages(); // Refresh list after delete
+            } catch (e) {
+                console.error(e);
+                alert("Failed to delete file: " + e); // Fallback alert for error
+            }
+        }
+    };
+
+
 
     const handleOpenResolve = (pkg: VarPackage) => {
         // Find enabled packages with same Creator & PackageName
@@ -244,14 +318,36 @@ function App() {
                 <SettingsModal
                     isOpen={isSettingsOpen}
                     onClose={() => setIsSettingsOpen(false)}
-                    currentPath={vamPath}
-                    onSavePath={(path) => {
-                        setVamPath(path);
-                        localStorage.setItem("vamPath", path);
-                        setIsSettingsOpen(false); // Close modal after saving
+                    libraryPath={vamPath}
+                    onBrowseLibrary={async () => {
+                        try {
+                            // @ts-ignore
+                            const p = await window.go.main.App.SelectDirectory();
+                            if (p) {
+                                setVamPath(p);
+                                localStorage.setItem("vamPath", p);
+                                setIsSettingsOpen(false);
+                            }
+                        } catch (e) { console.error(e); }
+                    }}
+                    downloadPath={downloadPath}
+                    onBrowseDownload={async () => {
+                        try {
+                            // @ts-ignore
+                            const p = await window.go.main.App.SelectDirectory();
+                            if (p) {
+                                setDownloadPath(p);
+                                localStorage.setItem("downloadPath", p);
+                            }
+                        } catch (e) { console.error(e); }
+                    }}
+                    onResetDownload={() => {
+                        setDownloadPath("");
+                        localStorage.removeItem("downloadPath");
                     }}
                 />
                 <div className="text-center space-y-6 max-w-md w-full p-8 bg-gray-800 rounded-xl shadow-2xl border border-gray-700">
+                    {/* ... (Welcome content same as before) ... */}
                     <div className="bg-blue-600 w-16 h-16 rounded-xl flex items-center justify-center mx-auto shadow-lg shadow-blue-900/20">
                         <Package size={32} className="text-white" />
                     </div>
@@ -296,12 +392,7 @@ function App() {
         <div className="flex h-screen bg-gray-900 text-white overflow-hidden relative">
             <DragDropOverlay onDrop={handleDrop} />
             <LoadingToast visible={loading} />
-            <MissingDepsModal
-                isOpen={missingDepsData.open}
-                onClose={() => setMissingDepsData(prev => ({ ...prev, open: false }))}
-                pkgName={missingDepsData.pkgName}
-                missingDeps={missingDepsData.deps}
-            />
+
             <VersionResolutionModal
                 isOpen={resolveData.open}
                 onClose={() => setResolveData(prev => ({ ...prev, open: false }))}
@@ -311,28 +402,93 @@ function App() {
             <SettingsModal
                 isOpen={isSettingsOpen}
                 onClose={() => setIsSettingsOpen(false)}
-                currentPath={vamPath}
-                onSavePath={(path) => {
-                    setVamPath(path);
-                    localStorage.setItem("vamPath", path);
-                    setIsSettingsOpen(false); // Close modal after saving
+                libraryPath={vamPath}
+                onBrowseLibrary={async () => {
+                    try {
+                        // @ts-ignore
+                        const p = await window.go.main.App.SelectDirectory();
+                        if (p) {
+                            setVamPath(p);
+                            localStorage.setItem("vamPath", p);
+                        }
+                    } catch (e) { console.error(e); }
+                }}
+                downloadPath={downloadPath}
+                onBrowseDownload={async () => {
+                    try {
+                        // @ts-ignore
+                        const p = await window.go.main.App.SelectDirectory();
+                        if (p) {
+                            setDownloadPath(p);
+                            localStorage.setItem("downloadPath", p);
+                        }
+                    } catch (e) { console.error(e); }
+                }}
+                onResetDownload={() => {
+                    setDownloadPath("");
+                    localStorage.removeItem("downloadPath");
                 }}
             />
 
-            <Sidebar
-                packages={packages}
-                onFilterCreator={setSelectedCreator}
-                currentFilter={currentFilter}
-                setFilter={setCurrentFilter}
-                selectedCreator={selectedCreator}
-                selectedType={selectedType}
-                onFilterType={setSelectedType}
-                onOpenSettings={() => setIsSettingsOpen(true)}
+            <ConfirmationModal
+                isOpen={deleteConfirm.open}
+                onClose={() => setDeleteConfirm({ open: false, pkg: null })}
+                onConfirm={handleConfirmDelete}
+                title="Delete Package"
+                message={`Are you sure you want to delete "${deleteConfirm.pkg?.fileName}"? It will be moved to the Recycle Bin.`}
+                confirmText="Delete"
+                confirmStyle="danger"
             />
 
-            <main className="flex-1 flex flex-col overflow-hidden">
-                <header className="p-4 bg-gray-800 border-b border-gray-700 flex justify-between items-center shadow-md z-10">
+            {/* Hide sidebar on small screens when not needed, or use CSS media queries */}
+            {/* Mobile Overlay Backdrop */}
+            <AnimatePresence>
+                {isSidebarOpen && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => setIsSidebarOpen(false)}
+                        className="fixed inset-0 bg-black/50 z-30 md:hidden"
+                    />
+                )}
+            </AnimatePresence>
+
+            {/* Sidebar Wrapper */}
+            <div className={clsx(
+                "h-full z-40 transition-all duration-300 ease-in-out bg-gray-800 shrink-0",
+                // Desktop: Relative positioning for flow
+                "md:relative",
+                // Mobile: Fixed absolute positioning
+                "fixed inset-y-0 left-0 shadow-2xl md:shadow-none",
+                // Open/Close States
+                isSidebarOpen ? "w-64 translate-x-0" : "w-0 -translate-x-full md:translate-x-0 md:w-0 overflow-hidden"
+            )}>
+                <div className="w-64 h-full"> {/* Inner container to maintain width while parent animates */}
+                    <Sidebar
+                        packages={packages}
+                        currentFilter={currentFilter}
+                        setFilter={setCurrentFilter}
+                        selectedCreator={selectedCreator}
+                        onFilterCreator={setSelectedCreator}
+                        selectedType={selectedType}
+                        onFilterType={setSelectedType}
+                        onOpenSettings={() => setIsSettingsOpen(true)}
+                    />
+                </div>
+            </div>
+
+            <main className="flex-1 flex flex-col overflow-hidden w-full">
+                <header className="p-4 bg-gray-800 border-b border-gray-700 flex justify-between items-center shadow-md z-10 shrink-0">
                     <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                            className="p-2 -ml-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+                            title="Toggle Sidebar"
+                        >
+                            <PanelLeft size={20} />
+                        </button>
+
                         <div className="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-lg w-64">
                             <Search size={18} className="text-gray-400" />
                             <input
@@ -341,6 +497,22 @@ function App() {
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
+                            <div className="flex items-center gap-1 bg-gray-700 p-1 rounded-lg">
+                                <button
+                                    onClick={() => setViewMode('grid')}
+                                    className={clsx("p-1.5 rounded transition-all", viewMode === 'grid' ? "bg-gray-600 text-white shadow" : "text-gray-400 hover:text-gray-200")}
+                                    title="Grid View"
+                                >
+                                    <LayoutGrid size={18} />
+                                </button>
+                                <button
+                                    onClick={() => setViewMode('list')}
+                                    className={clsx("p-1.5 rounded transition-all", viewMode === 'list' ? "bg-gray-600 text-white shadow" : "text-gray-400 hover:text-gray-200")}
+                                    title="List View"
+                                >
+                                    <List size={18} />
+                                </button>
+                            </div>
                         </div>
 
                         <TagSearch
@@ -371,41 +543,50 @@ function App() {
                     </div>
                 </header>
 
-                <div className="flex-1 overflow-auto p-4 custom-scrollbar flex flex-col">
-                    <div className="flex-1">
+                <div className="flex-1 flex overflow-hidden">
+                    <div className="flex-1 overflow-auto p-4 custom-scrollbar flex flex-col">
                         <CardGrid
                             packages={filteredPkgs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)}
-                            onShowMissing={handleShowMissingDeps}
-                            // @ts-ignore
-                            onResolve={handleOpenResolve}
                             currentPath={vamPath}
                             totalCount={packages.length}
                             onContextMenu={handleContextMenu}
+                            onSelect={handlePackageClick}
+                            selectedPkgId={selectedPackage?.filePath}
+                            viewMode={viewMode}
                         />
+
+                        {filteredPkgs.length > itemsPerPage && (
+                            <div className="flex justify-center items-center gap-4 py-4 mt-4 border-t border-gray-700 bg-gray-800/50 backdrop-blur sticky bottom-0">
+                                <button
+                                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                    disabled={currentPage === 1}
+                                    className="p-2 rounded bg-gray-700 disabled:opacity-50 hover:bg-gray-600 disabled:hover:bg-gray-700 transition"
+                                >
+                                    <ChevronLeft size={20} />
+                                </button>
+                                <span className="text-gray-400">
+                                    Page {currentPage} of {Math.ceil(filteredPkgs.length / itemsPerPage)}
+                                </span>
+                                <button
+                                    onClick={() => setCurrentPage(p => Math.min(Math.ceil(filteredPkgs.length / itemsPerPage), p + 1))}
+                                    disabled={currentPage === Math.ceil(filteredPkgs.length / itemsPerPage)}
+                                    className="p-2 rounded bg-gray-700 disabled:opacity-50 hover:bg-gray-600 disabled:hover:bg-gray-700 transition"
+                                >
+                                    <ChevronRight size={20} />
+                                </button>
+                            </div>
+                        )}
                     </div>
 
-                    {filteredPkgs.length > itemsPerPage && (
-                        <div className="flex justify-center items-center gap-4 py-4 mt-4 border-t border-gray-700 bg-gray-800/50 backdrop-blur sticky bottom-0">
-                            {/* ... pagination buttons ... keep same ... */}
-                            <button
-                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                disabled={currentPage === 1}
-                                className="p-2 rounded bg-gray-700 disabled:opacity-50 hover:bg-gray-600 disabled:hover:bg-gray-700 transition"
-                            >
-                                <ChevronLeft size={20} />
-                            </button>
-                            <span className="text-gray-400">
-                                Page {currentPage} of {Math.ceil(filteredPkgs.length / itemsPerPage)}
-                            </span>
-                            <button
-                                onClick={() => setCurrentPage(p => Math.min(Math.ceil(filteredPkgs.length / itemsPerPage), p + 1))}
-                                disabled={currentPage === Math.ceil(filteredPkgs.length / itemsPerPage)}
-                                className="p-2 rounded bg-gray-700 disabled:opacity-50 hover:bg-gray-600 disabled:hover:bg-gray-700 transition"
-                            >
-                                <ChevronRight size={20} />
-                            </button>
-                        </div>
-                    )}
+                    <AnimatePresence>
+                        {selectedPackage && (
+                            <RightSidebar
+                                pkg={selectedPackage}
+                                onClose={() => setSelectedPackage(null)}
+                                onResolve={handleOpenResolve}
+                            />
+                        )}
+                    </AnimatePresence>
                 </div>
             </main>
 
@@ -417,8 +598,12 @@ function App() {
                     pkg={contextMenu.pkg}
                     onClose={() => setContextMenu({ ...contextMenu, open: false })}
                     onToggle={togglePackage}
-                    onFavorite={toggleFavorite}
-                    onHide={toggleHidden}
+                    onOpenFolder={handleOpenFolder}
+                    onDownload={handleDownloadPackage}
+                    onCopyPath={handleCopyPath}
+                    onCopyFile={handleCopyFile}
+                    onCutFile={handleCutFile}
+                    onDelete={handleDeleteClick}
                 />
             )}
         </div>

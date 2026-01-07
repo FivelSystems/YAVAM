@@ -23,5 +23,18 @@ type VarPackage struct {
 	IsFavorite      bool     `json:"isFavorite"`
 	IsHidden        bool     `json:"isHidden"`
 	Type            string   `json:"type"`
-	Tags            []string `json:"tags"`
+	Tags            []string `json:"tags,omitempty"`
+}
+
+type PackageContent struct {
+	FilePath        string `json:"filePath"`
+	FileName        string `json:"fileName"`
+	Type            string `json:"type"`
+	ThumbnailBase64 string `json:"thumbnailBase64,omitempty"`
+	Size            int64  `json:"size"`
+}
+
+type ScanResult struct {
+	Packages []VarPackage `json:"packages"`
+	Tags     []string     `json:"tags"`
 }
