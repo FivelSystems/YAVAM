@@ -1,5 +1,6 @@
 import { Upload } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime';
 
 interface DragDropOverlayProps {
     onDrop: (files: string[]) => void;
@@ -26,31 +27,28 @@ const DragDropOverlay = ({ onDrop }: DragDropOverlayProps) => {
         const handleDrop = (e: DragEvent) => {
             e.preventDefault();
             setIsDragging(false);
-            if (e.dataTransfer?.files) {
-                const paths: string[] = [];
-                // Not all browsers expose path in files, but Wails WebView usually does via custom handling or standard File API if strictly file drop
-                // Wails/WebView2 typically allows standard file drop.
-                // NOTE: In Wails, we might need a runtime drag-drop handler, but standard HTML5 drop often works if `wails.json` doesn't block it.
-                // Assuming standard file object contains 'path' property in Electron/WebView2 environments.
-                // @ts-ignore
-                for (const file of e.dataTransfer.files) {
-                    // @ts-ignore
-                    if (file.path) paths.push(file.path);
-                }
-                if (paths.length > 0) {
-                    onDrop(paths);
-                }
-            }
+            // We rely on Wails OnFileDrop for the actual files
         };
 
         window.addEventListener('dragover', handleDragOver);
         window.addEventListener('dragleave', handleDragLeave);
         window.addEventListener('drop', handleDrop);
 
+        // Register Wails OnFileDrop listener
+        // @ts-ignore
+        OnFileDrop((_x, _y, paths) => {
+            console.log("Wails OnFileDrop triggered", paths);
+            setIsDragging(false);
+            if (paths && paths.length > 0) {
+                onDrop(paths);
+            }
+        }, false);
+
         return () => {
             window.removeEventListener('dragover', handleDragOver);
             window.removeEventListener('dragleave', handleDragLeave);
             window.removeEventListener('drop', handleDrop);
+            OnFileDropOff();
         };
     }, [onDrop]);
 
