@@ -54,6 +54,10 @@ export function SelectDirectory() {
   return window['go']['main']['App']['SelectDirectory']();
 }
 
+export function SetAlwaysOnTop(arg1) {
+  return window['go']['main']['App']['SetAlwaysOnTop'](arg1);
+}
+
 export function TogglePackage(arg1, arg2, arg3) {
   return window['go']['main']['App']['TogglePackage'](arg1, arg2, arg3);
 }
