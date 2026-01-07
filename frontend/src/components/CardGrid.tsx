@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { VarPackage } from '../App';
 import PackageCard from './PackageCard';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -7,15 +8,19 @@ interface CardGridProps {
     packages: VarPackage[];
     currentPath?: string;
     totalCount?: number;
-    onShowMissing: (pkg: VarPackage) => void;
-    onResolve: (pkg: VarPackage) => void;
     onContextMenu: (e: React.MouseEvent, pkg: VarPackage) => void;
+    onSelect: (pkg: VarPackage) => void;
+    selectedPkgId?: string;
+    viewMode: 'grid' | 'list';
 }
 
-const CardGrid = ({ packages, currentPath, totalCount, onShowMissing, onResolve, onContextMenu }: CardGridProps) => {
+const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, selectedPkgId, viewMode }: CardGridProps) => {
+
+    const containerRef = useRef<HTMLDivElement>(null);
+
 
     if (packages.length === 0) {
-        // Distinguish between Empty Scan and Empty Filter
+        // ... (Empty state logic, unchanged)
         if (totalCount === 0) {
             return (
                 <div className="h-full flex flex-col items-center justify-center text-gray-500 space-y-2 p-4 text-center">
@@ -31,7 +36,6 @@ const CardGrid = ({ packages, currentPath, totalCount, onShowMissing, onResolve,
                 </div>
             )
         }
-
         return (
             <div className="h-full flex flex-col items-center justify-center text-gray-500">
                 <p className="text-lg">No matching packages.</p>
@@ -41,29 +45,35 @@ const CardGrid = ({ packages, currentPath, totalCount, onShowMissing, onResolve,
     }
 
     return (
-        <motion.div
-            layout
-            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 pb-20 p-4"
-        >
-            <AnimatePresence mode="popLayout">
-                {packages.map((pkg) => (
-                    <motion.div
-                        layout
-                        key={pkg.filePath}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                    >
-                        <PackageCard
-                            pkg={pkg}
-                            onResolve={onResolve}
-                            onShowMissing={onShowMissing}
-                            onContextMenu={onContextMenu}
-                        />
-                    </motion.div>
-                ))}
-            </AnimatePresence>
-        </motion.div>
+        <div ref={containerRef} className="h-full">
+            <motion.div
+                layout
+                className={viewMode === 'list'
+                    ? "flex flex-col gap-2 pb-20 p-4"
+                    : "grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4 pb-20 p-4"
+                }
+            >
+                <AnimatePresence mode="popLayout">
+                    {packages.map((pkg) => (
+                        <motion.div
+                            layout
+                            key={pkg.filePath}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                        >
+                            <PackageCard
+                                pkg={pkg}
+                                onContextMenu={onContextMenu}
+                                onSelect={onSelect}
+                                isSelected={pkg.filePath === selectedPkgId}
+                                viewMode={viewMode}
+                            />
+                        </motion.div>
+                    ))}
+                </AnimatePresence>
+            </motion.div>
+        </div>
     );
 };
 

@@ -1,40 +1,3 @@
-export namespace manager {
-	
-	export class ScanResult {
-	    packages: models.VarPackage[];
-	    tags: string[];
-	
-	    static createFrom(source: any = {}) {
-	        return new ScanResult(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.packages = this.convertValues(source["packages"], models.VarPackage);
-	        this.tags = source["tags"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-
-}
-
 export namespace models {
 	
 	export class MetaJSON {
@@ -59,6 +22,26 @@ export namespace models {
 	        this.tags = source["tags"];
 	    }
 	}
+	export class PackageContent {
+	    filePath: string;
+	    fileName: string;
+	    type: string;
+	    thumbnailBase64?: string;
+	    size: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PackageContent(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.filePath = source["filePath"];
+	        this.fileName = source["fileName"];
+	        this.type = source["type"];
+	        this.thumbnailBase64 = source["thumbnailBase64"];
+	        this.size = source["size"];
+	    }
+	}
 	export class VarPackage {
 	    filePath: string;
 	    fileName: string;
@@ -73,7 +56,7 @@ export namespace models {
 	    isFavorite: boolean;
 	    isHidden: boolean;
 	    type: string;
-	    tags: string[];
+	    tags?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new VarPackage(source);
@@ -94,6 +77,38 @@ export namespace models {
 	        this.isFavorite = source["isFavorite"];
 	        this.isHidden = source["isHidden"];
 	        this.type = source["type"];
+	        this.tags = source["tags"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ScanResult {
+	    packages: VarPackage[];
+	    tags: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ScanResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.packages = this.convertValues(source["packages"], VarPackage);
 	        this.tags = source["tags"];
 	    }
 	

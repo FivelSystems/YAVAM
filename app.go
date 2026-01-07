@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"varmanager/pkg/manager"
+	"varmanager/pkg/models"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -28,13 +30,59 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 }
 
+// GetPackageContents wrapper
+func (a *App) GetPackageContents(pkgPath string) ([]models.PackageContent, error) {
+	return a.manager.GetPackageContents(pkgPath)
+}
+
+func (a *App) OpenFolderInExplorer(path string) {
+	err := a.manager.OpenFolder(path)
+	if err != nil {
+		fmt.Println("Error opening folder:", err)
+	}
+}
+
+func (a *App) DeleteFileToRecycleBin(path string) error {
+	return a.manager.DeleteToTrash(path)
+}
+
+func (a *App) CopyFileToClipboard(path string) {
+	err := a.manager.CopyFileToClipboard(path)
+	if err != nil {
+		fmt.Println("Error copying file to clipboard:", err)
+	}
+}
+
+func (a *App) CutFileToClipboard(path string) {
+	err := a.manager.CutFileToClipboard(path)
+	if err != nil {
+		fmt.Println("Error cutting file to clipboard:", err)
+	}
+}
+
+// DownloadPackage copies a file to the target directory (or default Downloads)
+func (a *App) DownloadPackage(pkgPath string, customPath string) error {
+	targetDir := customPath
+	if targetDir == "" {
+		home, _ := os.UserHomeDir()
+		targetDir = filepath.Join(home, "Downloads")
+	}
+	return a.manager.DownloadPackage(pkgPath, targetDir)
+}
+
+// GetUserDownloadsDir returns the default user downloads directory
+func (a *App) GetUserDownloadsDir() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, "Downloads")
+}
+
 // Greet returns a greeting for the given name
 func (a *App) Greet(name string) string {
 	return fmt.Sprintf("Hello %s, It's show time!", name)
 }
 
 // ScanPackages triggers the scan process
-func (a *App) ScanPackages(vamPath string) (manager.ScanResult, error) {
+func (a *App) ScanPackages(vamPath string) (models.ScanResult, error) {
 	// Robustness: If user selected "AddonPackages" directly, move up to root
 	if filepath.Base(vamPath) == "AddonPackages" {
 		vamPath = filepath.Dir(vamPath)
@@ -78,18 +126,4 @@ func (a *App) SelectDirectory() (string, error) {
 	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
 		Title: "Select Library Folder",
 	})
-}
-
-func (a *App) ToggleFavorite(pkgName string) {
-	err := a.manager.ToggleFavorite(pkgName)
-	if err != nil {
-		fmt.Println("Error toggling favorite:", err)
-	}
-}
-
-func (a *App) ToggleHidden(pkgName string) {
-	err := a.manager.ToggleHidden(pkgName)
-	if err != nil {
-		fmt.Println("Error toggling hidden:", err)
-	}
 }

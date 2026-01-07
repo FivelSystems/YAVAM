@@ -5,32 +5,26 @@ import { motion } from 'framer-motion';
 
 interface PackageCardProps {
     pkg: VarPackage;
-    onResolve: (pkg: VarPackage) => void;
-    onShowMissing: (pkg: VarPackage) => void;
     onContextMenu: (e: React.MouseEvent, pkg: VarPackage) => void;
+    onSelect: (pkg: VarPackage) => void;
+    isSelected?: boolean;
+    viewMode?: 'grid' | 'list';
 }
 
-const PackageCard = ({ pkg, onResolve, onShowMissing, onContextMenu }: PackageCardProps) => {
+const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'grid' }: PackageCardProps) => {
 
     const handleClick = () => {
-        if (pkg.isEnabled) {
-            if (pkg.missingDeps && pkg.missingDeps.length > 0) {
-                onShowMissing(pkg);
-                return;
-            }
-            if (pkg.isDuplicate) {
-                onResolve(pkg);
-                return;
-            }
-        }
+        onSelect(pkg);
     };
 
     // Visual State Logic
-    let statusClass = "border-gray-700 opacity-60 grayscale"; // Disabled state default
+    let statusClass = "border-gray-700 opacity-60 grayscale";
     let statusIcon = <Power size={14} className="text-gray-400" />;
 
-    if (pkg.isEnabled) {
-        statusClass = "border-gray-600 grayscale-0"; // Active default
+    if (isSelected) {
+        statusClass = "border-blue-500 ring-2 ring-blue-500/50 shadow-xl z-10 grayscale-0 " + (viewMode === 'grid' ? "scale-[1.02]" : "");
+    } else if (pkg.isEnabled) {
+        statusClass = "border-gray-600 grayscale-0";
         if (pkg.missingDeps && pkg.missingDeps.length > 0) {
             statusClass = "border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]";
             statusIcon = <AlertCircle size={16} className="text-red-500" />;
@@ -43,6 +37,53 @@ const PackageCard = ({ pkg, onResolve, onShowMissing, onContextMenu }: PackageCa
         }
     }
 
+    if (viewMode === 'list') {
+        return (
+            <div
+                onClick={handleClick}
+                onContextMenu={(e) => onContextMenu(e, pkg)}
+                className={clsx(
+                    "relative group rounded-lg border overflow-hidden cursor-pointer bg-gray-900 transition-colors hover:bg-gray-800 flex items-center h-20 p-2 gap-3",
+                    statusClass
+                )}
+            >
+                {/* Small Thumbnail */}
+                <div className="h-16 w-16 bg-gray-800 rounded overflow-hidden shrink-0 relative">
+                    {pkg.hasThumbnail ? (
+                        <img
+                            src={`data:image/jpeg;base64,${pkg.thumbnailBase64}`}
+                            alt={pkg.fileName}
+                            className="w-full h-full object-cover"
+                        />
+                    ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-700 border border-gray-700">
+                            <span className="text-[8px] font-bold">NO IMG</span>
+                        </div>
+                    )}
+                </div>
+
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-center mb-1">
+                        <h3 className="font-bold text-gray-200 text-sm truncate pr-2" title={pkg.fileName}>
+                            {pkg.meta.packageName || pkg.fileName}
+                        </h3>
+                        {/* Status Icon */}
+                        <div className="shrink-0">{statusIcon}</div>
+                    </div>
+                    <div className="flex justify-between items-center text-xs text-gray-500">
+                        <span className="truncate">{pkg.meta.creator || "Unknown"}</span>
+                        <div className="flex gap-2">
+                            <span>v{pkg.meta.version}</span>
+                            <span>{(pkg.size / 1024 / 1024).toFixed(1)} MB</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Default Grid View
     return (
         <motion.div
             layout

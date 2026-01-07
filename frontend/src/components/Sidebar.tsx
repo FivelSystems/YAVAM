@@ -1,4 +1,4 @@
-import { User, ChevronDown, ChevronRight, AlertTriangle, Copy, Star, EyeOff, Layers, Package, Settings, CheckCircle2, CircleOff } from 'lucide-react';
+import { User, ChevronDown, ChevronRight, AlertTriangle, Copy, Layers, Package, Settings, CheckCircle2, CircleOff } from 'lucide-react';
 import { VarPackage } from '../App';
 import clsx from 'clsx';
 import { useMemo, useState } from 'react';
@@ -40,7 +40,7 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
     }, [packages]);
 
     return (
-        <aside className="w-64 bg-gray-800 border-r border-gray-700 flex flex-col shadow-xl z-20">
+        <aside className="w-64 h-full bg-gray-800 border-r border-gray-700 flex flex-col shadow-xl z-20">
             <div className="p-6 flex items-center justify-between border-b border-gray-700">
                 <div className="flex items-center gap-3">
                     <div className="bg-blue-600 p-2 rounded-lg">
@@ -73,14 +73,6 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
                             >
                                 <Layers size={18} /> All Packages
                             </button>
-                            {/* ... (Favorites) ... */}
-                            <button
-                                onClick={() => setFilter('favorites')}
-                                className={clsx("w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm",
-                                    currentFilter === 'favorites' ? "bg-amber-600/10 text-amber-500" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
-                            >
-                                <Star size={18} /> Favorites
-                            </button>
 
                             <button
                                 onClick={() => setFilter('enabled')}
@@ -109,14 +101,6 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
                                     currentFilter === 'duplicates' ? "bg-yellow-500/10 text-yellow-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
                             >
                                 <Copy size={18} /> Multiple Versions
-                            </button>
-
-                            <button
-                                onClick={() => setFilter('hidden')}
-                                className={clsx("w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm",
-                                    currentFilter === 'hidden' ? "bg-gray-700 text-gray-300" : "text-gray-500 hover:bg-gray-800 hover:text-gray-400")}
-                            >
-                                <EyeOff size={18} /> Hidden
                             </button>
                         </div>
                     )}

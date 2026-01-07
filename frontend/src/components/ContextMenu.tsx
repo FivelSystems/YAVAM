@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { VarPackage } from '../App';
-import { Eye, EyeOff, Star, Power } from 'lucide-react';
+import { Power, FolderOpen, Copy, Trash2, FileCode, Scissors, Download } from 'lucide-react';
 
 interface ContextMenuProps {
     x: number;
@@ -8,11 +8,15 @@ interface ContextMenuProps {
     pkg: VarPackage | null;
     onClose: () => void;
     onToggle: (pkg: VarPackage) => void;
-    onHide?: (pkg: VarPackage) => void;
-    onFavorite?: (pkg: VarPackage) => void;
+    onOpenFolder: (pkg: VarPackage) => void;
+    onDownload: (pkg: VarPackage) => void;
+    onCopyPath: (pkg: VarPackage) => void;
+    onCopyFile: (pkg: VarPackage) => void;
+    onCutFile: (pkg: VarPackage) => void;
+    onDelete: (pkg: VarPackage) => void;
 }
 
-const ContextMenu = ({ x, y, pkg, onClose, onToggle, onHide, onFavorite }: ContextMenuProps) => {
+const ContextMenu = ({ x, y, pkg, onClose, onToggle, onOpenFolder, onDownload, onCopyPath, onCopyFile, onCutFile, onDelete }: ContextMenuProps) => {
     const ref = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -30,7 +34,7 @@ const ContextMenu = ({ x, y, pkg, onClose, onToggle, onHide, onFavorite }: Conte
     return (
         <div
             ref={ref}
-            className="fixed bg-gray-800 border border-gray-700 rounded-lg shadow-xl py-1 z-50 w-48 text-sm"
+            className="fixed bg-gray-800 border border-gray-700 rounded-lg shadow-xl py-1 z-50 w-56 text-sm"
             style={{ top: y, left: x }}
         >
             <div className="px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-700 mb-1 truncate">
@@ -45,20 +49,57 @@ const ContextMenu = ({ x, y, pkg, onClose, onToggle, onHide, onFavorite }: Conte
                 {pkg.isEnabled ? "Disable" : "Enable"}
             </button>
 
+            <div className="border-t border-gray-700 my-1"></div>
+
             <button
-                onClick={() => { if (onFavorite) onFavorite(pkg); onClose(); }}
+                onClick={() => { onOpenFolder(pkg); onClose(); }}
                 className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
             >
-                <Star size={16} className={pkg.isFavorite ? "text-yellow-500 fill-yellow-500" : "text-gray-400"} />
-                {pkg.isFavorite ? "Unfavorite" : "Favorite"}
+                <FolderOpen size={16} className="text-blue-400" />
+                Open Folder
             </button>
 
             <button
-                onClick={() => { if (onHide) onHide(pkg); onClose(); }}
+                onClick={() => { onCopyPath(pkg); onClose(); }}
                 className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
             >
-                {pkg.isHidden ? <Eye size={16} className="text-blue-400" /> : <EyeOff size={16} className="text-gray-400" />}
-                {pkg.isHidden ? "Unhide" : "Hide"}
+                <FileCode size={16} className="text-gray-400" />
+                Copy Path
+            </button>
+
+            <button
+                onClick={() => { onCopyFile(pkg); onClose(); }}
+                className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
+            >
+                <Copy size={16} className="text-gray-400" />
+                Copy File
+            </button>
+
+            <button
+                onClick={() => { onCutFile(pkg); onClose(); }}
+                className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
+            >
+                <Scissors size={16} className="text-gray-400" />
+                Cut File
+            </button>
+
+
+            <button
+                onClick={() => { onDownload(pkg); onClose(); }}
+                className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
+            >
+                <Download size={16} className="text-blue-400" />
+                Download
+            </button>
+
+            <div className="border-t border-gray-700 my-1"></div>
+
+            <button
+                onClick={() => { onDelete(pkg); onClose(); }}
+                className="w-full text-left px-3 py-2 hover:bg-red-500/20 text-red-400 hover:text-red-300 flex items-center gap-2"
+            >
+                <Trash2 size={16} />
+                Delete
             </button>
         </div>
     );
