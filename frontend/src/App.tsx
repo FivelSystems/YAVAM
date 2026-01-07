@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Package, Search, RefreshCw, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import CardGrid from './components/CardGrid';
 import Sidebar from './components/Sidebar';
@@ -146,7 +146,8 @@ function App() {
         setFilteredPkgs(res);
     };
 
-    const handleDrop = async (files: string[]) => {
+    const handleDrop = useCallback(async (files: string[]) => {
+        console.log("Dropped files:", files);
         if (!vamPath) return;
         try {
             // @ts-ignore
@@ -154,8 +155,9 @@ function App() {
             scanPackages(); // Refresh
         } catch (e) {
             console.error(e);
+            alert(e);
         }
-    };
+    }, [vamPath]);
 
     const recalculateDuplicates = (currentPkgs: VarPackage[]): VarPackage[] => {
         const counts: Record<string, number> = {};

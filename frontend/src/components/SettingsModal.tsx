@@ -30,7 +30,7 @@ const SettingsModal = ({ isOpen, onClose, currentPath, onSavePath }: SettingsMod
                 <div className="space-y-4">
                     <div>
                         <label className="block text-sm font-medium text-gray-400 mb-2">
-                            Virt-A-Mate Root Folder
+                            Library Folder
                         </label>
                         <div className="flex gap-2">
                             <input
@@ -38,7 +38,7 @@ const SettingsModal = ({ isOpen, onClose, currentPath, onSavePath }: SettingsMod
                                 value={path}
                                 onChange={(e) => setPath(e.target.value)}
                                 className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                                placeholder="C:\Virt-A-Mate"
+                                placeholder="C:\VarLibrary"
                             />
                             <button
                                 onClick={async () => {
@@ -57,7 +57,7 @@ const SettingsModal = ({ isOpen, onClose, currentPath, onSavePath }: SettingsMod
                             </button>
                         </div>
                         <p className="text-xs text-gray-500 mt-2">
-                            This folder should contain your "AddonPackages" directory.
+                            This folder should contain your .var files.
                         </p>
                     </div>
 

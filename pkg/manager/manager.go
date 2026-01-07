@@ -317,11 +317,14 @@ func (m *Manager) TogglePackage(pkgs []models.VarPackage, pkgID string, enable b
 // InstallPackage moves a list of files to the AddonPackages folder
 func (m *Manager) InstallPackage(files []string, vamPath string) ([]string, error) {
 	var installed []string
+	var ignored []string
+
 	// Install directly to the repository root
 	destDir := vamPath
 
 	for _, f := range files {
 		if filepath.Ext(strings.ToLower(f)) != ".var" {
+			ignored = append(ignored, filepath.Base(f))
 			continue
 		}
 
@@ -346,6 +349,11 @@ func (m *Manager) InstallPackage(files []string, vamPath string) ([]string, erro
 		}
 		installed = append(installed, destPath)
 	}
+
+	if len(ignored) > 0 {
+		return installed, fmt.Errorf("the following files are not Virt-A-Mate packages and were ignored: %s", strings.Join(ignored, ", "))
+	}
+
 	return installed, nil
 }
 

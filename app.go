@@ -69,13 +69,14 @@ func (a *App) DisableOldVersions(creator string, pkgName string, vamPath string)
 
 // InstallFiles handles dropped files
 func (a *App) InstallFiles(files []string, vamPath string) ([]string, error) {
+	fmt.Printf("Backend received files to install: %v\n", files)
 	return a.manager.InstallPackage(files, vamPath)
 }
 
 // SelectDirectory opens a native dialog to select a folder
 func (a *App) SelectDirectory() (string, error) {
 	return runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Select Virt-A-Mate Root Folder",
+		Title: "Select Library Folder",
 	})
 }
 
