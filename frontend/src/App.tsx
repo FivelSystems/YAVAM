@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Package, Search, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Package, Search, RefreshCw, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import CardGrid from './components/CardGrid';
 import Sidebar from './components/Sidebar';
 import DragDropOverlay from './components/DragDropOverlay';
@@ -8,6 +8,7 @@ import LoadingToast from './components/LoadingToast';
 import MissingDepsModal from './components/MissingDepsModal';
 import VersionResolutionModal from './components/VersionResolutionModal';
 import ContextMenu from './components/ContextMenu';
+import TagSearch from './components/TagSearch';
 
 // Define types based on our Go models
 export interface VarPackage {
@@ -29,13 +30,23 @@ export interface VarPackage {
     isDuplicate: boolean;
     isFavorite: boolean;
     isHidden: boolean;
+    type?: string;
+    tags?: string[];
 }
 
 function App() {
     const [vamPath, setVamPath] = useState<string>(localStorage.getItem("vamPath") || "");
     const [packages, setPackages] = useState<VarPackage[]>([]);
     const [filteredPkgs, setFilteredPkgs] = useState<VarPackage[]>([]);
+    const [availableTags, setAvailableTags] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
+
+    // Filter State
+    const [searchQuery, setSearchQuery] = useState("");
+    const [currentFilter, setCurrentFilter] = useState("all");
+    const [selectedCreator, setSelectedCreator] = useState<string | null>(null);
+    const [selectedType, setSelectedType] = useState<string | null>(null);
+    const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
@@ -64,10 +75,7 @@ function App() {
         });
     };
 
-    // Filters
-    const [searchQuery, setSearchQuery] = useState("");
-    const [currentFilter, setCurrentFilter] = useState("all"); // all, enabled, disabled
-    const [selectedCreator, setSelectedCreator] = useState<string | null>(null);
+    // Filters (Moved to top state)
 
     useEffect(() => {
         if (vamPath) {
@@ -78,15 +86,16 @@ function App() {
     useEffect(() => {
         filterPackages();
         setCurrentPage(1);
-    }, [packages, searchQuery, currentFilter, selectedCreator]);
+    }, [packages, searchQuery, currentFilter, selectedCreator, selectedType, selectedTags]);
 
     const scanPackages = async () => {
         if (!vamPath) return;
         setLoading(true);
         try {
             // @ts-ignore
-            const pkgs = await window.go.main.App.ScanPackages(vamPath);
-            setPackages(pkgs || []);
+            const res = await window.go.main.App.ScanPackages(vamPath);
+            setPackages(res.packages || []);
+            setAvailableTags(res.tags || []);
         } catch (e) {
             console.error(e);
         } finally {
@@ -112,6 +121,17 @@ function App() {
 
         // Creator Filter
         if (selectedCreator) res = res.filter(p => p.meta?.creator === selectedCreator);
+
+        // Type Filter
+        if (selectedType) res = res.filter(p => p.type === selectedType);
+
+        // Tags Filter
+        if (selectedTags.length > 0) {
+            res = res.filter(p => {
+                if (!p.tags) return false;
+                return selectedTags.every(t => p.tags!.includes(t));
+            });
+        }
 
         // Search
         if (searchQuery) {
@@ -303,19 +323,39 @@ function App() {
                 currentFilter={currentFilter}
                 setFilter={setCurrentFilter}
                 selectedCreator={selectedCreator}
+                selectedType={selectedType}
+                onFilterType={setSelectedType}
                 onOpenSettings={() => setIsSettingsOpen(true)}
             />
 
             <main className="flex-1 flex flex-col overflow-hidden">
                 <header className="p-4 bg-gray-800 border-b border-gray-700 flex justify-between items-center shadow-md z-10">
-                    <div className="flex items-center gap-4 bg-gray-700 px-4 py-2 rounded-lg w-96">
-                        <Search size={20} className="text-gray-400" />
-                        <input
-                            className="bg-transparent outline-none w-full text-sm"
-                            placeholder="Search packages, artists..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-lg w-64">
+                            <Search size={18} className="text-gray-400" />
+                            <input
+                                className="bg-transparent outline-none w-full text-sm"
+                                placeholder="Search..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
+
+                        <TagSearch
+                            availableTags={availableTags}
+                            selectedTags={selectedTags}
+                            onSelectTag={(tag) => setSelectedTags([...selectedTags, tag])}
                         />
+
+                        {selectedTags.map(t => (
+                            <button
+                                key={t}
+                                onClick={() => setSelectedTags(selectedTags.filter(x => x !== t))}
+                                className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 transition-colors"
+                            >
+                                {t} <X size={12} />
+                            </button>
+                        ))}
                     </div>
                     <div className="flex items-center gap-4 text-sm text-gray-400">
                         <span>{filteredPkgs.length} packages found</span>

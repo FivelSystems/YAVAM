@@ -9,15 +9,26 @@ interface SidebarProps {
     setFilter: (f: string) => void;
     selectedCreator: string | null;
     onFilterCreator: (c: string | null) => void;
+    selectedType: string | null;
+    onFilterType: (t: string | null) => void;
     onOpenSettings: () => void;
 }
 
-const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilterCreator, onOpenSettings }: SidebarProps) => {
-    const [collapsed, setCollapsed] = useState({ status: false, creators: false }); // Renamed and inverted logic
+const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilterCreator, selectedType, onFilterType, onOpenSettings }: SidebarProps) => {
+    const [collapsed, setCollapsed] = useState({ status: false, creators: true, types: false });
 
-    const toggleSection = (section: 'status' | 'creators') => {
+    const toggleSection = (section: 'status' | 'creators' | 'types') => {
         setCollapsed(prev => ({ ...prev, [section]: !prev[section] }));
     };
+
+    const types = useMemo(() => {
+        const counts: Record<string, number> = {};
+        packages.forEach(p => {
+            const t = p.type || "Unknown";
+            counts[t] = (counts[t] || 0) + 1;
+        });
+        return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    }, [packages]);
 
     const creators = useMemo(() => {
         const counts: Record<string, number> = {};
@@ -111,7 +122,6 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
                     )}
                 </div>
 
-                {/* Creators Section */}
                 <div className="p-4">
                     <button
                         onClick={() => toggleSection('creators')}
@@ -136,6 +146,40 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
                                     onClick={() => onFilterCreator(name)}
                                     className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
                                         selectedCreator === name ? "bg-blue-600/10 text-blue-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
+                                >
+                                    <span className="truncate text-left flex-1">{name}</span>
+                                    <span className="text-xs bg-gray-700 px-1.5 py-0.5 rounded-full group-hover:bg-gray-600 text-gray-300">{count}</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Categories (Types) Section */}
+                <div className="p-4 pb-0">
+                    <button
+                        onClick={() => toggleSection('types')}
+                        className="w-full flex items-center justify-between text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2 hover:text-gray-300"
+                    >
+                        <span>Categories</span>
+                        {!collapsed.types ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </button>
+
+                    {!collapsed.types && (
+                        <div className="space-y-1">
+                            <button
+                                onClick={() => onFilterType(null)}
+                                className={clsx("w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm",
+                                    selectedType === null ? "bg-blue-600/10 text-blue-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
+                            >
+                                <Layers size={18} /> All Categories
+                            </button>
+                            {types.map(([name, count]) => (
+                                <button
+                                    key={name}
+                                    onClick={() => onFilterType(name)}
+                                    className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
+                                        selectedType === name ? "bg-blue-600/10 text-blue-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
                                 >
                                     <span className="truncate text-left flex-1">{name}</span>
                                     <span className="text-xs bg-gray-700 px-1.5 py-0.5 rounded-full group-hover:bg-gray-600 text-gray-300">{count}</span>

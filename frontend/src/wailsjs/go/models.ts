@@ -1,3 +1,40 @@
+export namespace manager {
+	
+	export class ScanResult {
+	    packages: models.VarPackage[];
+	    tags: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ScanResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.packages = this.convertValues(source["packages"], models.VarPackage);
+	        this.tags = source["tags"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace models {
 	
 	export class MetaJSON {
@@ -6,6 +43,7 @@ export namespace models {
 	    version: string;
 	    description?: string;
 	    dependencies?: Record<string, any>;
+	    tags?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new MetaJSON(source);
@@ -18,6 +56,7 @@ export namespace models {
 	        this.version = source["version"];
 	        this.description = source["description"];
 	        this.dependencies = source["dependencies"];
+	        this.tags = source["tags"];
 	    }
 	}
 	export class VarPackage {
@@ -33,6 +72,8 @@ export namespace models {
 	    isDuplicate: boolean;
 	    isFavorite: boolean;
 	    isHidden: boolean;
+	    type: string;
+	    tags: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new VarPackage(source);
@@ -52,6 +93,8 @@ export namespace models {
 	        this.isDuplicate = source["isDuplicate"];
 	        this.isFavorite = source["isFavorite"];
 	        this.isHidden = source["isHidden"];
+	        this.type = source["type"];
+	        this.tags = source["tags"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
