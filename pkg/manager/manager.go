@@ -124,15 +124,20 @@ func (m *Manager) ScanAndAnalyze(rootPath string) (models.ScanResult, error) {
 			// checking if dependencies have categories or if we extract from specific json)
 			// VaM meta.json doesn't strictly have "tags". Dependencies are keys.
 
+			// Normalize Tags
+			var normalizedTags []string
+			tagMu.Lock()
+			for _, t := range p.Tags {
+				lowerT := strings.ToLower(t)
+				normalizedTags = append(normalizedTags, lowerT)
+				tagSet[lowerT] = true
+			}
+			tagMu.Unlock()
+			p.Tags = normalizedTags
+
 			mu.Lock()
 			processedPkgs = append(processedPkgs, p)
 			mu.Unlock()
-
-			tagMu.Lock()
-			for _, t := range p.Tags {
-				tagSet[t] = true
-			}
-			tagMu.Unlock()
 
 		}(pkg)
 	}
