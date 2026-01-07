@@ -6,6 +6,7 @@ type MetaJSON struct {
 	Version      string                 `json:"version"`
 	Description  string                 `json:"description,omitempty"`
 	Dependencies map[string]interface{} `json:"dependencies,omitempty"`
+	Tags         []string               `json:"tags,omitempty"`
 }
 
 type VarPackage struct {
@@ -21,4 +22,6 @@ type VarPackage struct {
 	IsDuplicate     bool     `json:"isDuplicate"`
 	IsFavorite      bool     `json:"isFavorite"`
 	IsHidden        bool     `json:"isHidden"`
+	Type            string   `json:"type"`
+	Tags            []string `json:"tags"`
 }

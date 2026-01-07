@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"varmanager/pkg/manager"
-	"varmanager/pkg/models"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -35,19 +34,18 @@ func (a *App) Greet(name string) string {
 }
 
 // ScanPackages triggers the scan process
-func (a *App) ScanPackages(vamPath string) ([]models.VarPackage, error) {
+func (a *App) ScanPackages(vamPath string) (manager.ScanResult, error) {
 	// Robustness: If user selected "AddonPackages" directly, move up to root
 	if filepath.Base(vamPath) == "AddonPackages" {
 		vamPath = filepath.Dir(vamPath)
 	}
-	pkgs, _, err := a.manager.ScanAndAnalyze(vamPath)
-	return pkgs, err
+	return a.manager.ScanAndAnalyze(vamPath)
 }
 
 // GetFilters returns the list of unique tags/creators found
 func (a *App) GetFilters(vamPath string) ([]string, error) {
-	_, tags, err := a.manager.ScanAndAnalyze(vamPath)
-	return tags, err
+	res, err := a.manager.ScanAndAnalyze(vamPath)
+	return res.Tags, err
 }
 
 // TogglePackage enables or disables a package
@@ -62,11 +60,11 @@ func (a *App) DisableOldVersions(creator string, pkgName string, vamPath string)
 	// We need the latest state, so we scan first? Or trust frontend?
 	// The manager method implementation needs the package list.
 	// For efficiency, let's scan internally.
-	pkgs, _, err := a.manager.ScanAndAnalyze(vamPath)
+	res, err := a.manager.ScanAndAnalyze(vamPath)
 	if err != nil {
 		return err
 	}
-	return a.manager.DisableOldVersions(pkgs, creator, pkgName, vamPath)
+	return a.manager.DisableOldVersions(res.Packages, creator, pkgName, vamPath)
 }
 
 // InstallFiles handles dropped files

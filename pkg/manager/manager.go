@@ -21,6 +21,11 @@ type UserPreferences struct {
 	Hidden    []string `json:"hidden"`
 }
 
+type ScanResult struct {
+	Packages []models.VarPackage `json:"packages"`
+	Tags     []string            `json:"tags"`
+}
+
 type Manager struct {
 	scanner     *scanner.Scanner
 	preferences UserPreferences
@@ -42,11 +47,11 @@ func NewManager() *Manager {
 }
 
 // ScanAndAnalyze performs scanning, parsing, duplicate detection, and dependency checking
-func (m *Manager) ScanAndAnalyze(vamPath string) ([]models.VarPackage, []string, error) {
+func (m *Manager) ScanAndAnalyze(vamPath string) (ScanResult, error) {
 	// 1. Scan files
 	rawPkgs, err := m.scanner.ScanForPackages(vamPath)
 	if err != nil {
-		return nil, nil, err
+		return ScanResult{}, err
 	}
 
 	// Snapshot preferences for fast lookup
@@ -80,15 +85,20 @@ func (m *Manager) ScanAndAnalyze(vamPath string) ([]models.VarPackage, []string,
 			sem <- struct{}{}        // Acquire
 			defer func() { <-sem }() // Release
 
-			meta, thumbBytes, err := parser.ParseVarMetadata(p.FilePath)
+			meta, thumbBytes, contentType, err := parser.ParseVarMetadata(p.FilePath)
 			if err == nil {
 				p.Meta = meta
+				p.Type = contentType
+				p.Tags = meta.Tags
 				p.HasThumbnail = len(thumbBytes) > 0
 				if p.HasThumbnail {
 					p.ThumbnailBase64 = base64.StdEncoding.EncodeToString(thumbBytes)
 					fmt.Printf("DEBUG: %s - Thumbnail FOUND (Size: %d bytes)\n", p.FileName, len(thumbBytes))
 				} else {
 					fmt.Printf("DEBUG: %s - Thumbnail NOT found\n", p.FileName)
+				}
+				if len(p.Meta.Tags) > 0 {
+					fmt.Printf("DEBUG: %s - Tags Found: %v\n", p.FileName, p.Meta.Tags)
 				}
 
 				// Fix empty fields from filename if meta is missing or incomplete
@@ -144,10 +154,10 @@ func (m *Manager) ScanAndAnalyze(vamPath string) ([]models.VarPackage, []string,
 			processedPkgs = append(processedPkgs, p)
 			mu.Unlock()
 
-			// Example tag collection from dependencies keys?
-			// Or if description has hashtags?
 			tagMu.Lock()
-			tagSet[p.Meta.Creator] = true
+			for _, t := range p.Tags {
+				tagSet[t] = true
+			}
 			tagMu.Unlock()
 
 		}(pkg)
@@ -166,11 +176,13 @@ func (m *Manager) ScanAndAnalyze(vamPath string) ([]models.VarPackage, []string,
 	// Convert tags map to slice
 	var tags []string
 	for t := range tagSet {
-		tags = append(tags, t)
+		if t != "" {
+			tags = append(tags, t)
+		}
 	}
 	sort.Strings(tags)
 
-	return processedPkgs, tags, nil
+	return ScanResult{Packages: processedPkgs, Tags: tags}, nil
 }
 
 func (m *Manager) resolveDuplicates(pkgs []models.VarPackage) []models.VarPackage {
