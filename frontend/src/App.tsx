@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { RefreshCw, Search, ChevronLeft, ChevronRight, Package, PanelLeft, LayoutGrid, List } from 'lucide-react';
+import { RefreshCw, Search, X, ChevronLeft, ChevronRight, Package, PanelLeft, LayoutGrid, List, Filter } from 'lucide-react';
 import clsx from 'clsx';
 import DragDropOverlay from './components/DragDropOverlay';
 import ContextMenu from './components/ContextMenu';
@@ -48,6 +48,9 @@ function App() {
 
     // Filter State
     const [searchQuery, setSearchQuery] = useState("");
+    const [tagSearchQuery, setTagSearchQuery] = useState("");
+    const [isTagSearchOpen, setIsTagSearchOpen] = useState(false);
+    const [isTagsVisible, setIsTagsVisible] = useState(true);
     const [currentFilter, setCurrentFilter] = useState("all");
     const [selectedCreator, setSelectedCreator] = useState<string | null>(null);
     const [selectedType, setSelectedType] = useState<string | null>(null);
@@ -480,7 +483,7 @@ function App() {
                 <main className="flex-1 flex flex-col overflow-hidden w-full">
                     <header className="flex flex-col bg-gray-800 border-b border-gray-700 shadow-md z-10 shrink-0">
                         <div className="flex justify-between items-center p-4">
-                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <div className="flex items-center gap-3 flex-1 min-w-0 mr-8">
                                 <button
                                     onClick={() => setIsSidebarOpen(!isSidebarOpen)}
                                     className="p-2 -ml-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors shrink-0"
@@ -502,6 +505,19 @@ function App() {
 
                             {/* Right Group: View Mode & Status */}
                             <div className="flex items-center gap-4 shrink-0">
+                                <button
+                                    onClick={() => setIsTagsVisible(!isTagsVisible)}
+                                    className={clsx(
+                                        "p-2 rounded-lg transition-colors",
+                                        isTagsVisible ? "text-blue-400 bg-blue-400/10" : "text-gray-400 hover:text-white hover:bg-gray-700"
+                                    )}
+                                    title="Toggle Tags"
+                                >
+                                    <Filter size={20} />
+                                </button>
+
+                                <div className="w-px h-6 bg-gray-700"></div>
+
                                 <div className="flex items-center gap-1 bg-gray-700 p-1 rounded-lg">
                                     <button
                                         onClick={() => setViewMode('grid')}
@@ -535,31 +551,73 @@ function App() {
                         </div>
 
                         {/* Tags Filter Bar */}
-                        {availableTags.length > 0 && (
-                            <div className="px-4 pb-3 flex items-center gap-2 overflow-x-auto scrollbar-hide">
-                                <div className="flex gap-2">
-                                    {availableTags.map(tag => {
-                                        const isSelected = selectedTags.includes(tag);
-                                        return (
-                                            <button
-                                                key={tag}
-                                                onClick={() => setSelectedTags(prev =>
-                                                    isSelected ? prev.filter(t => t !== tag) : [...prev, tag]
-                                                )}
+                        <AnimatePresence>
+                            {isTagsVisible && availableTags.length > 0 && (
+                                <motion.div
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: 'auto', opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    className="overflow-hidden"
+                                >
+                                    <div className="relative group px-4 pb-3 flex items-center gap-2">
+                                        {/* Tag Search Toggle */}
+                                        <div className={clsx(
+                                            "flex items-center bg-gray-700 rounded-full transition-all duration-300 ease-in-out overflow-hidden shrink-0",
+                                            isTagSearchOpen ? "w-48 px-3 py-1" : "w-8 h-8 justify-center cursor-pointer hover:bg-gray-600"
+                                        )} onClick={() => !isTagSearchOpen && setIsTagSearchOpen(true)}>
+                                            <Search size={14} className="text-gray-400 shrink-0" />
+                                            <input
                                                 className={clsx(
-                                                    "px-3 py-1 text-xs rounded-full border transition-colors whitespace-nowrap",
-                                                    isSelected
-                                                        ? "bg-blue-600 border-blue-500 text-white"
-                                                        : "bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600 hover:text-white"
+                                                    "bg-transparent outline-none text-xs text-white ml-2 w-full",
+                                                    !isTagSearchOpen && "hidden"
                                                 )}
-                                            >
-                                                {tag}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        )}
+                                                placeholder="Filter tags..."
+                                                value={tagSearchQuery}
+                                                onChange={(e) => setTagSearchQuery(e.target.value)}
+                                                onBlur={() => !tagSearchQuery && setIsTagSearchOpen(false)}
+                                                autoFocus={isTagSearchOpen}
+                                            />
+                                            {isTagSearchOpen && tagSearchQuery && (
+                                                <button onClick={(e) => { e.stopPropagation(); setTagSearchQuery(''); }} className="ml-1 text-gray-400 hover:text-white">
+                                                    <X size={12} />
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        <div className="flex gap-2 overflow-hidden flex-1 mask-linear-fade pr-8">
+                                            {[
+                                                ...selectedTags,
+                                                ...availableTags.filter(t =>
+                                                    !selectedTags.includes(t) &&
+                                                    t.toLowerCase().includes(tagSearchQuery.toLowerCase())
+                                                )
+                                            ].map(tag => {
+                                                const isSelected = selectedTags.includes(tag);
+                                                return (
+                                                    <button
+                                                        key={tag}
+                                                        onClick={() => setSelectedTags(prev =>
+                                                            isSelected ? prev.filter(t => t !== tag) : [...prev, tag]
+                                                        )}
+                                                        className={clsx(
+                                                            "px-3 py-1 text-xs rounded-full border transition-colors whitespace-nowrap",
+                                                            isSelected
+                                                                ? "bg-blue-600 border-blue-500 text-white"
+                                                                : "bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600 hover:text-white"
+                                                        )}
+                                                    >
+                                                        {tag}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* Fade Out Effect */}
+                                        <div className="absolute right-0 top-0 bottom-3 w-16 bg-gradient-to-l from-gray-800 to-transparent pointer-events-none"></div>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </header>
 
                     <div className="flex-1 flex overflow-hidden">
