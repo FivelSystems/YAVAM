@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { RefreshCw, Search, X, ChevronLeft, ChevronRight, Package, PanelLeft, LayoutGrid, List } from 'lucide-react';
+import { RefreshCw, Search, ChevronLeft, ChevronRight, Package, PanelLeft, LayoutGrid, List } from 'lucide-react';
 import clsx from 'clsx';
 import DragDropOverlay from './components/DragDropOverlay';
 import ContextMenu from './components/ContextMenu';
@@ -11,8 +11,8 @@ import Sidebar from './components/Sidebar';
 import VersionResolutionModal from './components/VersionResolutionModal';
 import SettingsModal from './components/SettingsModal';
 import ConfirmationModal from './components/ConfirmationModal';
-import TagSearch from './components/TagSearch';
 import RightSidebar from './components/RightSidebar';
+import TitleBar from './components/TitleBar';
 
 // Define types based on our Go models
 export interface VarPackage {
@@ -389,223 +389,243 @@ function App() {
     }
 
     return (
-        <div className="flex h-screen bg-gray-900 text-white overflow-hidden relative">
-            <DragDropOverlay onDrop={handleDrop} />
-            <LoadingToast visible={loading} />
+        <div className="flex flex-col h-screen bg-gray-900 text-white overflow-hidden">
+            <TitleBar />
+            <div className="flex-1 flex overflow-hidden relative">
+                <DragDropOverlay onDrop={handleDrop} />
+                <LoadingToast visible={loading} />
 
-            <VersionResolutionModal
-                isOpen={resolveData.open}
-                onClose={() => setResolveData(prev => ({ ...prev, open: false }))}
-                duplicates={resolveData.duplicates}
-                onResolve={handleConfirmResolve}
-            />
-            <SettingsModal
-                isOpen={isSettingsOpen}
-                onClose={() => setIsSettingsOpen(false)}
-                libraryPath={vamPath}
-                onBrowseLibrary={async () => {
-                    try {
-                        // @ts-ignore
-                        const p = await window.go.main.App.SelectDirectory();
-                        if (p) {
-                            setVamPath(p);
-                            localStorage.setItem("vamPath", p);
-                        }
-                    } catch (e) { console.error(e); }
-                }}
-                downloadPath={downloadPath}
-                onBrowseDownload={async () => {
-                    try {
-                        // @ts-ignore
-                        const p = await window.go.main.App.SelectDirectory();
-                        if (p) {
-                            setDownloadPath(p);
-                            localStorage.setItem("downloadPath", p);
-                        }
-                    } catch (e) { console.error(e); }
-                }}
-                onResetDownload={() => {
-                    setDownloadPath("");
-                    localStorage.removeItem("downloadPath");
-                }}
-            />
+                <VersionResolutionModal
+                    isOpen={resolveData.open}
+                    onClose={() => setResolveData(prev => ({ ...prev, open: false }))}
+                    duplicates={resolveData.duplicates}
+                    onResolve={handleConfirmResolve}
+                />
+                <SettingsModal
+                    isOpen={isSettingsOpen}
+                    onClose={() => setIsSettingsOpen(false)}
+                    libraryPath={vamPath}
+                    onBrowseLibrary={async () => {
+                        try {
+                            // @ts-ignore
+                            const p = await window.go.main.App.SelectDirectory();
+                            if (p) {
+                                setVamPath(p);
+                                localStorage.setItem("vamPath", p);
+                            }
+                        } catch (e) { console.error(e); }
+                    }}
+                    downloadPath={downloadPath}
+                    onBrowseDownload={async () => {
+                        try {
+                            // @ts-ignore
+                            const p = await window.go.main.App.SelectDirectory();
+                            if (p) {
+                                setDownloadPath(p);
+                                localStorage.setItem("downloadPath", p);
+                            }
+                        } catch (e) { console.error(e); }
+                    }}
+                    onResetDownload={() => {
+                        setDownloadPath("");
+                        localStorage.removeItem("downloadPath");
+                    }}
+                />
 
-            <ConfirmationModal
-                isOpen={deleteConfirm.open}
-                onClose={() => setDeleteConfirm({ open: false, pkg: null })}
-                onConfirm={handleConfirmDelete}
-                title="Delete Package"
-                message={`Are you sure you want to delete "${deleteConfirm.pkg?.fileName}"? It will be moved to the Recycle Bin.`}
-                confirmText="Delete"
-                confirmStyle="danger"
-            />
+                <ConfirmationModal
+                    isOpen={deleteConfirm.open}
+                    onClose={() => setDeleteConfirm({ open: false, pkg: null })}
+                    onConfirm={handleConfirmDelete}
+                    title="Delete Package"
+                    message={`Are you sure you want to delete "${deleteConfirm.pkg?.fileName}"? It will be moved to the Recycle Bin.`}
+                    confirmText="Delete"
+                    confirmStyle="danger"
+                />
 
-            {/* Hide sidebar on small screens when not needed, or use CSS media queries */}
-            {/* Mobile Overlay Backdrop */}
-            <AnimatePresence>
-                {isSidebarOpen && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        onClick={() => setIsSidebarOpen(false)}
-                        className="fixed inset-0 bg-black/50 z-30 md:hidden"
-                    />
-                )}
-            </AnimatePresence>
+                {/* Hide sidebar on small screens when not needed, or use CSS media queries */}
+                {/* Mobile Overlay Backdrop */}
+                <AnimatePresence>
+                    {isSidebarOpen && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setIsSidebarOpen(false)}
+                            className="fixed inset-0 bg-black/50 z-30 md:hidden"
+                        />
+                    )}
+                </AnimatePresence>
 
-            {/* Sidebar Wrapper */}
-            <div className={clsx(
-                "h-full z-40 transition-all duration-300 ease-in-out bg-gray-800 shrink-0",
-                // Desktop: Relative positioning for flow
-                "md:relative",
-                // Mobile: Fixed absolute positioning
-                "fixed inset-y-0 left-0 shadow-2xl md:shadow-none",
-                // Open/Close States
-                isSidebarOpen ? "w-64 translate-x-0" : "w-0 -translate-x-full md:translate-x-0 md:w-0 overflow-hidden"
-            )}>
-                <div className="w-64 h-full"> {/* Inner container to maintain width while parent animates */}
-                    <Sidebar
-                        packages={packages}
-                        currentFilter={currentFilter}
-                        setFilter={setCurrentFilter}
-                        selectedCreator={selectedCreator}
-                        onFilterCreator={setSelectedCreator}
-                        selectedType={selectedType}
-                        onFilterType={setSelectedType}
-                        onOpenSettings={() => setIsSettingsOpen(true)}
-                    />
+                {/* Sidebar Wrapper */}
+                <div className={clsx(
+                    "h-full z-40 transition-all duration-300 ease-in-out bg-gray-800 shrink-0 border-t border-gray-700",
+                    "md:relative",
+                    "fixed inset-y-0 left-0 shadow-2xl md:shadow-none",
+                    isSidebarOpen ? "w-64 translate-x-0" : "w-0 -translate-x-full md:translate-x-0 md:w-0 overflow-hidden"
+                )} style={{ top: 0 }}>
+                    <div className="w-64 h-full"> {/* Inner container to maintain width while parent animates */}
+                        <Sidebar
+                            packages={packages}
+                            currentFilter={currentFilter}
+                            setFilter={setCurrentFilter}
+                            selectedCreator={selectedCreator}
+                            onFilterCreator={setSelectedCreator}
+                            selectedType={selectedType}
+                            onFilterType={setSelectedType}
+                            onOpenSettings={() => setIsSettingsOpen(true)}
+                        />
+                    </div>
                 </div>
-            </div>
 
-            <main className="flex-1 flex flex-col overflow-hidden w-full">
-                <header className="p-4 bg-gray-800 border-b border-gray-700 flex justify-between items-center shadow-md z-10 shrink-0">
-                    <div className="flex items-center gap-3">
-                        <button
-                            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                            className="p-2 -ml-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
-                            title="Toggle Sidebar"
-                        >
-                            <PanelLeft size={20} />
-                        </button>
+                <main className="flex-1 flex flex-col overflow-hidden w-full">
+                    <header className="flex flex-col bg-gray-800 border-b border-gray-700 shadow-md z-10 shrink-0">
+                        <div className="flex justify-between items-center p-4">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <button
+                                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                                    className="p-2 -ml-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors shrink-0"
+                                    title="Toggle Sidebar"
+                                >
+                                    <PanelLeft size={20} />
+                                </button>
 
-                        <div className="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-lg w-64">
-                            <Search size={18} className="text-gray-400" />
-                            <input
-                                className="bg-transparent outline-none w-full text-sm"
-                                placeholder="Search..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                            />
-                            <div className="flex items-center gap-1 bg-gray-700 p-1 rounded-lg">
-                                <button
-                                    onClick={() => setViewMode('grid')}
-                                    className={clsx("p-1.5 rounded transition-all", viewMode === 'grid' ? "bg-gray-600 text-white shadow" : "text-gray-400 hover:text-gray-200")}
-                                    title="Grid View"
-                                >
-                                    <LayoutGrid size={18} />
-                                </button>
-                                <button
-                                    onClick={() => setViewMode('list')}
-                                    className={clsx("p-1.5 rounded transition-all", viewMode === 'list' ? "bg-gray-600 text-white shadow" : "text-gray-400 hover:text-gray-200")}
-                                    title="List View"
-                                >
-                                    <List size={18} />
-                                </button>
+                                <div className="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-lg max-w-md w-full">
+                                    <Search size={18} className="text-gray-400 shrink-0" />
+                                    <input
+                                        className="bg-transparent outline-none w-full text-sm"
+                                        placeholder="Search packages..."
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Right Group: View Mode & Status */}
+                            <div className="flex items-center gap-4 shrink-0">
+                                <div className="flex items-center gap-1 bg-gray-700 p-1 rounded-lg">
+                                    <button
+                                        onClick={() => setViewMode('grid')}
+                                        className={clsx("p-1.5 rounded transition-all", viewMode === 'grid' ? "bg-gray-600 text-white shadow" : "text-gray-400 hover:text-gray-200")}
+                                        title="Grid View"
+                                    >
+                                        <LayoutGrid size={18} />
+                                    </button>
+                                    <button
+                                        onClick={() => setViewMode('list')}
+                                        className={clsx("p-1.5 rounded transition-all", viewMode === 'list' ? "bg-gray-600 text-white shadow" : "text-gray-400 hover:text-gray-200")}
+                                        title="List View"
+                                    >
+                                        <List size={18} />
+                                    </button>
+                                </div>
+
+                                <div className="w-px h-6 bg-gray-700"></div>
+
+                                <div className="flex items-center gap-4 text-sm text-gray-400">
+                                    <span className="hidden sm:inline">{filteredPkgs.length} packages found</span>
+                                    <button
+                                        onClick={scanPackages}
+                                        className="hover:text-white transition-colors"
+                                        title="Refresh Packages"
+                                    >
+                                        <RefreshCw size={20} className={loading ? "animate-spin" : ""} />
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
-                        <TagSearch
-                            availableTags={availableTags}
-                            selectedTags={selectedTags}
-                            onSelectTag={(tag) => setSelectedTags([...selectedTags, tag])}
-                        />
-
-                        {selectedTags.map(t => (
-                            <button
-                                key={t}
-                                onClick={() => setSelectedTags(selectedTags.filter(x => x !== t))}
-                                className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1 transition-colors"
-                            >
-                                {t} <X size={12} />
-                            </button>
-                        ))}
-                    </div>
-                    <div className="flex items-center gap-4 text-sm text-gray-400">
-                        <span>{filteredPkgs.length} packages found</span>
-                        <button
-                            onClick={scanPackages}
-                            className="hover:text-white transition-colors"
-                            title="Refresh Packages"
-                        >
-                            <RefreshCw size={20} className={loading ? "animate-spin" : ""} />
-                        </button>
-                    </div>
-                </header>
-
-                <div className="flex-1 flex overflow-hidden">
-                    <div className="flex-1 overflow-auto p-4 custom-scrollbar flex flex-col">
-                        <CardGrid
-                            packages={filteredPkgs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)}
-                            currentPath={vamPath}
-                            totalCount={packages.length}
-                            onContextMenu={handleContextMenu}
-                            onSelect={handlePackageClick}
-                            selectedPkgId={selectedPackage?.filePath}
-                            viewMode={viewMode}
-                        />
-
-                        {filteredPkgs.length > itemsPerPage && (
-                            <div className="flex justify-center items-center gap-4 py-4 mt-4 border-t border-gray-700 bg-gray-800/50 backdrop-blur sticky bottom-0">
-                                <button
-                                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                    disabled={currentPage === 1}
-                                    className="p-2 rounded bg-gray-700 disabled:opacity-50 hover:bg-gray-600 disabled:hover:bg-gray-700 transition"
-                                >
-                                    <ChevronLeft size={20} />
-                                </button>
-                                <span className="text-gray-400">
-                                    Page {currentPage} of {Math.ceil(filteredPkgs.length / itemsPerPage)}
-                                </span>
-                                <button
-                                    onClick={() => setCurrentPage(p => Math.min(Math.ceil(filteredPkgs.length / itemsPerPage), p + 1))}
-                                    disabled={currentPage === Math.ceil(filteredPkgs.length / itemsPerPage)}
-                                    className="p-2 rounded bg-gray-700 disabled:opacity-50 hover:bg-gray-600 disabled:hover:bg-gray-700 transition"
-                                >
-                                    <ChevronRight size={20} />
-                                </button>
+                        {/* Tags Filter Bar */}
+                        {availableTags.length > 0 && (
+                            <div className="px-4 pb-3 flex items-center gap-2 overflow-x-auto scrollbar-hide">
+                                <div className="flex gap-2">
+                                    {availableTags.map(tag => {
+                                        const isSelected = selectedTags.includes(tag);
+                                        return (
+                                            <button
+                                                key={tag}
+                                                onClick={() => setSelectedTags(prev =>
+                                                    isSelected ? prev.filter(t => t !== tag) : [...prev, tag]
+                                                )}
+                                                className={clsx(
+                                                    "px-3 py-1 text-xs rounded-full border transition-colors whitespace-nowrap",
+                                                    isSelected
+                                                        ? "bg-blue-600 border-blue-500 text-white"
+                                                        : "bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600 hover:text-white"
+                                                )}
+                                            >
+                                                {tag}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
                             </div>
                         )}
-                    </div>
+                    </header>
 
-                    <AnimatePresence>
-                        {selectedPackage && (
-                            <RightSidebar
-                                pkg={selectedPackage}
-                                onClose={() => setSelectedPackage(null)}
-                                onResolve={handleOpenResolve}
+                    <div className="flex-1 flex overflow-hidden">
+                        <div className="flex-1 overflow-auto p-4 custom-scrollbar flex flex-col">
+                            <CardGrid
+                                packages={filteredPkgs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)}
+                                currentPath={vamPath}
+                                totalCount={packages.length}
+                                onContextMenu={handleContextMenu}
+                                onSelect={handlePackageClick}
+                                selectedPkgId={selectedPackage?.filePath}
+                                viewMode={viewMode}
                             />
-                        )}
-                    </AnimatePresence>
-                </div>
-            </main>
 
-            {/* Context Menu */}
-            {contextMenu.open && (
-                <ContextMenu
-                    x={contextMenu.x}
-                    y={contextMenu.y}
-                    pkg={contextMenu.pkg}
-                    onClose={() => setContextMenu({ ...contextMenu, open: false })}
-                    onToggle={togglePackage}
-                    onOpenFolder={handleOpenFolder}
-                    onDownload={handleDownloadPackage}
-                    onCopyPath={handleCopyPath}
-                    onCopyFile={handleCopyFile}
-                    onCutFile={handleCutFile}
-                    onDelete={handleDeleteClick}
-                />
-            )}
+                            {filteredPkgs.length > itemsPerPage && (
+                                <div className="flex justify-center items-center gap-4 py-4 mt-4 border-t border-gray-700 bg-gray-800/50 backdrop-blur sticky bottom-0">
+                                    <button
+                                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                        disabled={currentPage === 1}
+                                        className="p-2 rounded bg-gray-700 disabled:opacity-50 hover:bg-gray-600 disabled:hover:bg-gray-700 transition"
+                                    >
+                                        <ChevronLeft size={20} />
+                                    </button>
+                                    <span className="text-gray-400">
+                                        Page {currentPage} of {Math.ceil(filteredPkgs.length / itemsPerPage)}
+                                    </span>
+                                    <button
+                                        onClick={() => setCurrentPage(p => Math.min(Math.ceil(filteredPkgs.length / itemsPerPage), p + 1))}
+                                        disabled={currentPage === Math.ceil(filteredPkgs.length / itemsPerPage)}
+                                        className="p-2 rounded bg-gray-700 disabled:opacity-50 hover:bg-gray-600 disabled:hover:bg-gray-700 transition"
+                                    >
+                                        <ChevronRight size={20} />
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        <AnimatePresence>
+                            {selectedPackage && (
+                                <RightSidebar
+                                    pkg={selectedPackage}
+                                    onClose={() => setSelectedPackage(null)}
+                                    onResolve={handleOpenResolve}
+                                />
+                            )}
+                        </AnimatePresence>
+                    </div>
+                </main>
+
+                {/* Context Menu */}
+                {contextMenu.open && (
+                    <ContextMenu
+                        x={contextMenu.x}
+                        y={contextMenu.y}
+                        pkg={contextMenu.pkg}
+                        onClose={() => setContextMenu({ ...contextMenu, open: false })}
+                        onToggle={togglePackage}
+                        onOpenFolder={handleOpenFolder}
+                        onDownload={handleDownloadPackage}
+                        onCopyPath={handleCopyPath}
+                        onCopyFile={handleCopyFile}
+                        onCutFile={handleCutFile}
+                        onDelete={handleDeleteClick}
+                    />
+                )}
+            </div>
         </div>
     );
 }

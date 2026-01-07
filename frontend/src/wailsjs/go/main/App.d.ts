@@ -28,4 +28,6 @@ export function ScanPackages(arg1:string):Promise<models.ScanResult>;
 
 export function SelectDirectory():Promise<string>;
 
+export function SetAlwaysOnTop(arg1:boolean):Promise<void>;
+
 export function TogglePackage(arg1:string,arg2:boolean,arg3:string):Promise<string>;

@@ -127,3 +127,8 @@ func (a *App) SelectDirectory() (string, error) {
 		Title: "Select Library Folder",
 	})
 }
+
+// SetAlwaysOnTop toggles the window pinned state
+func (a *App) SetAlwaysOnTop(onTop bool) {
+	runtime.WindowSetAlwaysOnTop(a.ctx, onTop)
+}
