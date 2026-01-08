@@ -46,19 +46,19 @@ interface RightSidebarProps {
     pkg: VarPackage | null;
     onClose: () => void;
     onResolve: (pkg: VarPackage) => void;
+    activeTab: 'details' | 'contents';
+    onTabChange: (tab: 'details' | 'contents') => void;
 }
 
-const RightSidebar = ({ pkg, onClose, onResolve }: RightSidebarProps) => {
+const RightSidebar = ({ pkg, onClose, onResolve, activeTab, onTabChange }: RightSidebarProps) => {
     // ... (state hooks same as before) ...
     const [contents, setContents] = useState<PackageContent[]>([]);
     const [loading, setLoading] = useState(false);
-    const [activeTab, setActiveTab] = useState<'details' | 'contents'>('details');
     const [thumbSrc, setThumbSrc] = useState<string | undefined>(undefined);
 
     useEffect(() => {
         if (pkg) {
             fetchContents();
-            setActiveTab('details'); // Reset to details on new package selection
 
             // Thumbnail Logic
             if (pkg.thumbnailBase64) {
@@ -193,7 +193,7 @@ const RightSidebar = ({ pkg, onClose, onResolve }: RightSidebarProps) => {
                 {/* Tabs / Switcher */}
                 <div className="flex border-b border-gray-800 sticky top-0 bg-gray-900 z-10 text-sm font-medium">
                     <button
-                        onClick={() => setActiveTab('details')}
+                        onClick={() => onTabChange('details')}
                         className={clsx(
                             "flex-1 py-3 text-center transition-colors border-b-2",
                             activeTab === 'details'
@@ -204,7 +204,7 @@ const RightSidebar = ({ pkg, onClose, onResolve }: RightSidebarProps) => {
                         Details
                     </button>
                     <button
-                        onClick={() => setActiveTab('contents')}
+                        onClick={() => onTabChange('contents')}
                         className={clsx(
                             "flex-1 py-3 text-center transition-colors border-b-2",
                             activeTab === 'contents'

@@ -23,6 +23,15 @@ const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'gri
         onSelect(pkg, e);
     };
 
+    // Ensure state syncs if pkg data updates (e.g. from backend scan completion)
+    useEffect(() => {
+        if (pkg.thumbnailBase64) {
+            setThumbSrc(`data:image/jpeg;base64,${pkg.thumbnailBase64}`);
+        } else if (!pkg.hasThumbnail) {
+            setThumbSrc(undefined);
+        }
+    }, [pkg.thumbnailBase64, pkg.hasThumbnail]);
+
     // Lazy Loading Logic
     useEffect(() => {
         // @ts-ignore

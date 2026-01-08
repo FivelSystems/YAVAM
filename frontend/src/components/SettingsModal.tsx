@@ -271,7 +271,8 @@ const SettingsModal = ({
                         </div>
 
                         {/* Footer */}
-                        <div className="p-4 bg-gray-900/50 border-t border-gray-700 flex justify-end shrink-0">
+                        <div className="p-4 bg-gray-900/50 border-t border-gray-700 flex justify-between items-center shrink-0">
+                            <span className="text-xs text-gray-500 font-mono">v1.1.1-e</span>
                             <button
                                 onClick={onClose}
                                 className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors"
