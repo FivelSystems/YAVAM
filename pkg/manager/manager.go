@@ -2,6 +2,7 @@ package manager
 
 import (
 	"archive/zip"
+	"context"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -33,16 +34,19 @@ func NewManager() *Manager {
 	return m
 }
 
-// ScanAndAnalyze scans the directory and returns metadata
-func (m *Manager) ScanAndAnalyze(rootPath string) (models.ScanResult, error) {
+// ScanAndAnalyze scans the directory and streams results via callbacks
+func (m *Manager) ScanAndAnalyze(ctx context.Context, rootPath string, onPackage func(models.VarPackage), onProgress func(int, int)) error {
 	rawPkgs, err := m.scanner.ScanForPackages(rootPath)
 	if err != nil {
-		return models.ScanResult{}, err
+		return err
 	}
 
-	var processedPkgs []models.VarPackage
-	var mu sync.Mutex
+	total := len(rawPkgs)
+	processed := 0
 	var wg sync.WaitGroup
+	// Callback mutex to ensure sequential writes if the receiver isn't thread-safe
+	// (though Wails Emit is, slice append isn't)
+	var cbMu sync.Mutex
 
 	// Channels for tags
 	tagSet := make(map[string]bool)
@@ -51,7 +55,19 @@ func (m *Manager) ScanAndAnalyze(rootPath string) (models.ScanResult, error) {
 	// Sempahore to limit concurrency
 	sem := make(chan struct{}, 20)
 
+	// Notify initial progress
+	if onProgress != nil {
+		onProgress(0, total)
+	}
+
 	for _, pkg := range rawPkgs {
+		// Check cancellation
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		wg.Add(1)
 		go func(p models.VarPackage) {
 			defer wg.Done()
@@ -101,21 +117,16 @@ func (m *Manager) ScanAndAnalyze(rootPath string) (models.ScanResult, error) {
 
 				p.Tags = meta.Tags
 				p.HasThumbnail = len(thumbBytes) > 0
-				if p.HasThumbnail {
-					p.ThumbnailBase64 = base64.StdEncoding.EncodeToString(thumbBytes)
-					fmt.Printf("DEBUG: %s - Thumbnail FOUND (Size: %d bytes)\n", p.FileName, len(thumbBytes))
-				} else {
-					fmt.Printf("DEBUG: %s - Thumbnail NOT found\n", p.FileName)
-				}
+				// MEMORY OPTIMIZATION: Do NOT load Base64 thumbnail here.
+				// It will be served on-demand via API.
+
 				if len(p.Meta.Tags) > 0 {
-					fmt.Printf("DEBUG: %s - Tags Found: %v\n", p.FileName, p.Meta.Tags)
+					// fmt.Printf("DEBUG: %s - Tags Found: %v\n", p.FileName, p.Meta.Tags)
 				}
 
 				// Fix empty fields from filename if meta is missing or incomplete
 				if p.Meta.Creator == "" || p.Meta.PackageName == "" {
 					// Fallback to filename parsing
-					// Expected format: Creator.Package.Version.var
-					// Preserve CASE for display
 					cleanName := p.FileName
 
 					// Remove extensions case-insensitively
@@ -131,7 +142,6 @@ func (m *Manager) ScanAndAnalyze(rootPath string) (models.ScanResult, error) {
 						if p.Meta.Creator == "" {
 							c := parts[0]
 							if len(c) > 0 {
-								// Simple Title Case: "artist" -> "Artist"
 								p.Meta.Creator = strings.ToUpper(c[:1]) + c[1:]
 							} else {
 								p.Meta.Creator = c
@@ -152,15 +162,6 @@ func (m *Manager) ScanAndAnalyze(rootPath string) (models.ScanResult, error) {
 				}
 			}
 
-			// Apply User Preferences
-			// Removed features
-			// p.IsFavorite = favMap[p.FileName]
-			// p.IsHidden = hideMap[p.FileName]
-
-			// Collect tags (assuming generic description search for now,
-			// checking if dependencies have categories or if we extract from specific json)
-			// VaM meta.json doesn't strictly have "tags". Dependencies are keys.
-
 			// Normalize Tags
 			var normalizedTags []string
 			tagMu.Lock()
@@ -172,33 +173,27 @@ func (m *Manager) ScanAndAnalyze(rootPath string) (models.ScanResult, error) {
 			tagMu.Unlock()
 			p.Tags = normalizedTags
 
-			mu.Lock()
-			processedPkgs = append(processedPkgs, p)
-			mu.Unlock()
+			// Thread-safe callbacks
+			cbMu.Lock()
+			current := processed + 1
+			processed = current
+
+			if onPackage != nil {
+				onPackage(p)
+			}
+			if onProgress != nil {
+				// Emit progress every 10 items or if finished
+				if current%10 == 0 || current == total {
+					onProgress(current, total)
+				}
+			}
+			cbMu.Unlock()
 
 		}(pkg)
 	}
+
 	wg.Wait()
-
-	// 3. Duplicate Detection & Missing Dependency Check
-	processedPkgs = m.resolveDuplicates(processedPkgs)
-	processedPkgs = m.checkDependencies(processedPkgs)
-
-	// 4. Sort alphabetically by FileName for stable UI
-	sort.Slice(processedPkgs, func(i, j int) bool {
-		return strings.ToLower(processedPkgs[i].FileName) < strings.ToLower(processedPkgs[j].FileName)
-	})
-
-	// Convert tags map to slice
-	var tags []string
-	for t := range tagSet {
-		if t != "" {
-			tags = append(tags, t)
-		}
-	}
-	sort.Strings(tags)
-
-	return models.ScanResult{Packages: processedPkgs, Tags: tags}, nil
+	return nil
 }
 
 func (m *Manager) resolveDuplicates(pkgs []models.VarPackage) []models.VarPackage {

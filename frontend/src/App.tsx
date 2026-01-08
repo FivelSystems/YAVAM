@@ -12,6 +12,7 @@ import Sidebar from './components/Sidebar';
 import VersionResolutionModal from './components/VersionResolutionModal';
 import SettingsModal from './components/SettingsModal';
 import ConfirmationModal from './components/ConfirmationModal';
+import { ProgressModal } from './components/ProgressModal';
 import RightSidebar from './components/RightSidebar';
 import TitleBar from './components/TitleBar';
 
@@ -162,6 +163,7 @@ function App() {
     const [filteredPkgs, setFilteredPkgs] = useState<VarPackage[]>([]);
     const [availableTags, setAvailableTags] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
+    const [scanProgress, setScanProgress] = useState({ current: 0, total: 0 });
 
     // Filter State
     const [searchQuery, setSearchQuery] = useState("");
@@ -416,30 +418,61 @@ function App() {
     const scanPackages = async () => {
         if (!activeLibraryPath) return;
         setLoading(true);
-        try {
+        setPackages([]); // Clear current list immediately
+        setFilteredPkgs([]);
+        setScanProgress({ current: 0, total: 0 });
+
+        // @ts-ignore
+        if (window.go) {
+            // Remove old listeners to prevent duplicates
             // @ts-ignore
-            if (window.go) {
+            window.runtime.EventsOff("package:scanned");
+            // @ts-ignore
+            window.runtime.EventsOff("scan:progress");
+            // @ts-ignore
+            window.runtime.EventsOff("scan:complete");
+            // @ts-ignore
+            window.runtime.EventsOff("scan:error");
+
+            // Setup Listeners
+            // @ts-ignore
+            window.runtime.EventsOn("package:scanned", (pkg: VarPackage) => {
+                setPackages(prev => [...prev, pkg]);
+            });
+            // @ts-ignore
+            window.runtime.EventsOn("scan:progress", (data: any) => {
+                setScanProgress({ current: data.current, total: data.total });
+            });
+            // @ts-ignore
+            window.runtime.EventsOn("scan:complete", () => {
+                setLoading(false);
+            });
+            // @ts-ignore
+            window.runtime.EventsOn("scan:error", (err: string) => {
+                console.error("Scan error:", err);
+                setLoading(false);
+            });
+
+            try {
                 // @ts-ignore
-                const res = await window.go.main.App.ScanPackages(activeLibraryPath);
-                setPackages(res.packages || []);
-                setAvailableTags(res.tags || []);
-            } else {
-                // Web Mode
+                await window.go.main.App.ScanPackages(activeLibraryPath);
+            } catch (e) {
+                console.error(e);
+                setLoading(false);
+            }
+        } else {
+            // Web Mode
+            try {
                 const pkgs = await fetch(`/api/packages?path=${encodeURIComponent(activeLibraryPath)}`).then(r => r.json());
                 setPackages(pkgs || []);
-                // Extract tags from pkgs if backend doesn't send them separately (my /api/packages endpoint sends [Package] list currently, not ScanResult)
-                // Wait, my endpoint sends res.Packages which is []VarPackage.
-                // It does NOT send tags separately.
-                // I should ideally update endpoint or extract tags here.
-                // Let's extract tags here for now to be safe.
                 const tags = new Set<string>();
                 pkgs?.forEach((p: any) => p.tags?.forEach((t: string) => tags.add(t)));
                 setAvailableTags(Array.from(tags));
+            } catch (e) {
+                console.error(e);
+            } finally {
+                setLoading(false);
             }
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setLoading(false);
         }
     };
 
@@ -746,6 +779,11 @@ function App() {
 
         return (
             <div className="flex h-screen items-center justify-center bg-gray-900 text-white">
+                <ProgressModal
+                    isOpen={loading && !!(window as any).go}
+                    current={scanProgress.current}
+                    total={scanProgress.total}
+                />
                 <SettingsModal
                     isOpen={isSettingsOpen}
                     onClose={() => setIsSettingsOpen(false)}

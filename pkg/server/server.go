@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 	"varmanager/pkg/manager"
+	"varmanager/pkg/models"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -153,13 +154,57 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 			return
 		}
 
-		res, err := s.manager.ScanAndAnalyze(targetPath)
+		var pkgs []models.VarPackage
+		err := s.manager.ScanAndAnalyze(r.Context(), targetPath, func(p models.VarPackage) {
+			pkgs = append(pkgs, p)
+		}, nil)
 		if err != nil {
 			s.writeError(w, err.Error(), 500)
 			return
 		}
 
-		json.NewEncoder(w).Encode(res.Packages)
+		json.NewEncoder(w).Encode(pkgs)
+	})
+
+	// Thumbnail Endpoint
+	mux.HandleFunc("/api/thumbnail", func(w http.ResponseWriter, r *http.Request) {
+		filePath := r.URL.Query().Get("filePath")
+		if filePath == "" {
+			http.NotFound(w, r)
+			return
+		}
+
+		// Security Check
+		cleanTarget := strings.ToLower(filepath.Clean(filePath))
+		cleanActive := strings.ToLower(filepath.Clean(activePath))
+		allowed := false
+
+		if strings.HasPrefix(cleanTarget, cleanActive) {
+			allowed = true
+		} else {
+			for _, lib := range s.libraries {
+				cleanLib := strings.ToLower(filepath.Clean(lib))
+				if strings.HasPrefix(cleanTarget, cleanLib) {
+					allowed = true
+					break
+				}
+			}
+		}
+
+		if !allowed {
+			s.writeError(w, "Access denied", 403)
+			return
+		}
+
+		thumbData, err := s.manager.GetThumbnail(filePath)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		w.Write(thumbData)
 	})
 
 	// Contents Endpoint (for Web Mode)
