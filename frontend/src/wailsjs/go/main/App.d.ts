@@ -41,3 +41,5 @@ export function StartServer(arg1:string,arg2:string,arg3:Array<string>):Promise<
 export function StopServer():Promise<void>;
 
 export function TogglePackage(arg1:string,arg2:boolean,arg3:string,arg4:boolean):Promise<string>;
+
+export function UpdateServerLibraries(arg1:Array<string>):Promise<void>;

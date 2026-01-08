@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
@@ -25,16 +26,25 @@ type Server struct {
 	logMutex  sync.Mutex
 	manager   *manager.Manager
 	libraries []string // List of allowed library paths
+	assets    fs.FS    // Embedded frontend assets
 	onRestore func()
 }
 
-func NewServer(ctx context.Context, m *manager.Manager, onRestore func()) *Server {
+func NewServer(ctx context.Context, m *manager.Manager, assets fs.FS, onRestore func()) *Server {
 	return &Server{
 		ctx:       ctx,
 		manager:   m,
 		onRestore: onRestore,
 		libraries: []string{},
+		assets:    assets,
 	}
+}
+
+func (s *Server) UpdateLibraries(libraries []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.libraries = libraries
+	s.log(fmt.Sprintf("Updated allowed libraries: %d paths", len(libraries)))
 }
 
 func (s *Server) log(message string) {
@@ -118,20 +128,27 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 			targetPath = activePath
 		}
 
+		s.log(fmt.Sprintf("Client requested packages for: %s", targetPath))
+
 		// Security: Ensure targetPath is in allowed libraries
+		// Normalize paths for comparison (handle slashes and case)
 		allowed := false
-		for _, lib := range s.libraries {
-			if lib == targetPath {
-				allowed = true
-				break
-			}
-		}
-		// Also allow the initial active path even if not explicitly in list (edge case)
-		if targetPath == activePath {
+		cleanTarget := strings.ToLower(filepath.Clean(targetPath))
+		cleanActive := strings.ToLower(filepath.Clean(activePath))
+
+		if cleanTarget == cleanActive {
 			allowed = true
+		} else {
+			for _, lib := range s.libraries {
+				if strings.ToLower(filepath.Clean(lib)) == cleanTarget {
+					allowed = true
+					break
+				}
+			}
 		}
 
 		if !allowed {
+			s.log(fmt.Sprintf("Access denied. Target: %s, Allowed: %v", cleanTarget, s.libraries))
 			s.writeError(w, "Access denied to this library path", 403)
 			return
 		}
@@ -285,12 +302,8 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 	})
 
 	// Serve Frontend (Dist)
-	distPath := filepath.Join("frontend", "dist")
-	if _, err := os.Stat(distPath); os.IsNotExist(err) {
-		s.log("Warning: frontend/dist not found. Web UI may not work.")
-	}
-
-	distFs := http.FileServer(http.Dir(distPath))
+	// Use embedded assets
+	distFs := http.FileServer(http.FS(s.assets))
 
 	// Custom File Serving Logic
 	mux.HandleFunc("/files/", func(w http.ResponseWriter, r *http.Request) {
