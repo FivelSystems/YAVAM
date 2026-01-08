@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, FolderOpen, LayoutGrid, Network, Folder, Terminal } from "lucide-react";
+import { X, FolderOpen, LayoutGrid, Network, Folder, Terminal, AlertTriangle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from 'clsx';
 
@@ -15,6 +15,8 @@ interface SettingsModalProps {
     // Dashboard Tab
     gridSize: number;
     setGridSize: (size: number) => void;
+    itemsPerPage: number;
+    setItemsPerPage: (val: number) => void;
 }
 
 const SettingsModal = ({
@@ -26,10 +28,16 @@ const SettingsModal = ({
     libraryPath,
     onBrowseLibrary,
     gridSize,
-    setGridSize
+    setGridSize,
+    itemsPerPage,
+    setItemsPerPage
 }: SettingsModalProps) => {
 
     const [activeTab, setActiveTab] = useState<'dashboard' | 'libraries' | 'network'>('dashboard');
+
+    // ...
+
+
 
     // Network Tab State
     const [serverEnabled, setServerEnabled] = useState(false);
@@ -108,7 +116,7 @@ const SettingsModal = ({
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.95 }}
-                        className="bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl h-[600px] border border-gray-700 overflow-hidden flex flex-col"
+                        className="bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl h-[600px] max-h-[90vh] border border-gray-700 overflow-hidden flex flex-col"
                     >
                         {/* Header */}
                         <div className="flex items-center justify-between p-4 border-b border-gray-700 shrink-0">
@@ -166,6 +174,28 @@ const SettingsModal = ({
                                                         <span>Compact</span>
                                                         <span>Large</span>
                                                     </div>
+                                                </div>
+
+                                                <div className="pt-4 border-t border-gray-700">
+                                                    <div className="flex justify-between items-start mb-1">
+                                                        <div className="space-y-1">
+                                                            <label className="text-sm text-gray-300 font-medium block">Packages Per Page</label>
+                                                            <p className="text-xs text-gray-500">Default: 25</p>
+                                                        </div>
+                                                        <input
+                                                            type="number"
+                                                            min="1"
+                                                            value={itemsPerPage}
+                                                            onChange={(e) => setItemsPerPage(Math.max(1, parseInt(e.target.value) || 1))}
+                                                            className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none w-24 text-center"
+                                                        />
+                                                    </div>
+                                                    {itemsPerPage > 50 && (
+                                                        <div className="mt-2 flex items-center gap-2 text-yellow-500 text-xs bg-yellow-500/10 p-2 rounded">
+                                                            <AlertTriangle size={14} />
+                                                            <span>High count may impact performance. Recommended max: 50.</span>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
