@@ -7,7 +7,6 @@ This tool was developed with the assistance of an AI agent.
 ## Features
 
 *   **Package Browser**: View your `.var` files in a responsive grid with thumbnails.
-*   **Package Browser**: View your `.var` files in a responsive grid with thumbnails.
 *   **Web Server & Mobile Support**: Access your library from any device on your network via a browser. Includes a fully responsive mobile interface.
 *   **Remote Management**: Enable/Disable packages, view details, and manage files from your phone or tablet.
 *   **Drag & Drop Upload**: Wireless file transfer - upload `.var` files directly from your browser to the host library.
