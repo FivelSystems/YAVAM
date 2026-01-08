@@ -753,6 +753,7 @@ func (m *Manager) ResolveConflicts(keepPath string, others []string, libraryPath
 // CopyPackagesToLibrary copies a list of package files to a destination library
 // Returns list of collided filenames (if overwrite=false) or error
 func (m *Manager) CopyPackagesToLibrary(filePaths []string, destLibPath string, overwrite bool) ([]string, error) {
+	fmt.Printf("[Manager] CopyPackagesToLibrary called. Dest: %s, Overwrite: %v, Count: %d\n", destLibPath, overwrite, len(filePaths))
 	var collisions []string
 	// Ensure destination exists
 	addonPath := destLibPath
@@ -765,7 +766,9 @@ func (m *Manager) CopyPackagesToLibrary(filePaths []string, destLibPath string, 
 		for _, src := range filePaths {
 			baseName := filepath.Base(src)
 			dest := filepath.Join(addonPath, baseName)
-			if _, err := os.Stat(dest); err == nil {
+			fmt.Printf("[Manager] Checking collision for %s -> %s\n", src, dest)
+			if info, err := os.Stat(dest); err == nil {
+				fmt.Printf("[Manager] Collision found: %s (IsDir: %v)\n", dest, info.IsDir())
 				collisions = append(collisions, baseName)
 			}
 		}
@@ -800,6 +803,7 @@ func (m *Manager) CopyPackagesToLibrary(filePaths []string, destLibPath string, 
 		if err != nil {
 			return nil, fmt.Errorf("failed to copy %s: %v", baseName, err)
 		}
+		fmt.Printf("[Manager] Copied %s to %s\n", baseName, dest)
 	}
 	return nil, nil // Success, no collisions/errors
 }
