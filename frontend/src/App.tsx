@@ -45,8 +45,8 @@ function App() {
         if (index < 0 || index >= libraries.length) return;
         setActiveLibIndex(index);
         const path = libraries[index];
-        setVamPath(path);
-        localStorage.setItem("vamPath", path);
+        setActiveLibraryPath(path);
+        localStorage.setItem("activeLibraryPath", path);
         // Toast?
     };
 
@@ -58,8 +58,8 @@ function App() {
                 // Already exists, just switch to it
                 const idx = prev.indexOf(path);
                 setActiveLibIndex(idx);
-                setVamPath(path);
-                localStorage.setItem("vamPath", path);
+                setActiveLibraryPath(path);
+                localStorage.setItem("activeLibraryPath", path);
                 return prev;
             }
             const newLibs = [...prev, path];
@@ -67,8 +67,8 @@ function App() {
 
             // Switch to new
             setActiveLibIndex(newLibs.length - 1);
-            setVamPath(path);
-            localStorage.setItem("vamPath", path);
+            setActiveLibraryPath(path);
+            localStorage.setItem("activeLibraryPath", path);
             return newLibs;
         });
     };
@@ -83,14 +83,14 @@ function App() {
             if (activeLibIndex >= newLibs.length) {
                 setActiveLibIndex(newLibs.length - 1);
                 const path = newLibs[newLibs.length - 1] || "";
-                setVamPath(path);
-                localStorage.setItem("vamPath", path);
+                setActiveLibraryPath(path);
+                localStorage.setItem("activeLibraryPath", path);
             } else if (index === activeLibIndex) {
                 // Removed current, switching to same index (which is now next item) or prev?
                 // Actually if I remove index 0, the new index 0 is valid.
                 const path = newLibs[activeLibIndex] || "";
-                setVamPath(path);
-                localStorage.setItem("vamPath", path);
+                setActiveLibraryPath(path);
+                localStorage.setItem("activeLibraryPath", path);
             } else if (index < activeLibIndex) {
                 // Removed item before current, shift index down
                 setActiveLibIndex(prevIdx => prevIdx - 1);
@@ -120,7 +120,7 @@ function App() {
     const [libraries, setLibraries] = useState<string[]>(() => {
         const saved = localStorage.getItem("savedLibraries");
         const initial = saved ? JSON.parse(saved) : [];
-        const current = localStorage.getItem("vamPath");
+        const current = localStorage.getItem("activeLibraryPath");
         if (current && !initial.includes(current)) {
             return [current, ...initial];
         }
@@ -129,7 +129,7 @@ function App() {
 
     // Determine active index based on current vamPath or default to 0
     const [activeLibIndex, setActiveLibIndex] = useState(() => {
-        const current = localStorage.getItem("vamPath");
+        const current = localStorage.getItem("activeLibraryPath");
         const saved = localStorage.getItem("savedLibraries");
         const libs = saved ? JSON.parse(saved) : [];
         if (current) {
@@ -147,9 +147,9 @@ function App() {
     // Derived vamPath (source of truth is libraries[activeLibIndex])
     // But we also need to support the case where no libraries exist yet.
     // So we use a state for vamPath that syncs, or just use derived?
-    // Existing logic relies on `vamPath` state. Let's keep `vamPath` state but update it when library switches.
-    const [vamPath, setVamPath] = useState<string>(() => {
-        const current = localStorage.getItem("vamPath");
+    // Existing logic relies on `activeLibraryPath` state.
+    const [activeLibraryPath, setActiveLibraryPath] = useState<string>(() => {
+        const current = localStorage.getItem("activeLibraryPath");
         if (current) return current;
         // Fallback to first library if available
         const saved = localStorage.getItem("savedLibraries");
@@ -242,6 +242,8 @@ function App() {
     const [installModal, setInstallModal] = useState<{ open: boolean, pkgs: VarPackage[] }>({ open: false, pkgs: [] });
     // Install Collision
     const [installCollision, setInstallCollision] = useState<{ open: boolean, collisions: string[], libPath: string, pkgs: VarPackage[] }>({ open: false, collisions: [], libPath: "", pkgs: [] });
+    // Details Panel Visibility
+    const [isDetailsPanelOpen, setIsDetailsPanelOpen] = useState(false);
 
     const handlePackageClick = (pkg: VarPackage, e?: React.MouseEvent) => {
         if (e && (e.ctrlKey || e.metaKey)) {
@@ -252,13 +254,11 @@ function App() {
                 else newSet.add(pkg.filePath);
                 return newSet;
             });
-            // Update primary selection for RightSidebar if only 1 remains?
-            // Actually RightSidebar logic will be: show if selectIds.size === 1
-            // We also keep selectedPackage for backwards compat in other funcs? 
-            // Ideally we sync selectedPackage to "last clicked" or null if multiple?
+            // Update anchor, but DO NOT open details panel
             setSelectedPackage(pkg);
+            setIsDetailsPanelOpen(false);
         } else if (e && e.shiftKey && selectedPackage) {
-            // Shift select (range) - naive implementation: select all between last and current in filtered
+            // Shift select (range)
             const start = filteredPkgs.findIndex(p => p.filePath === selectedPackage.filePath);
             const end = filteredPkgs.findIndex(p => p.filePath === pkg.filePath);
             if (start !== -1 && end !== -1) {
@@ -272,10 +272,19 @@ function App() {
                 });
             }
             setSelectedPackage(pkg);
+            setIsDetailsPanelOpen(false);
         } else {
             // Single select
-            setSelectedPackage(pkg);
-            setSelectedIds(new Set([pkg.filePath]));
+            if (selectedPackage?.filePath === pkg.filePath && selectedIds.size === 1) {
+                // Toggle off / Deselect
+                setSelectedPackage(null);
+                setSelectedIds(new Set());
+                setIsDetailsPanelOpen(false);
+            } else {
+                setSelectedPackage(pkg);
+                setSelectedIds(new Set([pkg.filePath]));
+                setIsDetailsPanelOpen(true);
+            }
         }
     };
 
@@ -319,10 +328,10 @@ function App() {
                     if (data.libraries && Array.isArray(data.libraries)) {
                         setLibraries(data.libraries);
                     }
-                    if (data.path && !vamPath) {
+                    if (data.path && !activeLibraryPath) {
                         // Only set if we don't have one selected? 
                         // actually we should trust server config on initial load if local state is empty
-                        setVamPath(data.path);
+                        setActiveLibraryPath(data.path);
                     }
                 })
                 .catch(err => console.error("Failed to fetch server config", err));
@@ -347,7 +356,7 @@ function App() {
             } else {
                 try {
                     // @ts-ignore
-                    await window.go.main.App.StartServer(serverPort, vamPath, libraries);
+                    await window.go.main.App.StartServer(serverPort, activeLibraryPath, libraries);
                     setServerEnabled(true);
                 } catch (e) {
                     alert("Failed to start server: " + e);
@@ -367,8 +376,8 @@ function App() {
                 .then(r => r.json())
                 .then(cfg => {
                     if (cfg.path) {
-                        setVamPath(cfg.path);
-                        localStorage.setItem('vamPath', cfg.path);
+                        setActiveLibraryPath(cfg.path);
+                        localStorage.setItem('activeLibraryPath', cfg.path);
                     }
                 })
                 .catch(() => console.log("Not in web mode or server offline"));
@@ -384,10 +393,10 @@ function App() {
     }, []);
 
     useEffect(() => {
-        if (vamPath) {
+        if (activeLibraryPath) {
             scanPackages();
         }
-    }, [vamPath]);
+    }, [activeLibraryPath]);
 
     // Sync libraries to server if running
     useEffect(() => {
@@ -404,18 +413,18 @@ function App() {
     }, [packages, searchQuery, currentFilter, selectedCreator, selectedType, selectedTags]);
 
     const scanPackages = async () => {
-        if (!vamPath) return;
+        if (!activeLibraryPath) return;
         setLoading(true);
         try {
             // @ts-ignore
             if (window.go) {
                 // @ts-ignore
-                const res = await window.go.main.App.ScanPackages(vamPath);
+                const res = await window.go.main.App.ScanPackages(activeLibraryPath);
                 setPackages(res.packages || []);
                 setAvailableTags(res.tags || []);
             } else {
                 // Web Mode
-                const pkgs = await fetch(`/api/packages?path=${encodeURIComponent(vamPath)}`).then(r => r.json());
+                const pkgs = await fetch(`/api/packages?path=${encodeURIComponent(activeLibraryPath)}`).then(r => r.json());
                 setPackages(pkgs || []);
                 // Extract tags from pkgs if backend doesn't send them separately (my /api/packages endpoint sends [Package] list currently, not ScanResult)
                 // Wait, my endpoint sends res.Packages which is []VarPackage.
@@ -471,21 +480,22 @@ function App() {
 
     const handleDrop = useCallback(async (files: string[]) => {
         console.log("Dropped files:", files);
-        if (!vamPath) return;
+        if (!activeLibraryPath) return;
         try {
             // @ts-ignore
-            await window.go.main.App.InstallFiles(files, vamPath);
+            await window.go.main.App.InstallFiles(files, activeLibraryPath);
             scanPackages(); // Refresh
         } catch (e) {
             console.error(e);
             alert(e);
         }
-    }, [vamPath]);
+    }, [activeLibraryPath]);
 
     const handleWebUpload = async (files: FileList) => {
         if (!files || files.length === 0) return;
         setLoading(true);
         const formData = new FormData();
+        formData.append('path', activeLibraryPath || "");
         for (let i = 0; i < files.length; i++) {
             formData.append("file", files[i]);
         }
@@ -531,7 +541,7 @@ function App() {
             // @ts-ignore
             if (window.go) {
                 // @ts-ignore
-                newPath = await window.go.main.App.TogglePackage(pkg.filePath, !pkg.isEnabled, vamPath, merge);
+                newPath = await window.go.main.App.TogglePackage(pkg.filePath, !pkg.isEnabled, activeLibraryPath, merge);
             } else {
                 // Web Mode
                 const res = await fetch('/api/toggle', {
@@ -658,16 +668,50 @@ function App() {
     };
 
     const handleConfirmResolve = async (keepPkg: VarPackage) => {
-        const others = resolveData.duplicates.filter(p => p.filePath !== keepPkg.filePath);
-        setResolveData({ open: false, duplicates: [] }); // Close immediately
+        const others = resolveData.duplicates.filter(p => p.filePath !== keepPkg.filePath).map(p => p.filePath);
+        setResolveData({ open: false, duplicates: [] }); // Close immediately, optimistic UI
 
-        // Disable others
-        for (const p of others) {
-            await togglePackage(p); // This will trigger state updates and duplicate recalc
+        try {
+            // @ts-ignore
+            if (window.go) {
+                // @ts-ignore
+                const res = await window.go.main.App.ResolveConflicts(keepPkg.filePath, others, activeLibraryPath);
+
+                let msg = "Conflicts resolved";
+                if (res.merged > 0) msg += `, ${res.merged} merged`;
+                if (res.disabled > 0) msg += `, ${res.disabled} disabled`;
+
+                addToast(msg, 'success');
+                scanPackages(); // Refresh to show new state/paths
+            } else {
+                // Web Mode
+                const res = await fetch('/api/resolve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        keepPath: keepPkg.filePath,
+                        others: others,
+                        libraryPath: activeLibraryPath
+                    })
+                }).then(r => r.json());
+
+                if (res.error || res.success === false) {
+                    throw new Error(res.message || "Unknown error");
+                }
+
+                let msg = "Conflicts resolved";
+                if (res.merged > 0) msg += `, ${res.merged} merged`;
+                if (res.disabled > 0) msg += `, ${res.disabled} disabled`;
+                addToast(msg, 'success');
+            }
+            scanPackages(); // Refresh to show new state/paths
+        } catch (e) {
+            console.error(e);
+            addToast("Failed to resolve: " + e, 'error');
         }
     };
 
-    if (!vamPath) {
+    if (!activeLibraryPath) {
         // @ts-ignore
         if (!window.go) {
             return (
@@ -726,7 +770,7 @@ function App() {
                     <div className="flex gap-2 justify-center">
                         <input
                             type="text"
-                            value={vamPath}
+                            value={activeLibraryPath}
                             readOnly
                             placeholder="Select repository root folder..."
                             className="bg-gray-800 p-2 rounded w-96 border border-gray-700 text-gray-400 cursor-not-allowed"
@@ -998,7 +1042,7 @@ function App() {
                             <div className="flex-1 overflow-auto p-4 custom-scrollbar">
                                 <CardGrid
                                     packages={filteredPkgs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)}
-                                    currentPath={vamPath}
+                                    currentPath={activeLibraryPath}
                                     totalCount={packages.length}
                                     onContextMenu={handleContextMenu}
                                     onSelect={handlePackageClick}
@@ -1101,10 +1145,10 @@ function App() {
                         </div>
 
                         <AnimatePresence>
-                            {(selectedPackage && selectedIds.size === 1) && (
+                            {(selectedPackage && selectedIds.size === 1 && isDetailsPanelOpen) && (
                                 <RightSidebar
                                     pkg={selectedPackage}
-                                    onClose={() => { setSelectedPackage(null); setSelectedIds(new Set()); }}
+                                    onClose={() => { setIsDetailsPanelOpen(false); setSelectedPackage(null); setSelectedIds(new Set()); }}
                                     onResolve={handleOpenResolve}
                                 />
                             )}
@@ -1143,7 +1187,7 @@ function App() {
                             <h2 className="text-xl font-bold text-white mb-4">Install to Library</h2>
                             <p className="text-gray-400 mb-4">Select the destination library for {installModal.pkgs.length} package(s):</p>
                             <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar mb-4">
-                                {libraries.filter(l => l !== vamPath).map(lib => (
+                                {libraries.filter(l => l !== activeLibraryPath).map(lib => (
                                     <button
                                         key={lib}
                                         onClick={async () => {

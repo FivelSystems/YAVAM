@@ -323,6 +323,11 @@ func (a *App) onTrayReady() {
 	})
 }
 
+// ResolveConflicts handles deduplication and cleanup of conflicting packages
+func (a *App) ResolveConflicts(keepPath string, others []string, libraryPath string) (*manager.ResolveConflictResult, error) {
+	return a.manager.ResolveConflicts(keepPath, others, libraryPath)
+}
+
 func (a *App) onTrayExit() {
 	// Cleanup
 }

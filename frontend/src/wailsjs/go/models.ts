@@ -1,3 +1,24 @@
+export namespace manager {
+	
+	export class ResolveConflictResult {
+	    merged: number;
+	    disabled: number;
+	    newPath: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ResolveConflictResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.merged = source["merged"];
+	        this.disabled = source["disabled"];
+	        this.newPath = source["newPath"];
+	    }
+	}
+
+}
+
 export namespace models {
 	
 	export class MetaJSON {

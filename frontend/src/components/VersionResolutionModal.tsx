@@ -18,7 +18,7 @@ const VersionResolutionModal = ({ isOpen, onClose, duplicates, onResolve }: Vers
     });
 
     return (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
             <div className="bg-gray-800 border border-gray-700 rounded-xl shadow-2xl max-w-2xl w-full flex flex-col max-h-[80vh]">
                 <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-yellow-900/20">
                     <h2 className="text-lg font-bold text-yellow-500 flex items-center gap-2">
@@ -32,28 +32,47 @@ const VersionResolutionModal = ({ isOpen, onClose, duplicates, onResolve }: Vers
 
                 <div className="p-4 overflow-y-auto flex-1 custom-scrollbar">
                     <p className="text-gray-300 mb-6 text-sm">
-                        Multiple enabled versions of the same package detected. VaM may behave unpredictably.
-                        <br />
-                        Please select the version you want to <strong>Keep Enabled</strong>. All others will be disabled.
+                        Multiple enabled versions detected. Select the one to <strong>Keep Enabled</strong>:<br />
+                        <span className="text-gray-500 text-xs">(Identical copies will be automatically merged/deleted)</span>
                     </p>
 
                     <div className="space-y-3">
-                        {sorted.map((pkg) => (
-                            <div key={pkg.filePath} className="bg-gray-900/50 p-4 rounded-lg border border-gray-700 hover:border-blue-500/50 transition-colors flex justify-between items-center group">
-                                <div>
-                                    <div className="font-semibold text-white">{pkg.fileName}</div>
-                                    <div className="text-xs text-gray-500 font-mono mt-1">{pkg.meta.version ? `v${pkg.meta.version}` : 'Unknown Version'} • {pkg.meta.creator}</div>
-                                    <div className="text-xs text-gray-600 mt-1 truncate max-w-md">{pkg.filePath}</div>
-                                </div>
-                                <button
+                        {sorted.map((pkg) => {
+                            const isIdenticalToOthers = sorted.some(p => p.filePath !== pkg.filePath && p.size === pkg.size && p.meta.version === pkg.meta.version);
+
+                            return (
+                                <div
+                                    key={pkg.filePath}
                                     onClick={() => onResolve(pkg)}
-                                    className="px-4 py-2 bg-gray-700 hover:bg-blue-600 text-gray-200 hover:text-white rounded-lg flex items-center gap-2 transition-all font-medium text-sm border border-gray-600 hover:border-transparent"
+                                    className="bg-gray-900/50 p-3 rounded-lg border border-gray-700 hover:border-blue-500 hover:bg-gray-800/80 transition-all cursor-pointer flex justify-between items-center group active:scale-[0.98]"
                                 >
-                                    <CheckCircle size={16} />
-                                    Keep This
-                                </button>
-                            </div>
-                        ))}
+                                    <div className="min-w-0 pr-4">
+                                        <div className="font-bold text-white truncate text-base flex items-center gap-2">
+                                            {pkg.meta.packageName || pkg.fileName}
+                                            {isIdenticalToOthers && (
+                                                <span className="text-[10px] bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded border border-purple-500/30">
+                                                    Duplicate
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="text-xs text-gray-400 mt-0.5 flex items-center gap-2">
+                                            <span className="bg-gray-800 px-1.5 py-0.5 rounded text-gray-300 border border-gray-700">
+                                                v{pkg.meta.version || '?'}
+                                            </span>
+                                            <span className="truncate">{pkg.meta.creator}</span>
+                                            <span className="text-gray-600">•</span>
+                                            <span className="font-mono text-gray-500">{(pkg.size / 1024 / 1024).toFixed(2)} MB</span>
+                                        </div>
+                                        <div className="text-[10px] text-gray-600 mt-1 truncate font-mono hidden sm:block">
+                                            {pkg.filePath}
+                                        </div>
+                                    </div>
+                                    <div className="shrink-0 text-gray-600 group-hover:text-blue-500 transition-colors">
+                                        <CheckCircle size={24} />
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
 

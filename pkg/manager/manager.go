@@ -598,3 +598,92 @@ func (m *Manager) GetPackageContents(pkgPath string) ([]models.PackageContent, e
 
 	return contents, nil
 }
+
+// ResolveConflictResult holds statistics about the resolution operation
+type ResolveConflictResult struct {
+	Merged   int    `json:"merged"`
+	Disabled int    `json:"disabled"`
+	NewPath  string `json:"newPath"`
+}
+
+// ResolveConflicts handles deduplication and cleanup of conflicting packages
+func (m *Manager) ResolveConflicts(keepPath string, others []string, libraryPath string) (*ResolveConflictResult, error) {
+	// 1. Get info of the file to keep
+	keepInfo, err := os.Stat(keepPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat keep file: %v", err)
+	}
+	fmt.Printf("[ResolveConflicts] Keep: %s (Size: %d)\n", filepath.Base(keepPath), keepInfo.Size())
+
+	result := &ResolveConflictResult{
+		Merged:   0,
+		Disabled: 0,
+		NewPath:  keepPath, // Default to current path if move fails or not needed
+	}
+
+	// 2. Process conflicting files
+	for _, otherPath := range others {
+		if otherPath == keepPath {
+			continue
+		}
+
+		otherInfo, err := os.Stat(otherPath)
+		if os.IsNotExist(err) {
+			fmt.Printf("[ResolveConflicts] Duplicate not found: %s\n", otherPath)
+			continue // Already gone?
+		}
+
+		fmt.Printf("[ResolveConflicts] Comparing with: %s (Size: %d)\n", filepath.Base(otherPath), otherInfo.Size())
+
+		// Merge Check: Exactly same size?
+		if otherInfo.Size() == keepInfo.Size() {
+			fmt.Println("[ResolveConflicts] MATCH! Deleting duplicate...")
+			// IDENTICAL: Delete "other"
+			if err := os.Remove(otherPath); err == nil {
+				result.Merged++
+			} else {
+				fmt.Printf("Failed to delete duplicate %s: %v\n", otherPath, err)
+			}
+		} else {
+			fmt.Println("[ResolveConflicts] MISMATCH! Disabling...")
+			// DIFFERENT: Disable "other"
+			if !strings.HasSuffix(otherPath, ".disabled") {
+				disabledPath := otherPath + ".disabled"
+				if err := os.Rename(otherPath, disabledPath); err == nil {
+					result.Disabled++
+				} else {
+					fmt.Printf("Failed to disable conflict %s: %v\n", otherPath, err)
+				}
+			}
+		}
+	}
+
+	// 3. Move 'keepPath' to Library Root (Standardization)
+	// Only if it's not already in the root
+	baseName := filepath.Base(keepPath)
+	targetPath := filepath.Join(libraryPath, baseName)
+
+	if filepath.Clean(keepPath) != filepath.Clean(targetPath) {
+		// Move it
+		// Check if target exists
+		if _, err := os.Stat(targetPath); err == nil {
+			// Target exists. Is it me?
+			if filepath.Clean(keepPath) != filepath.Clean(targetPath) {
+				// We have a collision at the destination.
+				// This shouldn't happen if we passed all duplicates in 'others'.
+				// But safety check:
+				fmt.Printf("[ResolveConflicts] Target path exists: %s. Cannot move.\n", targetPath)
+				// Don't error out, just keep it where it is.
+			}
+		} else {
+			// Move
+			if err := os.Rename(keepPath, targetPath); err == nil {
+				result.NewPath = targetPath
+			} else {
+				fmt.Printf("[ResolveConflicts] Failed to move keep file to root: %v\n", err)
+			}
+		}
+	}
+
+	return result, nil
+}
