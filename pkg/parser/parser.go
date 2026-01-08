@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 	"varmanager/pkg/models"
 )
@@ -31,30 +32,63 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 	}
 	tagSet := make(map[string]bool)
 
+	// 1. Index files for fast lookup
+	fileMap := make(map[string]*zip.File)
+	for _, f := range r.File {
+		if !f.FileInfo().IsDir() {
+			fileMap[strings.ToLower(strings.ReplaceAll(f.Name, "\\", "/"))] = f
+		}
+	}
+
 	for _, f := range r.File {
 		if f.FileInfo().IsDir() {
 			continue
 		}
 
 		normName := strings.ReplaceAll(strings.ToLower(f.Name), "\\", "/")
+		isContent := false
 
-		// Category Detection
+		// Category Detection & Content Identification
 		if strings.HasPrefix(normName, "saves/scene/") && strings.HasSuffix(normName, ".json") {
 			categorySet["Scene"] = true
+			isContent = true
 		} else if strings.HasPrefix(normName, "saves/person/appearance/") && strings.HasSuffix(normName, ".vap") {
 			categorySet["Look"] = true
+			isContent = true
 		} else if strings.HasPrefix(normName, "custom/clothing/") {
 			categorySet["Clothing"] = true
+			// Clothing items often don't have a single file representing the item (folder based),
+			// but if there is a .vam or .json, we might check for image.
+			// Check suffixes commonly associated with definitions
+			if strings.HasSuffix(normName, ".vam") || strings.HasSuffix(normName, ".json") {
+				isContent = true
+			}
 		} else if strings.HasPrefix(normName, "custom/hair/") {
 			categorySet["Hair"] = true
+			if strings.HasSuffix(normName, ".vam") || strings.HasSuffix(normName, ".json") {
+				isContent = true
+			}
 		} else if strings.HasPrefix(normName, "custom/atom/person/morphs/") {
 			categorySet["Morph"] = true
+			if strings.HasSuffix(normName, ".vmi") || strings.HasSuffix(normName, ".vmb") {
+				isContent = true
+			}
 		} else if strings.HasPrefix(normName, "custom/atom/person/textures/") {
 			categorySet["Skin"] = true
+			// Textures themselves are content, but usually don't have "thumbnails" separate from themselves?
+			// Actually User wants to AVOID textures.
+			// So we set isContent=false here strictly for thumbnail purposes
+			isContent = false
 		} else if strings.HasPrefix(normName, "custom/scripts/") {
 			categorySet["Script"] = true
+			if strings.HasSuffix(normName, ".cs") || strings.HasSuffix(normName, ".cslist") {
+				isContent = true
+			}
 		} else if strings.HasPrefix(normName, "custom/assets/") {
 			categorySet["Asset"] = true
+			if strings.HasSuffix(normName, ".assetbundle") || strings.HasSuffix(normName, ".scene") {
+				isContent = true
+			}
 		} else if strings.HasPrefix(normName, "custom/") {
 			// Generic dynamic category detection (Custom/CategoryName/...)
 			parts := strings.Split(normName, "/")
@@ -69,7 +103,7 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 			}
 		}
 
-		// 1. Metadata Parsing
+		// Metadata Parsing
 		if normName == "meta.json" || normName == "core/meta.json" {
 			rc, err := f.Open()
 			if err == nil {
@@ -81,7 +115,7 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 			}
 		}
 
-		// 2. Deep Tag Scanning (VAM files)
+		// Deep Tag Scanning
 		if strings.HasSuffix(normName, ".vam") {
 			rc, err := f.Open()
 			if err == nil {
@@ -104,48 +138,39 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 			}
 		}
 
-		// 3. Thumbnail Hunting
-		if !strings.HasSuffix(normName, ".jpg") && !strings.HasSuffix(normName, ".png") {
-			continue
-		}
+		// Thumbnail Candidate Logic: Content Sibling (Priority 3)
+		// If we haven't found a higher priority candidate yet...
+		if candidatePriority < 3 && isContent {
+			// Look for sibling jpg/png
+			// Remove extension
+			ext := filepath.Ext(normName)
+			base := normName[:len(normName)-len(ext)]
 
-		currentPriority := 0
-		if normName == "package.jpg" || normName == "package.png" {
-			currentPriority = 5
-		} else if strings.Contains(normName, "saves/scene/") && !strings.Contains(normName, "/screenshots/") {
-			currentPriority = 3
-		} else if strings.Contains(normName, "/appearance/") || strings.Contains(normName, "/clothing/") {
-			currentPriority = 2
-		} else {
-			// STRICTER FILTERING: Ignore random textures
-			if strings.Contains(normName, "/textures/") || strings.Contains(normName, "/texture/") {
-				continue
+			if img, ok := fileMap[base+".jpg"]; ok {
+				candidate = img
+				candidatePriority = 3
+			} else if img, ok := fileMap[base+".png"]; ok {
+				candidate = img
+				candidatePriority = 3
 			}
-			if strings.Contains(normName, "_nm.") || strings.Contains(normName, "_spec.") || strings.Contains(normName, "_trans.") {
-				continue
-			}
-			if strings.HasPrefix(normName, "custom/") {
-				// Ignore custom assets/textures unless strictly matched above
-				continue
-			}
-			currentPriority = 1
-		}
-
-		if currentPriority > candidatePriority {
-			candidate = f
-			candidatePriority = currentPriority
 		}
 	}
 
-	// Override: If meta specifies an image, use it!
+	// Priority 4: Standard Package Image
+	if f, ok := fileMap["package.jpg"]; ok {
+		candidate = f
+		candidatePriority = 4
+	} else if f, ok := fileMap["package.png"]; ok {
+		candidate = f
+		candidatePriority = 4
+	}
+
+	// Priority 5: Meta ImageUrl (Highest)
 	if meta.ImageUrl != "" {
 		target := strings.ReplaceAll(strings.ToLower(meta.ImageUrl), "\\", "/")
-		for _, f := range r.File {
-			fn := strings.ReplaceAll(strings.ToLower(f.Name), "\\", "/")
-			if fn == target {
-				candidate = f
-				break
-			}
+		if f, ok := fileMap[target]; ok {
+			candidate = f
+			candidatePriority = 5
 		}
 	}
 
