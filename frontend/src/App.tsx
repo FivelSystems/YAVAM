@@ -445,6 +445,7 @@ function App() {
             });
             // @ts-ignore
             window.runtime.EventsOn("scan:complete", () => {
+                setPackages(prev => analyzePackages(prev));
                 setLoading(false);
             });
             // @ts-ignore
@@ -557,23 +558,60 @@ function App() {
         }
     };
 
-    const recalculateDuplicates = (currentPkgs: VarPackage[]): VarPackage[] => {
-        // ...
+    const analyzePackages = (pkgs: VarPackage[]): VarPackage[] => {
+        // 1. Build Index (Available Packages)
+        const pkgIds = new Set<string>();
 
+        pkgs.forEach(p => {
+            // We count disabled packages as "available" for resolution? 
+            // Usually only enabled packages provide dependencies in VaM.
+            if (p.isEnabled) {
+                const id = `${p.meta.creator}.${p.meta.packageName}.${p.meta.version}`;
+                pkgIds.add(id);
+            }
+        });
+
+        // 2. Duplicate Counts
         const counts: Record<string, number> = {};
-        // Count enabled instances
-        currentPkgs.forEach(p => {
+        pkgs.forEach(p => {
             if (p.isEnabled) {
                 const key = `${p.meta.creator}.${p.meta.packageName}`;
                 counts[key] = (counts[key] || 0) + 1;
             }
         });
 
-        return currentPkgs.map(p => {
-            if (!p.isEnabled) return { ...p, isDuplicate: false };
-            const key = `${p.meta.creator}.${p.meta.packageName}`;
-            return { ...p, isDuplicate: (counts[key] || 0) > 1 };
+        // 3. Process each package
+        return pkgs.map(p => {
+            let isDuplicate = false;
+            let missingDeps: string[] = [];
+
+            if (p.isEnabled) {
+                const key = `${p.meta.creator}.${p.meta.packageName}`;
+                if ((counts[key] || 0) > 1) isDuplicate = true;
+
+                // Dependencies
+                if (p.meta.dependencies) {
+                    Object.keys(p.meta.dependencies).forEach(depId => {
+                        // depId format: Creator.Package.Version
+                        // VaM dependencies are strict on version.
+                        if (!pkgIds.has(depId)) {
+                            // Try to be smart? No, VaM is strict.
+                            if (depId !== "VaM.Core.latest" && !depId.startsWith("system.")) { // Ignore core/system?
+                                missingDeps.push(depId);
+                            }
+                        }
+                    });
+                }
+            }
+
+            // Only update if changed to avoid unnecessary re-renders? 
+            // map always returns new object, react will re-render. That's fine for "complete" event.
+            return { ...p, isDuplicate, missingDeps };
         });
+    };
+
+    const recalculateDuplicates = (currentPkgs: VarPackage[]): VarPackage[] => {
+        return analyzePackages(currentPkgs);
     };
 
     const togglePackage = async (pkg: VarPackage, merge = false) => {
