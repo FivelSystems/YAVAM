@@ -10,8 +10,12 @@ import (
 
 	"varmanager/pkg/server"
 
+	"github.com/energye/systray"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+//go:embed build/appicon.png
+var iconData []byte
 
 // App struct
 type App struct {
@@ -168,9 +172,31 @@ func (a *App) SetMinimizeOnClose(val bool) {
 }
 
 func (a *App) onBeforeClose(ctx context.Context) (prevent bool) {
-	if a.minimizeOnClose {
+	// Only minimize to tray if Server is Running AND user enabled the option
+	if a.minimizeOnClose && a.server != nil && a.server.IsRunning() {
 		runtime.WindowHide(ctx)
 		return true
 	}
 	return false
+}
+
+func (a *App) onTrayReady() {
+	systray.SetIcon(iconData)
+	systray.SetTitle("YAVAM")
+	systray.SetTooltip("YAVAM")
+
+	mShow := systray.AddMenuItem("Show Window", "Restore the window")
+	mShow.Click(func() {
+		runtime.WindowShow(a.ctx)
+	})
+
+	mQuit := systray.AddMenuItem("Quit", "Quit YAVAM")
+	mQuit.Click(func() {
+		systray.Quit()
+		runtime.Quit(a.ctx)
+	})
+}
+
+func (a *App) onTrayExit() {
+	// Cleanup
 }

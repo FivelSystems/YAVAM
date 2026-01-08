@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 
+	"github.com/energye/systray"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -14,6 +15,11 @@ var assets embed.FS
 func main() {
 	// Create an instance of the app structure
 	app := NewApp()
+
+	// Start System Tray in a goroutine (so Wails can run on main thread)
+	go func() {
+		systray.Run(app.onTrayReady, app.onTrayExit)
+	}()
 
 	// Create application with options
 	err := wails.Run(&options.App{

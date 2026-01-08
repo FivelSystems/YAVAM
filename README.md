@@ -77,3 +77,12 @@ We have included batch scripts for convenience:
 
 ## Author
 FivelSystems
+
+## Dependencies & Acknowledgements
+*   **Wails**: Frontend/Backend bridge.
+*   **energye/systray**: Cross-platform system tray support (pure Go/minimal dependencies).
+
+## System Tray & Resource Usage
+When the "Run in Background" option is enabled (available in Network Settings), closing the main window will minimize the application to the system tray.
+*   **Resource Usage**: Minimizing/Hiding the window effectively suspends the frontend rendering process (WebView2), drastically reducing GPU and CPU usage on the host machine while keeping the HTTP server active for remote clients.
+*   **Restoration**: You can restore the window by right-clicking the tray icon and selecting "Show Window", or via the Web Interface if configured.
