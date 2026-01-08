@@ -1284,10 +1284,11 @@ function App() {
                             <h2 className="text-xl font-bold text-white mb-4">Install to Library</h2>
                             <p className="text-gray-400 mb-4">Select the destination library for {installModal.pkgs.length} package(s):</p>
                             <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar mb-4">
-                                {libraries.filter(l => l !== activeLibraryPath).map(lib => (
+                                {libraries.filter(l => l.toLowerCase() !== activeLibraryPath.toLowerCase()).map(lib => (
                                     <button
                                         key={lib}
                                         onClick={async () => {
+                                            console.log("Install button clicked for lib:", lib);
                                             // Trigger Install
                                             // @ts-ignore
                                             if (window.go) {
@@ -1310,9 +1311,11 @@ function App() {
                                                     addToast("Install failed: " + e, 'error');
                                                 }
                                             } else {
+                                                console.log("Web mode install detected");
                                                 // Web Mode
                                                 try {
                                                     const paths = installModal.pkgs.map(p => p.filePath);
+                                                    console.log("Installing paths:", paths, "to", lib);
                                                     const res = await fetch("/api/install", {
                                                         method: "POST",
                                                         headers: { "Content-Type": "application/json" },
@@ -1333,6 +1336,7 @@ function App() {
                                                     addToast(`Installed ${paths.length} packages`, 'success');
                                                     setInstallModal({ open: false, pkgs: [] });
                                                 } catch (e: any) {
+                                                    console.error("Install error:", e);
                                                     addToast(e.message, 'error');
                                                 }
 
