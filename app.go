@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"io/fs"
@@ -59,9 +60,17 @@ func (a *App) startup(ctx context.Context) {
 	})
 }
 
-// GetPackageContents wrapper
 func (a *App) GetPackageContents(pkgPath string) ([]models.PackageContent, error) {
 	return a.manager.GetPackageContents(pkgPath)
+}
+
+// GetPackageThumbnail returns the Base64 encoded thumbnail for a package
+func (a *App) GetPackageThumbnail(pkgPath string) (string, error) {
+	bytes, err := a.manager.GetThumbnail(pkgPath)
+	if err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(bytes), nil
 }
 
 func (a *App) OpenFolderInExplorer(path string) {
@@ -168,18 +177,49 @@ func (a *App) Greet(name string) string {
 }
 
 // ScanPackages triggers the scan process
-func (a *App) ScanPackages(vamPath string) (models.ScanResult, error) {
+func (a *App) ScanPackages(vamPath string) error {
 	// Robustness: If user selected "AddonPackages" directly, move up to root
 	if filepath.Base(vamPath) == "AddonPackages" {
 		vamPath = filepath.Dir(vamPath)
 	}
-	return a.manager.ScanAndAnalyze(vamPath)
+
+	go func() {
+		err := a.manager.ScanAndAnalyze(a.ctx, vamPath, func(pkg models.VarPackage) {
+			runtime.EventsEmit(a.ctx, "package:scanned", pkg)
+		}, func(current, total int) {
+			runtime.EventsEmit(a.ctx, "scan:progress", map[string]int{"current": current, "total": total})
+		})
+		if err != nil {
+			runtime.EventsEmit(a.ctx, "scan:error", err.Error())
+		}
+		runtime.EventsEmit(a.ctx, "scan:complete", true)
+	}()
+
+	return nil
 }
 
 // GetFilters returns the list of unique tags/creators found
 func (a *App) GetFilters(vamPath string) ([]string, error) {
-	res, err := a.manager.ScanAndAnalyze(vamPath)
-	return res.Tags, err
+	var pkgs []models.VarPackage
+	err := a.manager.ScanAndAnalyze(a.ctx, vamPath, func(p models.VarPackage) {
+		pkgs = append(pkgs, p)
+	}, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Extract tags
+	tagSet := make(map[string]bool)
+	for _, p := range pkgs {
+		for _, t := range p.Tags {
+			tagSet[t] = true
+		}
+	}
+	var tags []string
+	for t := range tagSet {
+		tags = append(tags, t)
+	}
+	return tags, nil
 }
 
 // TogglePackage enables or disables a package
@@ -194,11 +234,14 @@ func (a *App) DisableOldVersions(creator string, pkgName string, vamPath string)
 	// We need the latest state, so we scan first? Or trust frontend?
 	// The manager method implementation needs the package list.
 	// For efficiency, let's scan internally.
-	res, err := a.manager.ScanAndAnalyze(vamPath)
+	var pkgs []models.VarPackage
+	err := a.manager.ScanAndAnalyze(a.ctx, vamPath, func(p models.VarPackage) {
+		pkgs = append(pkgs, p)
+	}, nil)
 	if err != nil {
 		return err
 	}
-	return a.manager.DisableOldVersions(res.Packages, creator, pkgName, vamPath)
+	return a.manager.DisableOldVersions(pkgs, creator, pkgName, vamPath)
 }
 
 // InstallFiles handles dropped files

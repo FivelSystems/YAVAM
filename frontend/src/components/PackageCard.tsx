@@ -1,3 +1,4 @@
+import { useRef, useState, useEffect } from 'react';
 import { VarPackage } from '../App';
 import clsx from 'clsx';
 import { AlertCircle, Check, AlertTriangle, Power } from 'lucide-react';
@@ -12,10 +13,55 @@ interface PackageCardProps {
 }
 
 const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'grid' }: PackageCardProps) => {
+    const cardRef = useRef<HTMLDivElement>(null);
+    const [thumbSrc, setThumbSrc] = useState<string | undefined>(
+        pkg.thumbnailBase64 ? `data:image/jpeg;base64,${pkg.thumbnailBase64}` : undefined
+    );
+    const [isVisible, setIsVisible] = useState(false);
 
     const handleClick = (e: React.MouseEvent) => {
         onSelect(pkg, e);
     };
+
+    // Lazy Loading Logic
+    useEffect(() => {
+        // @ts-ignore
+        if (!window.go) {
+            // Web Mode: Use API URL directly
+            if (pkg.hasThumbnail && !pkg.thumbnailBase64) {
+                setThumbSrc(`/api/thumbnail?filePath=${encodeURIComponent(pkg.filePath)}`);
+            }
+            return;
+        }
+
+        // Desktop Mode: Intersection Observer
+        if (!pkg.hasThumbnail || thumbSrc) return; // Already have it or none exists
+
+        const observer = new IntersectionObserver(([entry]) => {
+            if (entry.isIntersecting) {
+                setIsVisible(true);
+                observer.disconnect(); // Only need trigger once
+            }
+        }, { rootMargin: '200px' });
+
+        if (cardRef.current) observer.observe(cardRef.current);
+
+        return () => observer.disconnect();
+    }, [pkg.filePath, pkg.hasThumbnail, thumbSrc]);
+
+    useEffect(() => {
+        // Fetch for Desktop when visible
+        // @ts-ignore
+        if (window.go && isVisible && pkg.hasThumbnail && !thumbSrc) {
+            // @ts-ignore
+            window.go.main.App.GetPackageThumbnail(pkg.filePath)
+                .then((b64: string) => {
+                    if (b64) setThumbSrc(`data:image/jpeg;base64,${b64}`);
+                })
+                .catch((e: any) => console.error("Thumb load failed:", e));
+        }
+    }, [isVisible, pkg.hasThumbnail, pkg.filePath, thumbSrc]);
+
 
     // Visual State Logic
     let statusClass = "border-gray-700 opacity-60 grayscale";
@@ -40,6 +86,7 @@ const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'gri
     if (viewMode === 'list') {
         return (
             <div
+                ref={cardRef}
                 onClick={handleClick}
                 onContextMenu={(e) => onContextMenu(e, pkg)}
                 className={clsx(
@@ -49,15 +96,16 @@ const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'gri
             >
                 {/* Small Thumbnail */}
                 <div className="h-16 w-16 bg-gray-800 rounded overflow-hidden shrink-0 relative">
-                    {pkg.hasThumbnail ? (
+                    {pkg.hasThumbnail && thumbSrc ? (
                         <img
-                            src={`data:image/jpeg;base64,${pkg.thumbnailBase64}`}
+                            src={thumbSrc}
                             alt={pkg.fileName}
+                            loading="lazy"
                             className="w-full h-full object-cover"
                         />
                     ) : (
                         <div className="w-full h-full flex items-center justify-center text-gray-700 border border-gray-700">
-                            <span className="text-[8px] font-bold">NO IMG</span>
+                            <span className="text-[8px] font-bold">{pkg.hasThumbnail ? "..." : "NO IMG"}</span>
                         </div>
                     )}
                 </div>
@@ -87,6 +135,7 @@ const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'gri
     return (
         <motion.div
             layout
+            ref={cardRef}
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
@@ -100,15 +149,16 @@ const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'gri
         >
             {/* Full size thumbnail */}
             <div className="absolute inset-0 w-full h-full">
-                {pkg.hasThumbnail ? (
+                {pkg.hasThumbnail && thumbSrc ? (
                     <img
-                        src={`data:image/jpeg;base64,${pkg.thumbnailBase64}`}
+                        src={thumbSrc}
                         alt={pkg.fileName}
+                        loading="lazy"
                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                     />
                 ) : (
                     <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
-                        <span className="text-4xl font-bold text-gray-700 select-none opacity-50">VAR</span>
+                        <span className="text-4xl font-bold text-gray-700 select-none opacity-50">{pkg.hasThumbnail ? "..." : "VAR"}</span>
                     </div>
                 )}
             </div>
