@@ -747,5 +747,56 @@ func (m *Manager) ResolveConflicts(keepPath string, others []string, libraryPath
 		}
 	}
 
-	return result, nil
+// CopyPackagesToLibrary copies a list of package files to a destination library
+// Returns list of collided filenames (if overwrite=false) or error
+func (m *Manager) CopyPackagesToLibrary(filePaths []string, destLibPath string, overwrite bool) ([]string, error) {
+	var collisions []string
+	// Ensure destination exists
+	addonPath := destLibPath
+	if err := os.MkdirAll(addonPath, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create destination: %v", err)
+	}
+
+	// First pass: check for collisions if not overwriting
+	if !overwrite {
+		for _, src := range filePaths {
+			baseName := filepath.Base(src)
+			dest := filepath.Join(addonPath, baseName)
+			if _, err := os.Stat(dest); err == nil {
+				collisions = append(collisions, baseName)
+			}
+		}
+		if len(collisions) > 0 {
+			return collisions, nil
+		}
+	}
+
+	// Second pass: perform copy
+	for _, src := range filePaths {
+		baseName := filepath.Base(src)
+		dest := filepath.Join(addonPath, baseName)
+
+		sourceFile, err := os.Open(src)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open source %s: %v", baseName, err)
+		}
+
+		err = func() error {
+			defer sourceFile.Close()
+			destFile, err := os.Create(dest) // Create truncates if exists
+			if err != nil {
+				return err
+			}
+			defer destFile.Close()
+			if _, err := io.Copy(destFile, sourceFile); err != nil {
+				return err
+			}
+			return nil
+		}()
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to copy %s: %v", baseName, err)
+		}
+	}
+	return nil, nil // Success, no collisions/errors
 }
