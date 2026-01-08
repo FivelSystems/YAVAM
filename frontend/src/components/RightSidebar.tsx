@@ -53,13 +53,36 @@ const RightSidebar = ({ pkg, onClose, onResolve }: RightSidebarProps) => {
     const [contents, setContents] = useState<PackageContent[]>([]);
     const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<'details' | 'contents'>('details');
+    const [thumbSrc, setThumbSrc] = useState<string | undefined>(undefined);
 
     useEffect(() => {
         if (pkg) {
             fetchContents();
             setActiveTab('details'); // Reset to details on new package selection
+
+            // Thumbnail Logic
+            if (pkg.thumbnailBase64) {
+                setThumbSrc(`data:image/jpeg;base64,${pkg.thumbnailBase64}`);
+            } else if (pkg.hasThumbnail) {
+                // Fetch
+                // @ts-ignore
+                if (window.go) {
+                    // @ts-ignore
+                    window.go.main.App.GetPackageThumbnail(pkg.filePath)
+                        .then((b64: string) => {
+                            if (b64) setThumbSrc(`data:image/jpeg;base64,${b64}`);
+                        })
+                        .catch((e: any) => console.error(e));
+                } else {
+                    setThumbSrc(`/api/thumbnail?filePath=${encodeURIComponent(pkg.filePath)}`);
+                }
+            } else {
+                setThumbSrc(undefined);
+            }
+
         } else {
             setContents([]);
+            setThumbSrc(undefined);
         }
     }, [pkg]);
 
@@ -117,9 +140,9 @@ const RightSidebar = ({ pkg, onClose, onResolve }: RightSidebarProps) => {
             <div className="flex-1 overflow-y-auto custom-scrollbar">
                 {/* Thumbnail - Reduced Height */}
                 <div className="h-48 w-full bg-gray-950 relative overflow-hidden group shrink-0">
-                    {pkg.hasThumbnail ? (
+                    {pkg.hasThumbnail && thumbSrc ? (
                         <img
-                            src={`data:image/jpeg;base64,${pkg.thumbnailBase64}`}
+                            src={thumbSrc}
                             alt={pkg.fileName}
                             className="w-full h-full object-cover object-center transition-transform duration-700 group-hover:scale-105"
                         />

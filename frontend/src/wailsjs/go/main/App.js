@@ -38,6 +38,10 @@ export function GetPackageContents(arg1) {
   return window['go']['main']['App']['GetPackageContents'](arg1);
 }
 
+export function GetPackageThumbnail(arg1) {
+  return window['go']['main']['App']['GetPackageThumbnail'](arg1);
+}
+
 export function GetUserDownloadsDir() {
   return window['go']['main']['App']['GetUserDownloadsDir']();
 }
