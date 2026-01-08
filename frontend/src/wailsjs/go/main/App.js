@@ -26,6 +26,10 @@ export function GetFilters(arg1) {
   return window['go']['main']['App']['GetFilters'](arg1);
 }
 
+export function GetLocalIP() {
+  return window['go']['main']['App']['GetLocalIP']();
+}
+
 export function GetPackageContents(arg1) {
   return window['go']['main']['App']['GetPackageContents'](arg1);
 }
@@ -56,6 +60,14 @@ export function SelectDirectory() {
 
 export function SetAlwaysOnTop(arg1) {
   return window['go']['main']['App']['SetAlwaysOnTop'](arg1);
+}
+
+export function StartServer(arg1, arg2) {
+  return window['go']['main']['App']['StartServer'](arg1, arg2);
+}
+
+export function StopServer() {
+  return window['go']['main']['App']['StopServer']();
 }
 
 export function TogglePackage(arg1, arg2, arg3) {

@@ -1,17 +1,105 @@
-import { X, FolderOpen } from "lucide-react";
+import { useState, useEffect, useRef } from 'react';
+import { X, FolderOpen, LayoutGrid, Network, Folder, Terminal } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import clsx from 'clsx';
 
 interface SettingsModalProps {
     isOpen: boolean;
     onClose: () => void;
+    // Libraries Tab
     downloadPath: string;
     onBrowseDownload: () => void;
     onResetDownload: () => void;
     libraryPath: string;
     onBrowseLibrary: () => void;
+    // Dashboard Tab
+    gridSize: number;
+    setGridSize: (size: number) => void;
 }
 
-const SettingsModal = ({ isOpen, onClose, downloadPath, onBrowseDownload, onResetDownload, libraryPath, onBrowseLibrary }: SettingsModalProps) => {
+const SettingsModal = ({
+    isOpen,
+    onClose,
+    downloadPath,
+    onBrowseDownload,
+    onResetDownload,
+    libraryPath,
+    onBrowseLibrary,
+    gridSize,
+    setGridSize
+}: SettingsModalProps) => {
+
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'libraries' | 'network'>('dashboard');
+
+    // Network Tab State
+    const [serverEnabled, setServerEnabled] = useState(false);
+    const [serverPort, setServerPort] = useState("18888");
+    const [localIP, setLocalIP] = useState("Loading...");
+    const [logs, setLogs] = useState<string[]>([]);
+    // @ts-ignore
+    const isWeb = !window.go;
+    const logEndRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (logEndRef.current) {
+            logEndRef.current.scrollIntoView({ behavior: "smooth" });
+        }
+    }, [logs]);
+
+    useEffect(() => {
+        if (isOpen && activeTab === 'network' && !isWeb) {
+            // Get IP
+            // @ts-ignore
+            window.go.main.App.GetLocalIP().then(ip => setLocalIP(ip));
+
+            // Subscribe to logs
+            // @ts-ignore
+            window.runtime.EventsOn("server:log", (msg: string) => {
+                setLogs(prev => [...prev, msg].slice(-100)); // Keep last 100 logs
+            });
+        } else if (isWeb && isOpen && activeTab === 'network') {
+            setLocalIP("Remote Connection");
+            setLogs(["Connected to remote server.", "Server controls are disabled in web mode."]);
+            setServerEnabled(true);
+        }
+        return () => {
+            // Cleanup listener
+        };
+    }, [isOpen, activeTab]);
+
+    const toggleServer = async () => {
+        if (isWeb) return;
+        if (serverEnabled) {
+            // ...
+            try {
+                // @ts-ignore
+                await window.go.main.App.StopServer();
+                setServerEnabled(false);
+                setLogs(prev => [`[System] Server stopped.`, ...prev]);
+            } catch (e) {
+                console.error(e);
+                setLogs(prev => [`[Error] Failed to stop server: ${e}`, ...prev]);
+            }
+        } else {
+            // Start Server
+            try {
+                // @ts-ignore
+                await window.go.main.App.StartServer(serverPort, libraryPath);
+                setServerEnabled(true);
+            } catch (e) {
+                console.error(e);
+                setLogs(prev => [`[Error] Failed to start server: ${e}`, ...prev]);
+                setServerEnabled(false);
+            }
+        }
+    };
+
+    const tabs = [
+        { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
+        { id: 'libraries', label: 'Libraries', icon: Folder },
+        { id: 'network', label: 'Network', icon: Network },
+    ] as const;
+
     return (
         <AnimatePresence>
             {isOpen && (
@@ -20,68 +108,190 @@ const SettingsModal = ({ isOpen, onClose, downloadPath, onBrowseDownload, onRese
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.95 }}
-                        className="bg-gray-800 rounded-xl shadow-2xl w-full max-w-md border border-gray-700 overflow-hidden"
+                        className="bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl h-[600px] border border-gray-700 overflow-hidden flex flex-col"
                     >
-                        <div className="flex items-center justify-between p-4 border-b border-gray-700">
+                        {/* Header */}
+                        <div className="flex items-center justify-between p-4 border-b border-gray-700 shrink-0">
                             <h3 className="text-lg font-semibold text-white">Settings</h3>
                             <button onClick={onClose} className="p-1 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors">
                                 <X size={20} />
                             </button>
                         </div>
 
-                        <div className="p-6 space-y-6">
-                            {/* Library Folder */}
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-300">Library Folder</label>
-                                <p className="text-xs text-gray-500">Location of your VaM AddonPackages.</p>
-                                <div className="flex gap-2">
-                                    <input
-                                        type="text"
-                                        value={libraryPath || "Not Set"}
-                                        readOnly
-                                        className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                                    />
+                        {/* Content Layout */}
+                        <div className="flex flex-1 overflow-hidden">
+                            {/* Sidebar */}
+                            <div className="w-48 bg-gray-800/50 border-r border-gray-700 p-2 space-y-1">
+                                {tabs.map(tab => (
                                     <button
-                                        onClick={onBrowseLibrary}
-                                        className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-lg transition-colors border border-gray-600"
-                                        title="Select Library Folder"
+                                        key={tab.id}
+                                        onClick={() => setActiveTab(tab.id)}
+                                        className={clsx(
+                                            "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                                            activeTab === tab.id
+                                                ? "bg-blue-600/10 text-blue-400"
+                                                : "text-gray-400 hover:bg-gray-700 hover:text-white"
+                                        )}
                                     >
-                                        <FolderOpen size={18} />
+                                        <tab.icon size={18} />
+                                        {tab.label}
                                     </button>
-                                </div>
+                                ))}
                             </div>
 
-                            {/* Download Path */}
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-300">Default Download Path</label>
-                                <p className="text-xs text-gray-500">Files will be exported to this folder.</p>
-                                <div className="flex gap-2">
-                                    <input
-                                        type="text"
-                                        value={downloadPath || "User Downloads Folder"}
-                                        readOnly
-                                        className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                                    />
-                                    <button
-                                        onClick={onBrowseDownload}
-                                        className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-lg transition-colors border border-gray-600"
-                                        title="Select Download Folder"
-                                    >
-                                        <FolderOpen size={18} />
-                                    </button>
-                                </div>
-                                <div className="flex justify-end">
-                                    <button
-                                        onClick={onResetDownload}
-                                        className="text-xs text-blue-400 hover:text-blue-300 underline"
-                                    >
-                                        Reset to Default
-                                    </button>
-                                </div>
+                            {/* Main Panel */}
+                            <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+                                {activeTab === 'dashboard' && (
+                                    <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                                        <div>
+                                            <h4 className="text-lg font-medium text-white mb-1">Appearance</h4>
+                                            <p className="text-sm text-gray-500 mb-4">Customize how YAVAM looks and feels.</p>
+
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <label className="text-sm text-gray-300 font-medium">Card Grid Size</label>
+                                                        <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">{gridSize}px</span>
+                                                    </div>
+                                                    <input
+                                                        type="range"
+                                                        min="100"
+                                                        max="300"
+                                                        step="10"
+                                                        value={gridSize}
+                                                        onChange={(e) => setGridSize(parseInt(e.target.value))}
+                                                        className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                                                    />
+                                                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                                                        <span>Compact</span>
+                                                        <span>Large</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeTab === 'libraries' && (
+                                    <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                                        <div>
+                                            <h4 className="text-lg font-medium text-white mb-1">Libraries</h4>
+                                            <p className="text-sm text-gray-500 mb-4">Manage your content libraries and paths.</p>
+
+                                            <div className="space-y-6">
+                                                {/* Main Library */}
+                                                <div className="space-y-2">
+                                                    <label className="text-sm font-medium text-gray-300">Main Library Folder</label>
+                                                    <div className="flex gap-2">
+                                                        <input
+                                                            type="text"
+                                                            value={libraryPath || "Not Set"}
+                                                            readOnly
+                                                            className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none"
+                                                        />
+                                                        <button
+                                                            onClick={onBrowseLibrary}
+                                                            className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-lg transition-colors border border-gray-600"
+                                                        >
+                                                            <FolderOpen size={18} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {/* Download Path */}
+                                                <div className="space-y-2">
+                                                    <div className="flex justify-between">
+                                                        <label className="text-sm font-medium text-gray-300">Downloads Folder</label>
+                                                        <button onClick={onResetDownload} className="text-xs text-blue-400 hover:underline">Reset</button>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <input
+                                                            type="text"
+                                                            value={downloadPath || "User Downloads Folder"}
+                                                            readOnly
+                                                            className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none"
+                                                        />
+                                                        <button
+                                                            onClick={onBrowseDownload}
+                                                            className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-lg transition-colors border border-gray-600"
+                                                        >
+                                                            <FolderOpen size={18} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeTab === 'network' && (
+                                    <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                                        <div>
+                                            <div className="flex items-center justify-between mb-4">
+                                                <div>
+                                                    <h4 className="text-lg font-medium text-white">HTTP Server</h4>
+                                                    <p className="text-sm text-gray-500">Allow local network access to your library.</p>
+                                                </div>
+                                                <button
+                                                    onClick={toggleServer}
+                                                    className={clsx(
+                                                        "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+                                                        serverEnabled ? "bg-green-500" : "bg-gray-700"
+                                                    )}
+                                                >
+                                                    <span className={clsx(
+                                                        "inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200",
+                                                        serverEnabled ? "translate-x-6" : "translate-x-1"
+                                                    )} />
+                                                </button>
+                                            </div>
+
+                                            <div className="bg-black/30 rounded-xl p-4 border border-gray-700/50 space-y-4">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="flex-1 space-y-1">
+                                                        <label className="text-xs uppercase font-bold text-gray-500">Local IP Address</label>
+                                                        <div className="font-mono text-blue-400">{localIP}</div>
+                                                    </div>
+                                                    <div className="w-px h-8 bg-gray-700"></div>
+                                                    <div className="flex-1 space-y-1">
+                                                        <label className="text-xs uppercase font-bold text-gray-500">Port</label>
+                                                        <input
+                                                            type="text"
+                                                            value={serverPort}
+                                                            onChange={(e) => setServerPort(e.target.value)}
+                                                            disabled={serverEnabled}
+                                                            className={clsx(
+                                                                "bg-transparent font-mono text-white w-full outline-none focus:border-b border-blue-500",
+                                                                serverEnabled && "opacity-50 cursor-not-allowed"
+                                                            )}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-6">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <label className="text-xs uppercase font-bold text-gray-500 flex items-center gap-2">
+                                                        <Terminal size={14} /> Server Console
+                                                    </label>
+                                                    <button onClick={() => setLogs([])} className="text-xs text-gray-400 hover:text-white">Clear</button>
+                                                </div>
+                                                <div className="bg-black rounded-lg border border-gray-800 p-3 h-32 overflow-y-auto font-mono text-xs text-gray-400 custom-scrollbar">
+                                                    {logs.length === 0 && <div className="text-gray-600 italic">Ready to start...</div>}
+                                                    {logs.map((log, i) => (
+                                                        <div key={i}>{log}</div>
+                                                    ))}
+                                                    <div ref={logEndRef} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
-                        <div className="p-4 bg-gray-900/50 border-t border-gray-700 flex justify-end">
+                        {/* Footer */}
+                        <div className="p-4 bg-gray-900/50 border-t border-gray-700 flex justify-end shrink-0">
                             <button
                                 onClick={onClose}
                                 className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors"

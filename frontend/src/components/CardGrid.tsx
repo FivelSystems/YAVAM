@@ -12,9 +12,10 @@ interface CardGridProps {
     onSelect: (pkg: VarPackage) => void;
     selectedPkgId?: string;
     viewMode: 'grid' | 'list';
+    gridSize?: number;
 }
 
-const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, selectedPkgId, viewMode }: CardGridProps) => {
+const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, selectedPkgId, viewMode, gridSize = 150 }: CardGridProps) => {
 
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -50,8 +51,11 @@ const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, 
                 layout
                 className={viewMode === 'list'
                     ? "flex flex-col gap-2 pb-20 p-4"
-                    : "grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4 pb-20 p-4"
+                    : "grid gap-4 pb-20 p-4"
                 }
+                style={viewMode === 'grid' ? {
+                    gridTemplateColumns: `repeat(auto-fill, minmax(${gridSize}px, 1fr))`
+                } : undefined}
             >
                 <AnimatePresence mode="popLayout">
                     {packages.map((pkg) => (
