@@ -111,16 +111,21 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 
 		currentPriority := 0
 		if normName == "package.jpg" || normName == "package.png" {
-			currentPriority = 4
+			currentPriority = 5
 		} else if strings.Contains(normName, "saves/scene/") && !strings.Contains(normName, "/screenshots/") {
 			currentPriority = 3
 		} else if strings.Contains(normName, "/appearance/") || strings.Contains(normName, "/clothing/") {
 			currentPriority = 2
 		} else {
+			// STRICTER FILTERING: Ignore random textures
 			if strings.Contains(normName, "/textures/") || strings.Contains(normName, "/texture/") {
 				continue
 			}
 			if strings.Contains(normName, "_nm.") || strings.Contains(normName, "_spec.") || strings.Contains(normName, "_trans.") {
+				continue
+			}
+			if strings.HasPrefix(normName, "custom/") {
+				// Ignore custom assets/textures unless strictly matched above
 				continue
 			}
 			currentPriority = 1
@@ -129,6 +134,18 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 		if currentPriority > candidatePriority {
 			candidate = f
 			candidatePriority = currentPriority
+		}
+	}
+
+	// Override: If meta specifies an image, use it!
+	if meta.ImageUrl != "" {
+		target := strings.ReplaceAll(strings.ToLower(meta.ImageUrl), "\\", "/")
+		for _, f := range r.File {
+			fn := strings.ReplaceAll(strings.ToLower(f.Name), "\\", "/")
+			if fn == target {
+				candidate = f
+				break
+			}
 		}
 	}
 
