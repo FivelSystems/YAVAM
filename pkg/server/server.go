@@ -18,18 +18,20 @@ import (
 )
 
 type Server struct {
-	ctx      context.Context
-	httpSrv  *http.Server
-	running  bool
-	mu       sync.Mutex
-	logMutex sync.Mutex
-	manager  *manager.Manager
+	ctx       context.Context
+	httpSrv   *http.Server
+	running   bool
+	mu        sync.Mutex
+	logMutex  sync.Mutex
+	manager   *manager.Manager
+	onRestore func()
 }
 
-func NewServer(ctx context.Context, m *manager.Manager) *Server {
+func NewServer(ctx context.Context, m *manager.Manager, onRestore func()) *Server {
 	return &Server{
-		ctx:     ctx,
-		manager: m,
+		ctx:       ctx,
+		manager:   m,
+		onRestore: onRestore,
 	}
 }
 
@@ -219,6 +221,24 @@ func (s *Server) Start(port string, path string) error {
 		}
 
 		s.log(fmt.Sprintf("Deleted package: %s", filepath.Base(req.FilePath)))
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+		})
+	})
+
+	// Restore Endpoint
+	mux.HandleFunc("/api/restore", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		s.log("Client requested window restore.")
+		if s.onRestore != nil {
+			s.onRestore()
+		}
+
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": true,

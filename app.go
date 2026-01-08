@@ -32,7 +32,9 @@ func NewApp() *App {
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-	a.server = server.NewServer(ctx, a.manager)
+	a.server = server.NewServer(ctx, a.manager, func() {
+		runtime.WindowShow(ctx)
+	})
 }
 
 // GetPackageContents wrapper
@@ -167,7 +169,7 @@ func (a *App) SetMinimizeOnClose(val bool) {
 
 func (a *App) onBeforeClose(ctx context.Context) (prevent bool) {
 	if a.minimizeOnClose {
-		runtime.WindowMinimise(ctx)
+		runtime.WindowHide(ctx)
 		return true
 	}
 	return false

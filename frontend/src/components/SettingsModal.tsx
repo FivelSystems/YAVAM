@@ -298,6 +298,18 @@ const SettingsModal = ({
                                                                     <ExternalLink size={14} />
                                                                 </button>
                                                             )}
+                                                            {isWeb && (
+                                                                <button
+                                                                    onClick={() => {
+                                                                        fetch('/api/restore', { method: 'POST' })
+                                                                            .then(() => alert("Host window restored!"))
+                                                                            .catch(err => alert("Failed to restore: " + err));
+                                                                    }}
+                                                                    className="px-2 py-0.5 bg-blue-600/20 text-blue-400 text-xs rounded border border-blue-600/30 hover:bg-blue-600/30 transition-colors"
+                                                                >
+                                                                    Show Host Window
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </div>
                                                     <div className="w-px h-8 bg-gray-700"></div>
@@ -336,8 +348,8 @@ const SettingsModal = ({
                                             {!isWeb && (
                                                 <div className="flex items-center justify-between pt-4 border-t border-gray-700">
                                                     <div>
-                                                        <h4 className="text-sm font-medium text-white">Minimize on Close</h4>
-                                                        <p className="text-xs text-gray-500">Keep server running in background when window is closed.</p>
+                                                        <h4 className="text-sm font-medium text-white">Run in Background</h4>
+                                                        <p className="text-xs text-gray-500">Hide window on close but keep server running. Restore via Web UI.</p>
                                                     </div>
                                                     <button
                                                         onClick={() => {
