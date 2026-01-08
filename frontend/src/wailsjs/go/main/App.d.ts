@@ -14,6 +14,8 @@ export function DownloadPackage(arg1:string,arg2:string):Promise<void>;
 
 export function GetFilters(arg1:string):Promise<Array<string>>;
 
+export function GetLocalIP():Promise<string>;
+
 export function GetPackageContents(arg1:string):Promise<Array<models.PackageContent>>;
 
 export function GetUserDownloadsDir():Promise<string>;
@@ -29,5 +31,9 @@ export function ScanPackages(arg1:string):Promise<models.ScanResult>;
 export function SelectDirectory():Promise<string>;
 
 export function SetAlwaysOnTop(arg1:boolean):Promise<void>;
+
+export function StartServer(arg1:string,arg2:string):Promise<void>;
+
+export function StopServer():Promise<void>;
 
 export function TogglePackage(arg1:string,arg2:boolean,arg3:string):Promise<string>;

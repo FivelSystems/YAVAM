@@ -8,6 +8,8 @@ import (
 	"varmanager/pkg/manager"
 	"varmanager/pkg/models"
 
+	"varmanager/pkg/server"
+
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -15,6 +17,7 @@ import (
 type App struct {
 	ctx     context.Context
 	manager *manager.Manager
+	server  *server.Server
 }
 
 // NewApp creates a new App application struct
@@ -28,6 +31,7 @@ func NewApp() *App {
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.server = server.NewServer(ctx, a.manager)
 }
 
 // GetPackageContents wrapper
@@ -131,4 +135,27 @@ func (a *App) SelectDirectory() (string, error) {
 // SetAlwaysOnTop toggles the window pinned state
 func (a *App) SetAlwaysOnTop(onTop bool) {
 	runtime.WindowSetAlwaysOnTop(a.ctx, onTop)
+}
+
+// Server Methods
+
+func (a *App) StartServer(port string, path string) error {
+	if a.server == nil {
+		return fmt.Errorf("server not initialized")
+	}
+	return a.server.Start(port, path)
+}
+
+func (a *App) StopServer() error {
+	if a.server == nil {
+		return nil
+	}
+	return a.server.Stop()
+}
+
+func (a *App) GetLocalIP() string {
+	if a.server == nil {
+		return ""
+	}
+	return a.server.GetOutboundIP()
 }

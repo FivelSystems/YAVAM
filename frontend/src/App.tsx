@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { RefreshCw, Search, X, ChevronLeft, ChevronRight, Package, PanelLeft, LayoutGrid, List, Filter } from 'lucide-react';
+import { RefreshCw, Search, X, ChevronLeft, ChevronRight, Package, PanelLeft, LayoutGrid, List, Filter, WifiOff } from 'lucide-react';
 import clsx from 'clsx';
 import DragDropOverlay from './components/DragDropOverlay';
 import ContextMenu from './components/ContextMenu';
@@ -65,9 +65,11 @@ function App() {
     const [downloadPath, setDownloadPath] = useState<string>(localStorage.getItem("downloadPath") || "");
     const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768);
     const [viewMode, setViewMode] = useState<'grid' | 'list'>(window.innerWidth < 768 ? 'list' : 'grid');
+    const [gridSize, setGridSize] = useState(parseInt(localStorage.getItem("gridSize") || "150"));
 
     useEffect(() => {
         const handleResize = () => {
+            // ... existing resize logic
             const width = window.innerWidth;
 
             // Sidebar Logic
@@ -81,10 +83,7 @@ function App() {
                 setViewMode('grid');
             }
         };
-
-        // Run once on mount to ensure correct state
-        // handleResize(); // intentionally skipped to respect initial state, but listener handles changes.
-
+        // ...
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
@@ -120,6 +119,22 @@ function App() {
 
     // Filters
 
+    // Web Mode Detection
+    useEffect(() => {
+        // @ts-ignore
+        if (!window.go) {
+            fetch('/api/config')
+                .then(r => r.json())
+                .then(cfg => {
+                    if (cfg.path) {
+                        setVamPath(cfg.path);
+                        localStorage.setItem('vamPath', cfg.path);
+                    }
+                })
+                .catch(() => console.log("Not in web mode or server offline"));
+        }
+    }, []);
+
     useEffect(() => {
         if (vamPath) {
             scanPackages();
@@ -136,9 +151,24 @@ function App() {
         setLoading(true);
         try {
             // @ts-ignore
-            const res = await window.go.main.App.ScanPackages(vamPath);
-            setPackages(res.packages || []);
-            setAvailableTags(res.tags || []);
+            if (window.go) {
+                // @ts-ignore
+                const res = await window.go.main.App.ScanPackages(vamPath);
+                setPackages(res.packages || []);
+                setAvailableTags(res.tags || []);
+            } else {
+                // Web Mode
+                const pkgs = await fetch('/api/packages').then(r => r.json());
+                setPackages(pkgs || []);
+                // Extract tags from pkgs if backend doesn't send them separately (my /api/packages endpoint sends [Package] list currently, not ScanResult)
+                // Wait, my endpoint sends res.Packages which is []VarPackage.
+                // It does NOT send tags separately.
+                // I should ideally update endpoint or extract tags here.
+                // Let's extract tags here for now to be safe.
+                const tags = new Set<string>();
+                pkgs?.forEach((p: any) => p.tags?.forEach((t: string) => tags.add(t)));
+                setAvailableTags(Array.from(tags));
+            }
         } catch (e) {
             console.error(e);
         } finally {
@@ -195,7 +225,33 @@ function App() {
         }
     }, [vamPath]);
 
+    const handleWebUpload = async (files: FileList) => {
+        if (!files || files.length === 0) return;
+        setLoading(true);
+        const formData = new FormData();
+        for (let i = 0; i < files.length; i++) {
+            formData.append("file", files[i]);
+        }
+
+        try {
+            const res = await fetch("/api/upload", {
+                method: "POST",
+                body: formData
+            });
+            if (!res.ok) throw new Error("Upload failed");
+            // Trigger Scan
+            scanPackages();
+        } catch (e) {
+            console.error(e);
+            alert("Upload failed: " + e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const recalculateDuplicates = (currentPkgs: VarPackage[]): VarPackage[] => {
+        // ...
+
         const counts: Record<string, number> = {};
         // Count enabled instances
         currentPkgs.forEach(p => {
@@ -214,8 +270,22 @@ function App() {
 
     const togglePackage = async (pkg: VarPackage) => {
         try {
+            let newPath = "";
             // @ts-ignore
-            const newPath = await window.go.main.App.TogglePackage(pkg.filePath, !pkg.isEnabled, vamPath);
+            if (window.go) {
+                // @ts-ignore
+                newPath = await window.go.main.App.TogglePackage(pkg.filePath, !pkg.isEnabled, vamPath);
+            } else {
+                // Web Mode
+                const res = await fetch('/api/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filePath: pkg.filePath, enable: !pkg.isEnabled })
+                }).then(r => r.json());
+
+                if (res.error) throw new Error(res.error);
+                newPath = res.newPath;
+            }
 
             // Optimistic update with path correction
             setPackages(prev => {
@@ -226,11 +296,14 @@ function App() {
             });
         } catch (e) {
             console.error(e);
+            alert("Failed to toggle: " + e);
         }
     };
 
     // Context Menu Handlers
     const handleOpenFolder = async (pkg: VarPackage) => {
+        // @ts-ignore
+        if (!window.go) return alert("Not available in web mode");
         try {
             // @ts-ignore
             await window.go.main.App.OpenFolderInExplorer(pkg.filePath);
@@ -246,6 +319,8 @@ function App() {
     };
 
     const handleCopyFile = async (pkg: VarPackage) => {
+        // @ts-ignore
+        if (!window.go) return alert("Not available in web mode");
         try {
             // @ts-ignore
             await window.go.main.App.CopyFileToClipboard(pkg.filePath);
@@ -253,6 +328,8 @@ function App() {
     };
 
     const handleCutFile = async (pkg: VarPackage) => {
+        // @ts-ignore
+        if (!window.go) return alert("Not available in web mode");
         try {
             // @ts-ignore
             await window.go.main.App.CutFileToClipboard(pkg.filePath);
@@ -260,6 +337,13 @@ function App() {
     };
 
     const handleDownloadPackage = async (pkg: VarPackage) => {
+        // @ts-ignore
+        if (!window.go) {
+            // Try naive download
+            // Assumes file is within library path
+            // We can try to construct a URL if we assume standard structure or just alert
+            return alert("Download not fully implemented for web mode yet.");
+        }
         try {
             // @ts-ignore
             await window.go.main.App.DownloadPackage(pkg.filePath, downloadPath);
@@ -271,6 +355,8 @@ function App() {
     };
 
     const handleDeleteClick = (pkg: VarPackage) => {
+        // @ts-ignore
+        if (!window.go) return alert("Delete not permitted in web mode");
         setDeleteConfirm({ open: true, pkg });
     };
 
@@ -281,6 +367,8 @@ function App() {
     const handleConfirmDelete = async () => {
         if (deleteConfirm.pkg) {
             try {
+                // @ts-ignore
+                if (!window.go) return;
                 // @ts-ignore
                 await window.go.main.App.DeleteFileToRecycleBin(deleteConfirm.pkg.filePath);
                 setDeleteConfirm({ open: false, pkg: null });
@@ -316,6 +404,30 @@ function App() {
     };
 
     if (!vamPath) {
+        // @ts-ignore
+        if (!window.go) {
+            return (
+                <div className="flex h-screen items-center justify-center bg-gray-900 text-white flex-col p-8 text-center space-y-6">
+                    <div className="bg-red-500/10 p-6 rounded-full animate-pulse">
+                        <WifiOff size={48} className="text-red-500" />
+                    </div>
+                    <div>
+                        <h1 className="text-2xl font-bold mb-2">Waiting for Host Configuration</h1>
+                        <p className="text-gray-400 max-w-md mx-auto">
+                            The host application has not configured a library folder yet.
+                            Please return to the host machine and select a Repository folder.
+                        </p>
+                    </div>
+                    <button
+                        onClick={() => window.location.reload()}
+                        className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2 mx-auto"
+                    >
+                        <RefreshCw size={18} /> Retry Connection
+                    </button>
+                </div>
+            );
+        }
+
         return (
             <div className="flex h-screen items-center justify-center bg-gray-900 text-white">
                 <SettingsModal
@@ -347,6 +459,11 @@ function App() {
                     onResetDownload={() => {
                         setDownloadPath("");
                         localStorage.removeItem("downloadPath");
+                    }}
+                    gridSize={gridSize}
+                    setGridSize={(size) => {
+                        setGridSize(size);
+                        localStorage.setItem("gridSize", size.toString());
                     }}
                 />
                 <div className="text-center space-y-6 max-w-md w-full p-8 bg-gray-800 rounded-xl shadow-2xl border border-gray-700">
@@ -395,7 +512,7 @@ function App() {
         <div className="flex flex-col h-screen bg-gray-900 text-white overflow-hidden">
             <TitleBar />
             <div className="flex-1 flex overflow-hidden relative">
-                <DragDropOverlay onDrop={handleDrop} />
+                <DragDropOverlay onDrop={handleDrop} onWebUpload={handleWebUpload} />
                 <LoadingToast visible={loading} />
 
                 <VersionResolutionModal
@@ -432,6 +549,11 @@ function App() {
                     onResetDownload={() => {
                         setDownloadPath("");
                         localStorage.removeItem("downloadPath");
+                    }}
+                    gridSize={gridSize}
+                    setGridSize={(size) => {
+                        setGridSize(size);
+                        localStorage.setItem("gridSize", size.toString());
                     }}
                 />
 
@@ -630,6 +752,7 @@ function App() {
                                 onSelect={handlePackageClick}
                                 selectedPkgId={selectedPackage?.filePath}
                                 viewMode={viewMode}
+                                gridSize={gridSize}
                             />
 
                             {filteredPkgs.length > itemsPerPage && (
