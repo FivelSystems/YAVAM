@@ -6,6 +6,10 @@ export function CopyFileToClipboard(arg1) {
   return window['go']['main']['App']['CopyFileToClipboard'](arg1);
 }
 
+export function CopyPackagesToLibrary(arg1, arg2, arg3) {
+  return window['go']['main']['App']['CopyPackagesToLibrary'](arg1, arg2, arg3);
+}
+
 export function CutFileToClipboard(arg1) {
   return window['go']['main']['App']['CutFileToClipboard'](arg1);
 }
@@ -66,8 +70,8 @@ export function SetMinimizeOnClose(arg1) {
   return window['go']['main']['App']['SetMinimizeOnClose'](arg1);
 }
 
-export function StartServer(arg1, arg2) {
-  return window['go']['main']['App']['StartServer'](arg1, arg2);
+export function StartServer(arg1, arg2, arg3) {
+  return window['go']['main']['App']['StartServer'](arg1, arg2, arg3);
 }
 
 export function StopServer() {

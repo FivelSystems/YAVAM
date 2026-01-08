@@ -12,10 +12,20 @@ interface SidebarProps {
     selectedType: string | null;
     onFilterType: (t: string | null) => void;
     onOpenSettings: () => void;
+    // Library Switcher
+    libraries: string[];
+    currentLibIndex: number;
+    onSelectLibrary: (index: number) => void;
+    onRemoveLibrary?: (index: number) => void;
+    onAddLibrary?: () => void;
 }
 
-const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilterCreator, selectedType, onFilterType, onOpenSettings }: SidebarProps) => {
+const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilterCreator, selectedType, onFilterType, onOpenSettings, libraries, currentLibIndex, onSelectLibrary, onRemoveLibrary, onAddLibrary }: SidebarProps) => {
     const [collapsed, setCollapsed] = useState({ status: false, creators: true, types: false });
+    const [isLibDropdownOpen, setIsLibDropdownOpen] = useState(false);
+
+    const currentLibPath = libraries && libraries[currentLibIndex] ? libraries[currentLibIndex] : "No Library Selected";
+    const currentLibName = currentLibPath.split(/[/\\]/).pop() || "Library";
 
     const toggleSection = (section: 'status' | 'creators' | 'types') => {
         setCollapsed(prev => ({ ...prev, [section]: !prev[section] }));
@@ -52,16 +62,83 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
     return (
         <aside className="w-64 h-full bg-gray-800 border-r border-gray-700 flex flex-col shadow-xl z-20">
             {/* ... header ... */}
-            <div className="p-6 flex items-center justify-between border-b border-gray-700">
-                <div className="flex items-center gap-3">
-                    <div className="bg-blue-600 p-2 rounded-lg">
-                        <Package className="text-white" size={24} />
+            {/* ... header ... */}
+            <div className="p-4 border-b border-gray-700 bg-gray-800/50">
+                <div className="flex items-center gap-2 mb-2">
+                    {/* Icon */}
+                    <div className="bg-blue-600 p-1.5 rounded-lg shrink-0">
+                        <Package className="text-white" size={20} />
                     </div>
-                    <h1 className="text-xl font-bold tracking-tight text-white">VAR Manager</h1>
+                    {/* Library Switcher */}
+                    <div className="flex-1 flex items-center justify-between bg-gray-900/50 rounded-lg p-1 border border-gray-700/50 relative min-w-0">
+                        <button
+                            onClick={() => onSelectLibrary((currentLibIndex - 1 + libraries.length) % libraries.length)}
+                            className="p-1 hover:text-white text-gray-500 transition-colors"
+                            disabled={libraries.length <= 1}
+                        >
+                            <ChevronDown className="rotate-90" size={16} />{/* ChevronLeft equivalent if rotated? Or just import ChevronLeft */}
+                        </button>
+
+                        <div
+                            className="flex-1 text-center cursor-pointer min-w-0 px-2"
+                            onClick={() => setIsLibDropdownOpen(!isLibDropdownOpen)}
+                        >
+                            <span className="text-[10px] text-gray-500 uppercase tracking-wider block leading-none mb-0.5">Library</span>
+                            <div className="font-bold text-gray-200 text-sm truncate leading-tight select-none" title={currentLibPath}>
+                                {currentLibName}
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={() => onSelectLibrary((currentLibIndex + 1) % libraries.length)}
+                            className="p-1 hover:text-white text-gray-500 transition-colors"
+                            disabled={libraries.length <= 1}
+                        >
+                            <ChevronRight size={16} />
+                        </button>
+
+                        {/* Dropdown */}
+                        {isLibDropdownOpen && (
+                            <>
+                                <div className="fixed inset-0 z-10" onClick={() => setIsLibDropdownOpen(false)}></div>
+                                <div className="absolute top-full left-0 right-0 mt-2 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-20 py-1 flex flex-col max-h-60 overflow-y-auto">
+                                    {libraries.map((lib, idx) => (
+                                        <div key={lib} className={clsx("flex items-center group px-2 py-1.5 hover:bg-gray-700 cursor-pointer", idx === currentLibIndex && "bg-blue-600/10")}>
+                                            <div className="flex-1 min-w-0" onClick={() => { onSelectLibrary(idx); setIsLibDropdownOpen(false); }}>
+                                                <div className={clsx("text-sm font-medium truncate", idx === currentLibIndex ? "text-blue-400" : "text-gray-300")}>
+                                                    {lib.split(/[/\\]/).pop()}
+                                                </div>
+                                                <div className="text-[10px] text-gray-600 truncate">{lib}</div>
+                                            </div>
+                                            {onRemoveLibrary && libraries.length > 1 && (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); onRemoveLibrary(idx); }}
+                                                    className="p-1.5 text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                                                    title="Remove Library"
+                                                >
+                                                    <AlertTriangle size={14} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))}
+                                    {onAddLibrary && (
+                                        <button
+                                            onClick={() => { onAddLibrary(); setIsLibDropdownOpen(false); }}
+                                            className="border-t border-gray-700/50 mt-1 px-3 py-2 text-xs text-blue-400 hover:text-blue-300 font-medium flex items-center gap-2 justify-center"
+                                        >
+                                            <Layers size={14} /> Add Library
+                                        </button>
+                                    )}
+                                </div>
+                            </>
+                        )}
+                    </div>
+
+                    {/* Config Button (Untouched) */}
+                    <button onClick={onOpenSettings} className="text-gray-400 hover:text-white transition-colors shrink-0 ml-1" title="Settings">
+                        <Settings size={20} />
+                    </button>
                 </div>
-                <button onClick={onOpenSettings} className="text-gray-400 hover:text-white transition-colors" title="Settings">
-                    <Settings size={20} />
-                </button>
             </div>
 
             <div className="flex-1 overflow-hidden flex flex-col custom-scrollbar overflow-y-auto">

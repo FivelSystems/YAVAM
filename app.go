@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"varmanager/pkg/manager"
@@ -57,6 +58,63 @@ func (a *App) OpenFolderInExplorer(path string) {
 
 func (a *App) DeleteFileToRecycleBin(path string) error {
 	return a.manager.DeleteToTrash(path)
+}
+
+// CopyPackagesToLibrary copies a list of package files to a destination library
+// Returns list of collided filenames (if overwrite=false) or error
+func (a *App) CopyPackagesToLibrary(filePaths []string, destLibPath string, overwrite bool) ([]string, error) {
+	var collisions []string
+	// Ensure destination exists
+	addonPath := filepath.Join(destLibPath, "AddonPackages")
+	if err := os.MkdirAll(addonPath, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create destination: %v", err)
+	}
+
+	// First pass: check for collisions if not overwriting
+	if !overwrite {
+		for _, src := range filePaths {
+			baseName := filepath.Base(src)
+			dest := filepath.Join(addonPath, baseName)
+			if _, err := os.Stat(dest); err == nil {
+				collisions = append(collisions, baseName)
+			}
+		}
+		if len(collisions) > 0 {
+			return collisions, nil
+		}
+	}
+
+	// Second pass: perform copy
+	for _, src := range filePaths {
+		baseName := filepath.Base(src)
+		dest := filepath.Join(addonPath, baseName)
+
+		// If overwrite=false and we are here, collisions should be empty, but good to be safe.
+		// If overwrite=true, we just do it.
+
+		sourceFile, err := os.Open(src)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open source %s: %v", baseName, err)
+		}
+
+		err = func() error {
+			defer sourceFile.Close()
+			destFile, err := os.Create(dest) // Create truncates if exists
+			if err != nil {
+				return err
+			}
+			defer destFile.Close()
+			if _, err := io.Copy(destFile, sourceFile); err != nil {
+				return err
+			}
+			return nil
+		}()
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to copy %s: %v", baseName, err)
+		}
+	}
+	return nil, nil // Success, no collisions/errors
 }
 
 func (a *App) CopyFileToClipboard(path string) {
@@ -148,11 +206,11 @@ func (a *App) SetAlwaysOnTop(onTop bool) {
 
 // Server Methods
 
-func (a *App) StartServer(port string, path string) error {
+func (a *App) StartServer(port string, path string, libraries []string) error {
 	if a.server == nil {
 		return fmt.Errorf("server not initialized")
 	}
-	return a.server.Start(port, path)
+	return a.server.Start(port, path, libraries)
 }
 
 func (a *App) StopServer() error {

@@ -4,6 +4,8 @@ import {models} from '../models';
 
 export function CopyFileToClipboard(arg1:string):Promise<void>;
 
+export function CopyPackagesToLibrary(arg1:Array<string>,arg2:string,arg3:boolean):Promise<Array<string>>;
+
 export function CutFileToClipboard(arg1:string):Promise<void>;
 
 export function DeleteFileToRecycleBin(arg1:string):Promise<void>;
@@ -34,7 +36,7 @@ export function SetAlwaysOnTop(arg1:boolean):Promise<void>;
 
 export function SetMinimizeOnClose(arg1:boolean):Promise<void>;
 
-export function StartServer(arg1:string,arg2:string):Promise<void>;
+export function StartServer(arg1:string,arg2:string,arg3:Array<string>):Promise<void>;
 
 export function StopServer():Promise<void>;
 

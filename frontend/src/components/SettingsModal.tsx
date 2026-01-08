@@ -1,113 +1,57 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, FolderOpen, LayoutGrid, Network, Folder, Terminal, AlertTriangle, ExternalLink } from "lucide-react";
+import { X, LayoutGrid, Network, Terminal, AlertTriangle, ExternalLink } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from 'clsx';
 
 interface SettingsModalProps {
     isOpen: boolean;
     onClose: () => void;
-    // Libraries Tab
-    downloadPath: string;
-    onBrowseDownload: () => void;
-    onResetDownload: () => void;
-    libraryPath: string;
-    onBrowseLibrary: () => void;
-    // Dashboard Tab
+    // General Tab
     gridSize: number;
     setGridSize: (size: number) => void;
     itemsPerPage: number;
     setItemsPerPage: (val: number) => void;
+    // Server Tab
+    serverEnabled: boolean;
+    onToggleServer: () => void;
+    serverPort: string;
+    setServerPort: (port: string) => void;
+    localIP: string;
+    logs: string[];
+    setLogs: React.Dispatch<React.SetStateAction<string[]>>;
+    isWeb: boolean;
 }
 
 const SettingsModal = ({
     isOpen,
     onClose,
-    downloadPath,
-    onBrowseDownload,
-    onResetDownload,
-    libraryPath,
-    onBrowseLibrary,
     gridSize,
     setGridSize,
     itemsPerPage,
-    setItemsPerPage
+    setItemsPerPage,
+    serverEnabled,
+    onToggleServer,
+    serverPort,
+    setServerPort,
+    localIP,
+    logs,
+    setLogs,
+    isWeb
 }: SettingsModalProps) => {
 
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'libraries' | 'network'>('dashboard');
-
-    // ...
-
-
-
-    // Network Tab State
-    const [serverEnabled, setServerEnabled] = useState(false);
-    const [serverPort, setServerPort] = useState("18888");
-    const [localIP, setLocalIP] = useState("Loading...");
-    const [logs, setLogs] = useState<string[]>([]);
+    const [activeTab, setActiveTab] = useState<'general' | 'network'>('general');
     const [minimizeOnClose, setMinimizeOnClose] = useState(() => localStorage.getItem('minimizeOnClose') === 'true');
-    // @ts-ignore
-    const isWeb = !window.go;
+
     const logEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        if (logEndRef.current) {
-            logEndRef.current.scrollIntoView({ behavior: "smooth" });
-        }
+        if (logEndRef.current) logEndRef.current.scrollIntoView({ behavior: "smooth" });
     }, [logs]);
 
-    useEffect(() => {
-        if (isOpen && activeTab === 'network' && !isWeb) {
-            // Get IP
-            // @ts-ignore
-            window.go.main.App.GetLocalIP().then(ip => setLocalIP(ip));
-
-            // Subscribe to logs
-            // @ts-ignore
-            window.runtime.EventsOn("server:log", (msg: string) => {
-                setLogs(prev => [...prev, msg].slice(-100)); // Keep last 100 logs
-            });
-        } else if (isWeb && isOpen && activeTab === 'network') {
-            setLocalIP("Remote Connection");
-            setLogs(["Connected to remote server.", "Server controls are disabled in web mode."]);
-            setServerEnabled(true);
-        }
-        return () => {
-            // Cleanup listener
-        };
-    }, [isOpen, activeTab]);
-
-    const toggleServer = async () => {
-        if (isWeb) return;
-        if (serverEnabled) {
-            // ...
-            try {
-                // @ts-ignore
-                await window.go.main.App.StopServer();
-                setServerEnabled(false);
-                setLogs(prev => [`[System] Server stopped.`, ...prev]);
-            } catch (e) {
-                console.error(e);
-                setLogs(prev => [`[Error] Failed to stop server: ${e}`, ...prev]);
-            }
-        } else {
-            // Start Server
-            try {
-                // @ts-ignore
-                await window.go.main.App.StartServer(serverPort, libraryPath);
-                setServerEnabled(true);
-            } catch (e) {
-                console.error(e);
-                setLogs(prev => [`[Error] Failed to start server: ${e}`, ...prev]);
-                setServerEnabled(false);
-            }
-        }
-    };
-
     const tabs = [
-        { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
+        { id: 'general', label: 'General', icon: LayoutGrid },
         // Conditional Tabs
         ...(!isWeb ? [
-            { id: 'libraries', label: 'Libraries', icon: Folder },
             { id: 'network', label: 'Network', icon: Network },
         ] : [])
     ] as const;
@@ -153,10 +97,10 @@ const SettingsModal = ({
 
                             {/* Main Panel */}
                             <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
-                                {activeTab === 'dashboard' && (
+                                {activeTab === 'general' && (
                                     <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
                                         <div>
-                                            <h4 className="text-lg font-medium text-white mb-1">Appearance</h4>
+                                            <h4 className="text-lg font-medium text-white mb-1">Appearance & preferences</h4>
                                             <p className="text-sm text-gray-500 mb-4">Customize how YAVAM looks and feels.</p>
 
                                             <div className="space-y-4">
@@ -206,58 +150,6 @@ const SettingsModal = ({
                                     </div>
                                 )}
 
-                                {activeTab === 'libraries' && (
-                                    <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
-                                        <div>
-                                            <h4 className="text-lg font-medium text-white mb-1">Libraries</h4>
-                                            <p className="text-sm text-gray-500 mb-4">Manage your content libraries and paths.</p>
-
-                                            <div className="space-y-6">
-                                                {/* Main Library */}
-                                                <div className="space-y-2">
-                                                    <label className="text-sm font-medium text-gray-300">Main Library Folder</label>
-                                                    <div className="flex gap-2">
-                                                        <input
-                                                            type="text"
-                                                            value={libraryPath || "Not Set"}
-                                                            readOnly
-                                                            className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none"
-                                                        />
-                                                        <button
-                                                            onClick={onBrowseLibrary}
-                                                            className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-lg transition-colors border border-gray-600"
-                                                        >
-                                                            <FolderOpen size={18} />
-                                                        </button>
-                                                    </div>
-                                                </div>
-
-                                                {/* Download Path */}
-                                                <div className="space-y-2">
-                                                    <div className="flex justify-between">
-                                                        <label className="text-sm font-medium text-gray-300">Downloads Folder</label>
-                                                        <button onClick={onResetDownload} className="text-xs text-blue-400 hover:underline">Reset</button>
-                                                    </div>
-                                                    <div className="flex gap-2">
-                                                        <input
-                                                            type="text"
-                                                            value={downloadPath || "User Downloads Folder"}
-                                                            readOnly
-                                                            className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none"
-                                                        />
-                                                        <button
-                                                            onClick={onBrowseDownload}
-                                                            className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-lg transition-colors border border-gray-600"
-                                                        >
-                                                            <FolderOpen size={18} />
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
                                 {activeTab === 'network' && (
                                     <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
                                         <div>
@@ -267,7 +159,7 @@ const SettingsModal = ({
                                                     <p className="text-sm text-gray-500">Allow local network access to your library.</p>
                                                 </div>
                                                 <button
-                                                    onClick={toggleServer}
+                                                    onClick={onToggleServer}
                                                     className={clsx(
                                                         "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
                                                         serverEnabled ? "bg-green-500" : "bg-gray-700"
@@ -351,13 +243,14 @@ const SettingsModal = ({
                                                         <h4 className="text-sm font-medium text-white">Run in Background</h4>
                                                         <p className="text-xs text-gray-500">Hide window on close but keep server running. Restore via Web UI.</p>
                                                     </div>
+                                                    {/* Minimize Logic here or separate? Keep local state for minimize pref */}
                                                     <button
                                                         onClick={() => {
                                                             const newVal = !minimizeOnClose;
                                                             setMinimizeOnClose(newVal);
                                                             localStorage.setItem('minimizeOnClose', newVal.toString());
                                                             // @ts-ignore
-                                                            window.go.main.App.SetMinimizeOnClose(newVal);
+                                                            if (window.go) window.go.main.App.SetMinimizeOnClose(newVal);
                                                         }}
                                                         className={clsx(
                                                             "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
