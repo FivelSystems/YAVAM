@@ -747,6 +747,9 @@ func (m *Manager) ResolveConflicts(keepPath string, others []string, libraryPath
 		}
 	}
 
+	return result, nil
+}
+
 // CopyPackagesToLibrary copies a list of package files to a destination library
 // Returns list of collided filenames (if overwrite=false) or error
 func (m *Manager) CopyPackagesToLibrary(filePaths []string, destLibPath string, overwrite bool) ([]string, error) {
