@@ -77,6 +77,7 @@ export namespace models {
 	    isFavorite: boolean;
 	    isHidden: boolean;
 	    type: string;
+	    categories: string[];
 	    tags?: string[];
 	
 	    static createFrom(source: any = {}) {
@@ -98,6 +99,7 @@ export namespace models {
 	        this.isFavorite = source["isFavorite"];
 	        this.isHidden = source["isHidden"];
 	        this.type = source["type"];
+	        this.categories = source["categories"];
 	        this.tags = source["tags"];
 	    }
 	

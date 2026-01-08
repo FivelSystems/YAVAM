@@ -34,8 +34,15 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
     const types = useMemo(() => {
         const counts: Record<string, number> = {};
         packages.forEach(p => {
-            const t = p.type || "Unknown";
-            counts[t] = (counts[t] || 0) + 1;
+            if (p.categories && p.categories.length > 0) {
+                p.categories.forEach(c => {
+                    counts[c] = (counts[c] || 0) + 1;
+                });
+            } else {
+                // Fallback to type if categories missing (legacy/compat)
+                const t = p.type || "Unknown";
+                counts[t] = (counts[t] || 0) + 1;
+            }
         });
         return Object.entries(counts).sort((a, b) => b[1] - a[1]);
     }, [packages]);

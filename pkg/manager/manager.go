@@ -58,10 +58,47 @@ func (m *Manager) ScanAndAnalyze(rootPath string) (models.ScanResult, error) {
 			sem <- struct{}{}        // Acquire
 			defer func() { <-sem }() // Release
 
-			meta, thumbBytes, contentType, err := parser.ParseVarMetadata(p.FilePath)
+			meta, thumbBytes, categories, err := parser.ParseVarMetadata(p.FilePath)
 			if err == nil {
 				p.Meta = meta
-				p.Type = contentType
+
+				// Sort Categories for stability and primary type selection
+				sort.Slice(categories, func(i, j int) bool {
+					prio := func(s string) int {
+						switch s {
+						case "Scene":
+							return 0
+						case "Look":
+							return 1
+						case "Clothing":
+							return 2
+						case "Hair":
+							return 3
+						case "Morph":
+							return 4
+						case "Skin":
+							return 5
+						case "Asset":
+							return 6
+						case "Script":
+							return 7
+						default:
+							return 10
+						}
+					}
+					pi, pj := prio(categories[i]), prio(categories[j])
+					if pi != pj {
+						return pi < pj
+					}
+					return categories[i] < categories[j]
+				})
+				p.Categories = categories
+				if len(categories) > 0 {
+					p.Type = categories[0]
+				} else {
+					p.Type = "Unknown"
+				}
+
 				p.Tags = meta.Tags
 				p.HasThumbnail = len(thumbBytes) > 0
 				if p.HasThumbnail {
@@ -550,16 +587,35 @@ func (m *Manager) GetPackageContents(pkgPath string) ([]models.PackageContent, e
 		contentType := ""
 
 		// Scenes
-		if strings.HasPrefix(lowerName, "saves/scene/") && strings.HasSuffix(lowerName, ".json") {
+		if strings.Contains(lowerName, "saves/scene/") && strings.HasSuffix(lowerName, ".json") {
 			contentType = "Scene"
-		} else if strings.HasPrefix(lowerName, "saves/person/appearance/") && strings.HasSuffix(lowerName, ".vap") {
+		} else if strings.Contains(lowerName, "saves/person/appearance/") && strings.HasSuffix(lowerName, ".vap") {
 			contentType = "Look"
-		} else if strings.HasPrefix(lowerName, "custom/clothing/") && strings.HasSuffix(lowerName, ".vap") {
+		} else if strings.Contains(lowerName, "custom/clothing/") && strings.HasSuffix(lowerName, ".vap") {
 			contentType = "Clothing"
-		} else if strings.HasPrefix(lowerName, "custom/hair/") && strings.HasSuffix(lowerName, ".vap") {
+		} else if strings.Contains(lowerName, "custom/hair/") && strings.HasSuffix(lowerName, ".vap") {
 			contentType = "Hair"
-			// } else if strings.HasPrefix(lowerName, "custom/assets/") {
-			// 	contentType = "Asset" // Too noisy usually
+		} else if strings.Contains(lowerName, "custom/atom/person/morphs/") && (strings.HasSuffix(lowerName, ".vmi") || strings.HasSuffix(lowerName, ".vmb")) {
+			contentType = "Morph"
+		} else if strings.Contains(lowerName, "custom/assets/") && strings.HasSuffix(lowerName, ".assetbundle") {
+			// Only show asset bundles, not every texture
+			contentType = "Asset"
+		} else if strings.Contains(lowerName, "custom/") && strings.HasSuffix(lowerName, ".vap") {
+			// Generic VAP in custom folder (Shoes, etc)
+			// Try to infer type from folder name
+			parts := strings.Split(lowerName, "/")
+			for i, p := range parts {
+				if p == "custom" && i+1 < len(parts) {
+					cat := parts[i+1]
+					if cat != "clothing" && cat != "hair" && cat != "assets" && cat != "atom" {
+						contentType = strings.Title(cat)
+					}
+					break
+				}
+			}
+			if contentType == "" {
+				contentType = "Preset"
+			}
 		}
 
 		if contentType != "" {
@@ -589,9 +645,20 @@ func (m *Manager) GetPackageContents(pkgPath string) ([]models.PackageContent, e
 
 	// Sort contents: Scenes first, then Looks, then others
 	sort.Slice(contents, func(i, j int) bool {
-		order := map[string]int{"Scene": 0, "Look": 1, "Clothing": 2, "Hair": 3}
-		if order[contents[i].Type] != order[contents[j].Type] {
-			return order[contents[i].Type] < order[contents[j].Type]
+		order := map[string]int{"Scene": 0, "Look": 1, "Clothing": 2, "Hair": 3, "Morph": 4, "Skin": 5, "Preset": 6, "Script": 7, "Asset": 8}
+
+		t1 := order[contents[i].Type]
+		if t1 == 0 && contents[i].Type != "Scene" {
+			t1 = 50
+		} // Default for unknown types if not in map (though map covers all knowns)
+
+		t2 := order[contents[j].Type]
+		if t2 == 0 && contents[j].Type != "Scene" {
+			t2 = 50
+		}
+
+		if t1 != t2 {
+			return t1 < t2
 		}
 		return contents[i].FileName < contents[j].FileName
 	})

@@ -162,6 +162,54 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		json.NewEncoder(w).Encode(res.Packages)
 	})
 
+	// Contents Endpoint (for Web Mode)
+	mux.HandleFunc("/api/contents", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			FilePath string `json:"filePath"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.writeError(w, err.Error(), 400)
+			return
+		}
+
+		// Security Check
+		cleanTarget := strings.ToLower(filepath.Clean(req.FilePath))
+		cleanActive := strings.ToLower(filepath.Clean(activePath))
+		allowed := false
+
+		if cleanTarget == cleanActive {
+			allowed = true // Should not happen for file, but path logic
+		} else if strings.HasPrefix(cleanTarget, cleanActive+string(os.PathSeparator)) {
+			allowed = true
+		} else {
+			for _, lib := range s.libraries {
+				cleanLib := strings.ToLower(filepath.Clean(lib))
+				if strings.HasPrefix(cleanTarget, cleanLib+string(os.PathSeparator)) {
+					allowed = true
+					break
+				}
+			}
+		}
+
+		if !allowed {
+			s.writeError(w, "Access denied: File not in allowed libraries", 403)
+			return
+		}
+
+		contents, err := s.manager.GetPackageContents(req.FilePath)
+		if err != nil {
+			s.writeError(w, err.Error(), 500)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(contents)
+	})
+
 	// Config Endpoint
 	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
