@@ -1309,6 +1309,33 @@ function App() {
                                                 } catch (e) {
                                                     addToast("Install failed: " + e, 'error');
                                                 }
+                                            } else {
+                                                // Web Mode
+                                                try {
+                                                    const paths = installModal.pkgs.map(p => p.filePath);
+                                                    const res = await fetch("/api/install", {
+                                                        method: "POST",
+                                                        headers: { "Content-Type": "application/json" },
+                                                        body: JSON.stringify({
+                                                            filePaths: paths,
+                                                            overwrite: false
+                                                        })
+                                                    });
+                                                    const data = await res.json();
+                                                    if (!res.ok) throw new Error(data.message || "Install failed");
+
+                                                    if (data.collisions && data.collisions.length > 0) {
+                                                        setInstallModal({ open: false, pkgs: [] });
+                                                        setInstallCollision({ open: true, collisions: data.collisions, libPath: lib, pkgs: installModal.pkgs });
+                                                        return;
+                                                    }
+
+                                                    addToast(`Installed ${paths.length} packages`, 'success');
+                                                    setInstallModal({ open: false, pkgs: [] });
+                                                } catch (e: any) {
+                                                    addToast(e.message, 'error');
+                                                }
+
                                             }
                                         }}
                                         className="w-full text-left px-3 py-2 rounded bg-gray-700 hover:bg-blue-600 text-gray-200 hover:text-white transition-colors truncate"
@@ -1342,15 +1369,38 @@ function App() {
                                 </button>
                                 <button
                                     onClick={async () => {
+                                        // @ts-ignore
                                         // Overwrite logic
-                                        try {
-                                            const paths = installCollision.pkgs.map(p => p.filePath);
-                                            // @ts-ignore
-                                            await window.go.main.App.CopyPackagesToLibrary(paths, installCollision.libPath, true);
-                                            addToast(`Installed/Overwrote ${paths.length} packages`, 'success');
-                                            setInstallCollision({ open: false, collisions: [], libPath: "", pkgs: [] });
-                                        } catch (e) {
-                                            addToast("Install failed: " + e, 'error');
+                                        // @ts-ignore
+                                        if (window.go) {
+                                            try {
+                                                const paths = installCollision.pkgs.map(p => p.filePath);
+                                                // @ts-ignore
+                                                await window.go.main.App.CopyPackagesToLibrary(paths, installCollision.libPath, true);
+                                                addToast(`Installed/Overwrote ${paths.length} packages`, 'success');
+                                                setInstallCollision({ open: false, collisions: [], libPath: "", pkgs: [] });
+                                            } catch (e) {
+                                                addToast("Install failed: " + e, 'error');
+                                            }
+                                        } else {
+                                            try {
+                                                const paths = installCollision.pkgs.map(p => p.filePath);
+                                                const res = await fetch("/api/install", {
+                                                    method: "POST",
+                                                    headers: { "Content-Type": "application/json" },
+                                                    body: JSON.stringify({
+                                                        filePaths: paths,
+                                                        overwrite: true
+                                                    })
+                                                });
+                                                const data = await res.json();
+                                                if (!res.ok) throw new Error(data.message || "Install failed");
+
+                                                addToast(`Installed/Overwrote ${paths.length} packages`, 'success');
+                                                setInstallCollision({ open: false, collisions: [], libPath: "", pkgs: [] });
+                                            } catch (e: any) {
+                                                addToast(e.message, 'error');
+                                            }
                                         }
                                     }}
                                     className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg"

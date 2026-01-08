@@ -439,6 +439,65 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		json.NewEncoder(w).Encode(res)
 	})
 
+	// Install Endpoint (Copy/Move to Library)
+	mux.HandleFunc("/api/install", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			FilePaths []string `json:"filePaths"`
+			Overwrite bool     `json:"overwrite"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.writeError(w, err.Error(), 400)
+			return
+		}
+
+		// Use activePath as destination library
+		// Note: Manager CopyPackagesToLibrary handles file copy.
+		// Security check: ensure source files are in allowed libraries?
+		// CopyPackagesToLibrary reads from src.
+		// We should validate sources are in s.libraries OR activePath.
+		for _, src := range req.FilePaths {
+			cleanSrc := strings.ToLower(filepath.Clean(src))
+			allowed := false
+			if strings.HasPrefix(cleanSrc, strings.ToLower(activePath)) {
+				allowed = true
+			} else {
+				for _, lib := range s.libraries {
+					if strings.HasPrefix(cleanSrc, strings.ToLower(lib)) {
+						allowed = true
+						break
+					}
+				}
+			}
+			if !allowed {
+				s.writeError(w, fmt.Sprintf("Access denied: Source file %s not in allowed libraries", src), 403)
+				return
+			}
+		}
+
+		collisions, err := s.manager.CopyPackagesToLibrary(req.FilePaths, activePath, req.Overwrite)
+		if err != nil {
+			s.log(fmt.Sprintf("Error installing packages: %v", err))
+			s.writeError(w, err.Error(), 500)
+			return
+		}
+
+		if len(collisions) > 0 {
+			s.log(fmt.Sprintf("Install collisions detected: %d files", len(collisions)))
+		} else {
+			s.log(fmt.Sprintf("Installed %d packages to %s", len(req.FilePaths), filepath.Base(activePath)))
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success":    true,
+			"collisions": collisions,
+		})
+	})
+
 	// Restore Endpoint
 	mux.HandleFunc("/api/restore", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
