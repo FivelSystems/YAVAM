@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"varmanager/pkg/models"
 	"varmanager/pkg/parser"
 	"varmanager/pkg/scanner"
@@ -484,6 +485,7 @@ func (m *Manager) DeleteToTrash(path string) error {
     `, path)
 
 	cmd := exec.Command("powershell", "-NoProfile", "-Command", psCmd)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	return cmd.Run()
 }
 
@@ -492,6 +494,7 @@ func (m *Manager) CopyFileToClipboard(path string) error {
 	// PowerShell: Set-Clipboard -Path "path"
 	// Note: Set-Clipboard -Path is available in PS 5.0+
 	cmd := exec.Command("powershell", "-NoProfile", "-Command", fmt.Sprintf("Set-Clipboard -Path '%s'", path))
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	return cmd.Run()
 }
 
@@ -517,6 +520,7 @@ func (m *Manager) CutFileToClipboard(path string) error {
 	`, path)
 
 	cmd := exec.Command("powershell", "-NoProfile", "-Command", psCmd)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	return cmd.Run()
 }
 
