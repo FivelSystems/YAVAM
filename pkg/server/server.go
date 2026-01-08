@@ -542,16 +542,22 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		}
 
 		// Security Check: targetFile must be inside one of the libraries
+		cleanTarget := strings.ToLower(filepath.Clean(targetFile))
+		cleanActive := strings.ToLower(filepath.Clean(activePath))
 		allowed := false
-		for _, lib := range s.libraries {
-			if strings.HasPrefix(targetFile, lib) {
-				allowed = true
-				break
-			}
-		}
-		// Also check activePath
-		if strings.HasPrefix(targetFile, activePath) {
+
+		// Check activePath first
+		if strings.HasPrefix(cleanTarget, cleanActive) {
 			allowed = true
+		} else {
+			// Check other libraries
+			for _, lib := range s.libraries {
+				cleanLib := strings.ToLower(filepath.Clean(lib))
+				if strings.HasPrefix(cleanTarget, cleanLib) {
+					allowed = true
+					break
+				}
+			}
 		}
 
 		if !allowed {
