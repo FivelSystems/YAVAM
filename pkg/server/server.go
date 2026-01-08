@@ -48,6 +48,15 @@ func (s *Server) IsRunning() bool {
 	return s.running
 }
 
+func (s *Server) writeError(w http.ResponseWriter, message string, code int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": false,
+		"message": message,
+	})
+}
+
 func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -64,7 +73,7 @@ func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// corsMiddleware allows all CORS requests - useful for local dev if needed, or just browser access
+// corsMiddleware allows all CORS requests
 func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -101,14 +110,14 @@ func (s *Server) Start(port string, path string) error {
 
 		res, err := s.manager.ScanAndAnalyze(path)
 		if err != nil {
-			http.Error(w, err.Error(), 500)
+			s.writeError(w, err.Error(), 500)
 			return
 		}
 
 		json.NewEncoder(w).Encode(res.Packages)
 	})
 
-	// Config Endpoint (for frontend to know it's in web mode if needed, or share settings)
+	// Config Endpoint
 	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -120,13 +129,13 @@ func (s *Server) Start(port string, path string) error {
 	// Upload Endpoint
 	mux.HandleFunc("/api/upload", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
 		// 500MB max limit
 		if err := r.ParseMultipartForm(500 << 20); err != nil {
-			http.Error(w, "File too large", http.StatusBadRequest)
+			s.writeError(w, "File too large", http.StatusBadRequest)
 			return
 		}
 
@@ -165,22 +174,23 @@ func (s *Server) Start(port string, path string) error {
 	// Toggle Endpoint
 	mux.HandleFunc("/api/toggle", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 		var req struct {
 			FilePath string `json:"filePath"`
 			Enable   bool   `json:"enable"`
+			Merge    bool   `json:"merge"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), 400)
+			s.writeError(w, err.Error(), 400)
 			return
 		}
 
-		newPath, err := s.manager.TogglePackage(nil, req.FilePath, req.Enable, path)
+		newPath, err := s.manager.TogglePackage(nil, req.FilePath, req.Enable, path, req.Merge)
 		if err != nil {
 			s.log(fmt.Sprintf("Error toggling package: %v", err))
-			http.Error(w, err.Error(), 500)
+			s.writeError(w, err.Error(), 500)
 			return
 		}
 
@@ -196,27 +206,27 @@ func (s *Server) Start(port string, path string) error {
 	// Delete Endpoint
 	mux.HandleFunc("/api/delete", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 		var req struct {
 			FilePath string `json:"filePath"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), 400)
+			s.writeError(w, err.Error(), 400)
 			return
 		}
 
-		// Security Check: Ensure file is within library path
+		// Security Check
 		rel, err := filepath.Rel(path, req.FilePath)
 		if err != nil || strings.HasPrefix(rel, "..") {
-			http.Error(w, "Security violation: Invalid file path", 403)
+			s.writeError(w, "Security violation: Invalid file path", 403)
 			return
 		}
 
 		if err := s.manager.DeleteToTrash(req.FilePath); err != nil {
 			s.log(fmt.Sprintf("Error deleting package: %v", err))
-			http.Error(w, err.Error(), 500)
+			s.writeError(w, err.Error(), 500)
 			return
 		}
 
@@ -230,7 +240,7 @@ func (s *Server) Start(port string, path string) error {
 	// Restore Endpoint
 	mux.HandleFunc("/api/restore", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
@@ -246,26 +256,15 @@ func (s *Server) Start(port string, path string) error {
 	})
 
 	// Serve Frontend (Dist)
-	// We assume frontend/dist is relative to the CWD of the executable or dev root.
-	// In dev mode: c:\Users\ganndev\github\yavam
-	// So frontend/dist is correct.
 	distPath := filepath.Join("frontend", "dist")
 	if _, err := os.Stat(distPath); os.IsNotExist(err) {
 		s.log("Warning: frontend/dist not found. Web UI may not work.")
 	}
 
 	distFs := http.FileServer(http.Dir(distPath))
-
-	// Handle SPA routing: if file not found, serve index.html
-	// But simpler for now: just serve dist
-	// And /files/ for the actual content
-
-	// File Serving
 	filesFs := http.FileServer(http.Dir(path))
 
 	mux.Handle("/files/", http.StripPrefix("/files/", filesFs))
-
-	// Static Assets
 	mux.Handle("/", distFs)
 
 	s.httpSrv = &http.Server{
@@ -322,7 +321,6 @@ func (s *Server) Stop() error {
 	return nil
 }
 
-// GetOutboundIP prefers the preferred outbound ip of this machine
 func (s *Server) GetOutboundIP() string {
 	conn, err := net.Dial("udp", "8.8.8.8:80")
 	if err != nil {

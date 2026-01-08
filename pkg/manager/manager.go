@@ -230,7 +230,7 @@ func (m *Manager) DisableOldVersions(pkgs []models.VarPackage, creator string, p
 	for _, p := range group[1:] {
 		// Disable
 		fmt.Printf("Disabling old version: %s\n", p.FileName)
-		_, err := m.TogglePackage(pkgs, p.FilePath, false, vamPath)
+		_, err := m.TogglePackage(pkgs, p.FilePath, false, vamPath, false)
 		if err != nil {
 			return err
 		}
@@ -243,14 +243,14 @@ func (m *Manager) DisableOldVersions(pkgs []models.VarPackage, creator string, p
 // Returns the new path and proper execution status
 // TogglePackage renames a package between .var and .var.disabled
 // Returns the new path and proper execution status
-func (m *Manager) TogglePackage(pkgs []models.VarPackage, pkgID string, enable bool, vamPath string) (string, error) {
+func (m *Manager) TogglePackage(pkgs []models.VarPackage, pkgID string, enable bool, vamPath string, merge bool) (string, error) {
 	// specific implementation: pkgID IS the FilePath
 	sourcePath := pkgID
 
 	// Security Check
 	if !m.validatePath(sourcePath, vamPath) {
 		// validatePath handles basic containment check
-		if !strings.HasPrefix(sourcePath, vamPath) {
+		if !strings.HasPrefix(strings.ToLower(sourcePath), strings.ToLower(vamPath)) {
 			return "", fmt.Errorf("security violation: path outside VaM folder")
 		}
 	}
@@ -283,7 +283,26 @@ func (m *Manager) TogglePackage(pkgs []models.VarPackage, pkgID string, enable b
 
 	// Check if destination already exists (collide)
 	if _, err := os.Stat(destPath); err == nil {
-		return "", fmt.Errorf("destination file already exists: %s", filepath.Base(destPath))
+		if !enable {
+			// If Disabling and target exists, it's safe to overwrite the disabled copy
+			// (User wants to disable this one, and there's already a disabled one? Just replace it)
+			if err := os.Remove(destPath); err != nil {
+				return "", fmt.Errorf("failed to overwrite existing disabled package: %v", err)
+			}
+		} else {
+			// If Enabling and target exists
+			if merge {
+				// User Requested Merge: We assume the desired outcome is "Enabled".
+				// Since "Enabled" version exists, we remove the "Disabled" source we are toggling FROM.
+				// (Effectively deleting the disabled copy, keeping the enabled one)
+				if err := os.Remove(sourcePath); err != nil {
+					return "", fmt.Errorf("failed to remove source package during merge: %v", err)
+				}
+				// We return the destPath (the one that already existed)
+				return destPath, nil
+			}
+			return "", fmt.Errorf("cannot enable: a package with the same name is already active")
+		}
 	}
 
 	if err := os.Rename(sourcePath, destPath); err != nil {
