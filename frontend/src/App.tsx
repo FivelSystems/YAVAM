@@ -355,8 +355,6 @@ function App() {
     };
 
     const handleDeleteClick = (pkg: VarPackage) => {
-        // @ts-ignore
-        if (!window.go) return alert("Delete not permitted in web mode");
         setDeleteConfirm({ open: true, pkg });
     };
 
@@ -368,9 +366,17 @@ function App() {
         if (deleteConfirm.pkg) {
             try {
                 // @ts-ignore
-                if (!window.go) return;
-                // @ts-ignore
-                await window.go.main.App.DeleteFileToRecycleBin(deleteConfirm.pkg.filePath);
+                if (window.go) {
+                    // @ts-ignore
+                    await window.go.main.App.DeleteFileToRecycleBin(deleteConfirm.pkg.filePath);
+                } else {
+                    const res = await fetch('/api/delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ filePath: deleteConfirm.pkg.filePath })
+                    }).then(r => r.json());
+                    if (!res.success) throw new Error("Delete failed");
+                }
                 setDeleteConfirm({ open: false, pkg: null });
                 scanPackages(); // Refresh list after delete
             } catch (e) {

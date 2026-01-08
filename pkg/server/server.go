@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 	"varmanager/pkg/manager"
@@ -128,11 +129,8 @@ func (s *Server) Start(port string, path string) error {
 		}
 
 		files := r.MultipartForm.File["file"]
-		addonPath := filepath.Join(path, "AddonPackages")
-		if err := os.MkdirAll(addonPath, 0755); err != nil {
-			http.Error(w, "Failed to create directory", http.StatusInternalServerError)
-			return
-		}
+		// User requested root path
+		downloadDir := path
 
 		count := 0
 		for _, fileHeader := range files {
@@ -142,7 +140,7 @@ func (s *Server) Start(port string, path string) error {
 			}
 			defer file.Close()
 
-			dstPath := filepath.Join(addonPath, filepath.Base(fileHeader.Filename))
+			dstPath := filepath.Join(downloadDir, filepath.Base(fileHeader.Filename))
 			dst, err := os.Create(dstPath)
 			if err != nil {
 				continue
@@ -190,6 +188,40 @@ func (s *Server) Start(port string, path string) error {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": true,
 			"newPath": newPath,
+		})
+	})
+
+	// Delete Endpoint
+	mux.HandleFunc("/api/delete", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			FilePath string `json:"filePath"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+
+		// Security Check: Ensure file is within library path
+		rel, err := filepath.Rel(path, req.FilePath)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			http.Error(w, "Security violation: Invalid file path", 403)
+			return
+		}
+
+		if err := s.manager.DeleteToTrash(req.FilePath); err != nil {
+			s.log(fmt.Sprintf("Error deleting package: %v", err))
+			http.Error(w, err.Error(), 500)
+			return
+		}
+
+		s.log(fmt.Sprintf("Deleted package: %s", filepath.Base(req.FilePath)))
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
 		})
 	})
 
