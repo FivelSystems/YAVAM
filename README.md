@@ -7,12 +7,14 @@ This tool was developed with the assistance of an AI agent.
 ## Features
 
 *   **Package Browser**: View your `.var` files in a responsive grid with thumbnails.
-*   **Generic Repository Support**: Manage `.var` files from any folder on your computer, not just the game's `AddonPackages` directory.
+*   **Package Browser**: View your `.var` files in a responsive grid with thumbnails.
+*   **Web Server & Mobile Support**: Access your library from any device on your network via a browser. Includes a fully responsive mobile interface.
+*   **Remote Management**: Enable/Disable packages, view details, and manage files from your phone or tablet.
+*   **Drag & Drop Upload**: Wireless file transfer - upload `.var` files directly from your browser to the host library.
 *   **Duplicate Detection**: Automatically identifies duplicate packages (multiple versions of the same file).
 *   **Missing Dependencies**: Scans packages to find missing references and allows you to view which dependencies are missing.
-*   **Context Menu**: Right-click to Enable, Disable, Favorite, or Hide packages.
-*   **Local Favorites & Hidden**: Mark packages as "Favorites" or "Hidden" (stored locally in `user_preferences.json`, independent of the game).
-*   **Search & Filter**: Powerful filtering by Status (Enabled/Disabled/Missing Refs), Creator, and more.
+*   **Search & Filter**: Powerful filtering by Status (Enabled/Disabled/Missing Refs), Creator, Tags, and Types.
+*   **Pagination**: optimized performance for large libraries with configurable page size.
 
 ## What this tool is NOT
 

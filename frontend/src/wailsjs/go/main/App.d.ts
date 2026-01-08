@@ -32,6 +32,8 @@ export function SelectDirectory():Promise<string>;
 
 export function SetAlwaysOnTop(arg1:boolean):Promise<void>;
 
+export function SetMinimizeOnClose(arg1:boolean):Promise<void>;
+
 export function StartServer(arg1:string,arg2:string):Promise<void>;
 
 export function StopServer():Promise<void>;

@@ -15,9 +15,10 @@ import (
 
 // App struct
 type App struct {
-	ctx     context.Context
-	manager *manager.Manager
-	server  *server.Server
+	ctx             context.Context
+	manager         *manager.Manager
+	server          *server.Server
+	minimizeOnClose bool
 }
 
 // NewApp creates a new App application struct
@@ -158,4 +159,16 @@ func (a *App) GetLocalIP() string {
 		return ""
 	}
 	return a.server.GetOutboundIP()
+}
+
+func (a *App) SetMinimizeOnClose(val bool) {
+	a.minimizeOnClose = val
+}
+
+func (a *App) onBeforeClose(ctx context.Context) (prevent bool) {
+	if a.minimizeOnClose {
+		runtime.WindowMinimise(ctx)
+		return true
+	}
+	return false
 }

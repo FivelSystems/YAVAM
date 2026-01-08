@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, FolderOpen, LayoutGrid, Network, Folder, Terminal, AlertTriangle } from "lucide-react";
+import { X, FolderOpen, LayoutGrid, Network, Folder, Terminal, AlertTriangle, ExternalLink } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from 'clsx';
 
@@ -44,6 +44,7 @@ const SettingsModal = ({
     const [serverPort, setServerPort] = useState("18888");
     const [localIP, setLocalIP] = useState("Loading...");
     const [logs, setLogs] = useState<string[]>([]);
+    const [minimizeOnClose, setMinimizeOnClose] = useState(() => localStorage.getItem('minimizeOnClose') === 'true');
     // @ts-ignore
     const isWeb = !window.go;
     const logEndRef = useRef<HTMLDivElement>(null);
@@ -104,8 +105,11 @@ const SettingsModal = ({
 
     const tabs = [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
-        { id: 'libraries', label: 'Libraries', icon: Folder },
-        { id: 'network', label: 'Network', icon: Network },
+        // Conditional Tabs
+        ...(!isWeb ? [
+            { id: 'libraries', label: 'Libraries', icon: Folder },
+            { id: 'network', label: 'Network', icon: Network },
+        ] : [])
     ] as const;
 
     return (
@@ -133,7 +137,7 @@ const SettingsModal = ({
                                 {tabs.map(tab => (
                                     <button
                                         key={tab.id}
-                                        onClick={() => setActiveTab(tab.id)}
+                                        onClick={() => setActiveTab(tab.id as any)}
                                         className={clsx(
                                             "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
                                             activeTab === tab.id
@@ -280,7 +284,21 @@ const SettingsModal = ({
                                                 <div className="flex items-center gap-4">
                                                     <div className="flex-1 space-y-1">
                                                         <label className="text-xs uppercase font-bold text-gray-500">Local IP Address</label>
-                                                        <div className="font-mono text-blue-400">{localIP}</div>
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="font-mono text-blue-400">{localIP}</div>
+                                                            {serverEnabled && !isWeb && (
+                                                                <button
+                                                                    onClick={() => {
+                                                                        // @ts-ignore
+                                                                        window.runtime.BrowserOpenURL(`http://${localIP}:${serverPort}`);
+                                                                    }}
+                                                                    className="p-1 text-gray-400 hover:text-white transition-colors"
+                                                                    title="Open in Browser"
+                                                                >
+                                                                    <ExternalLink size={14} />
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                     <div className="w-px h-8 bg-gray-700"></div>
                                                     <div className="flex-1 space-y-1">
@@ -314,6 +332,33 @@ const SettingsModal = ({
                                                     <div ref={logEndRef} />
                                                 </div>
                                             </div>
+
+                                            {!isWeb && (
+                                                <div className="flex items-center justify-between pt-4 border-t border-gray-700">
+                                                    <div>
+                                                        <h4 className="text-sm font-medium text-white">Minimize on Close</h4>
+                                                        <p className="text-xs text-gray-500">Keep server running in background when window is closed.</p>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => {
+                                                            const newVal = !minimizeOnClose;
+                                                            setMinimizeOnClose(newVal);
+                                                            localStorage.setItem('minimizeOnClose', newVal.toString());
+                                                            // @ts-ignore
+                                                            window.go.main.App.SetMinimizeOnClose(newVal);
+                                                        }}
+                                                        className={clsx(
+                                                            "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+                                                            minimizeOnClose ? "bg-blue-600" : "bg-gray-700"
+                                                        )}
+                                                    >
+                                                        <span className={clsx(
+                                                            "inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200",
+                                                            minimizeOnClose ? "translate-x-6" : "translate-x-1"
+                                                        )} />
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 )}
