@@ -437,7 +437,11 @@ function App() {
             // Setup Listeners
             // @ts-ignore
             window.runtime.EventsOn("package:scanned", (pkg: VarPackage) => {
-                setPackages(prev => [...prev, pkg]);
+                setPackages(prev => {
+                    // Prevent duplicates based on filePath
+                    if (prev.some(p => p.filePath === pkg.filePath)) return prev;
+                    return [...prev, pkg];
+                });
             });
             // @ts-ignore
             window.runtime.EventsOn("scan:progress", (data: any) => {
