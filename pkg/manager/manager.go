@@ -123,41 +123,46 @@ func (m *Manager) ScanAndAnalyze(ctx context.Context, rootPath string, onPackage
 				if len(p.Meta.Tags) > 0 {
 					// fmt.Printf("DEBUG: %s - Tags Found: %v\n", p.FileName, p.Meta.Tags)
 				}
+			} else {
+				// Parsing failed, ensure basics are safe defaults
+				p.Type = "Unknown"
+				// fmt.Printf("[Manager] Warning: Failed to parse metadata for %s: %v\n", p.FileName, err)
+			}
 
-				// Fix empty fields from filename if meta is missing or incomplete
-				if p.Meta.Creator == "" || p.Meta.PackageName == "" {
-					// Fallback to filename parsing
-					cleanName := p.FileName
+			// Fix empty fields from filename if meta is missing or incomplete
+			// This runs regardless of parse success/failure
+			if p.Meta.Creator == "" || p.Meta.PackageName == "" {
+				// Fallback to filename parsing
+				cleanName := p.FileName
 
-					// Remove extensions case-insensitively
-					lower := strings.ToLower(cleanName)
-					if strings.HasSuffix(lower, ".var.disabled") {
-						cleanName = cleanName[:len(cleanName)-len(".var.disabled")]
-					} else if strings.HasSuffix(lower, ".var") {
-						cleanName = cleanName[:len(cleanName)-len(".var")]
+				// Remove extensions case-insensitively
+				lower := strings.ToLower(cleanName)
+				if strings.HasSuffix(lower, ".var.disabled") {
+					cleanName = cleanName[:len(cleanName)-len(".var.disabled")]
+				} else if strings.HasSuffix(lower, ".var") {
+					cleanName = cleanName[:len(cleanName)-len(".var")]
+				}
+
+				parts := strings.Split(cleanName, ".")
+				if len(parts) >= 3 {
+					if p.Meta.Creator == "" {
+						c := parts[0]
+						if len(c) > 0 {
+							p.Meta.Creator = strings.ToUpper(c[:1]) + c[1:]
+						} else {
+							p.Meta.Creator = c
+						}
 					}
-
-					parts := strings.Split(cleanName, ".")
-					if len(parts) >= 3 {
-						if p.Meta.Creator == "" {
-							c := parts[0]
-							if len(c) > 0 {
-								p.Meta.Creator = strings.ToUpper(c[:1]) + c[1:]
-							} else {
-								p.Meta.Creator = c
-							}
+					if p.Meta.PackageName == "" {
+						pn := parts[1]
+						if len(pn) > 0 {
+							p.Meta.PackageName = strings.ToUpper(pn[:1]) + pn[1:]
+						} else {
+							p.Meta.PackageName = pn
 						}
-						if p.Meta.PackageName == "" {
-							pn := parts[1]
-							if len(pn) > 0 {
-								p.Meta.PackageName = strings.ToUpper(pn[:1]) + pn[1:]
-							} else {
-								p.Meta.PackageName = pn
-							}
-						}
-						if p.Meta.Version == "" {
-							p.Meta.Version = parts[len(parts)-1]
-						}
+					}
+					if p.Meta.Version == "" {
+						p.Meta.Version = parts[len(parts)-1]
 					}
 				}
 			}
