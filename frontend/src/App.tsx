@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { RefreshCw, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Package, PanelLeft, LayoutGrid, List, Filter, WifiOff, AlertTriangle } from 'lucide-react';
 import clsx from 'clsx';
@@ -165,6 +165,36 @@ function App() {
     const [loading, setLoading] = useState(false);
     const [scanProgress, setScanProgress] = useState({ current: 0, total: 0 });
 
+    const { creatorStatus, typeStatus } = useMemo(() => {
+        const cStatus: Record<string, 'normal' | 'warning' | 'error'> = {};
+        const tStatus: Record<string, 'normal' | 'warning' | 'error'> = {};
+
+        const updateStatus = (map: Record<string, 'normal' | 'warning' | 'error'>, key: string, pkgStatus: 'normal' | 'warning' | 'error') => {
+            const current = map[key] || 'normal';
+            if (pkgStatus === 'error') map[key] = 'error';
+            else if (pkgStatus === 'warning' && current !== 'error') map[key] = 'warning';
+            else if (!map[key]) map[key] = 'normal';
+        };
+
+        packages.forEach(p => {
+            let status: 'normal' | 'warning' | 'error' = 'normal';
+            if (p.isEnabled) {
+                if (p.missingDeps && p.missingDeps.length > 0) status = 'error';
+                else if (p.isDuplicate) status = 'warning';
+            }
+
+            if (p.meta.creator) updateStatus(cStatus, p.meta.creator, status);
+            else updateStatus(cStatus, "Unknown", status);
+
+            if (p.categories && p.categories.length > 0) {
+                p.categories.forEach(c => updateStatus(tStatus, c, status));
+            } else {
+                updateStatus(tStatus, "Unknown", status);
+            }
+        });
+        return { creatorStatus: cStatus, typeStatus: tStatus };
+    }, [packages]);
+
     // Filter State
     const [searchQuery, setSearchQuery] = useState("");
     const [tagSearchQuery, setTagSearchQuery] = useState("");
@@ -231,6 +261,8 @@ function App() {
 
     // Version Resolution State
     const [resolveData, setResolveData] = useState<{ open: boolean, duplicates: VarPackage[] }>({ open: false, duplicates: [] });
+    // Bulk Resolve State
+    const [bulkResolveData, setBulkResolveData] = useState<{ open: boolean, count: number, plan: { keep: VarPackage, others: string[] }[] }>({ open: false, count: 0, plan: [] });
 
     // Context Menu State
     const [contextMenu, setContextMenu] = useState<{ open: boolean, x: number, y: number, pkg: VarPackage | null }>({ open: false, x: 0, y: 0, pkg: null });
@@ -636,7 +668,7 @@ function App() {
         return analyzePackages(currentPkgs);
     };
 
-    const togglePackage = async (pkg: VarPackage, merge = false) => {
+    const togglePackage = async (pkg: VarPackage, merge = false, silent = false) => {
         try {
             let newPath = "";
             // @ts-ignore
@@ -655,7 +687,7 @@ function App() {
                 newPath = res.newPath;
             }
 
-            addToast(pkg.isEnabled ? "Package disabled" : "Package enabled", 'success');
+            if (!silent) addToast(pkg.isEnabled ? "Package disabled" : "Package enabled", 'success');
 
             // Optimistic update with path correction
             setPackages(prev => {
@@ -812,6 +844,178 @@ function App() {
         }
     };
 
+    const handleConfirmBulkResolve = async () => {
+        if (bulkResolveData.plan.length === 0) {
+            setBulkResolveData(prev => ({ ...prev, open: false }));
+            return;
+        }
+        setBulkResolveData(prev => ({ ...prev, open: false }));
+        setLoading(true);
+
+        let mergedCount = 0;
+        let disabledCount = 0;
+        let errorCount = 0;
+
+        try {
+            for (const item of bulkResolveData.plan) {
+                try {
+                    // @ts-ignore
+                    if (window.go) {
+                        // @ts-ignore
+                        const res = await window.go.main.App.ResolveConflicts(item.keep.filePath, item.others, activeLibraryPath);
+                        mergedCount += res.merged;
+                        disabledCount += res.disabled;
+                    } else {
+                        // Web
+                        const res = await fetch('/api/resolve', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                keepPath: item.keep.filePath,
+                                others: item.others,
+                                libraryPath: activeLibraryPath
+                            })
+                        }).then(r => r.json());
+                        mergedCount += res.merged;
+                        disabledCount += res.disabled;
+                    }
+                } catch (e) {
+                    errorCount++;
+                    console.error("Failed to resolve item", e);
+                }
+            }
+            addToast(`Batch resolution complete. Merged: ${mergedCount}, Disabled: ${disabledCount}` + (errorCount > 0 ? `, Errors: ${errorCount}` : ""), errorCount > 0 ? 'warning' : 'success');
+        } catch (e) {
+            console.error(e);
+            addToast("Batch resolution failed", 'error');
+        } finally {
+            setLoading(false);
+            scanPackages();
+        }
+    };
+
+    const handleSidebarAction = async (action: 'enable-all' | 'disable-all' | 'resolve-all', groupType: 'creator' | 'type' | 'status', key: string) => {
+        const targets = packages.filter(p => {
+            if (groupType === 'creator') return (p.meta.creator || "Unknown") === key;
+            if (groupType === 'type') {
+                if (p.categories && p.categories.length > 0) return p.categories.includes(key);
+                return (p.type || "Unknown") === key;
+            }
+            if (groupType === 'status') {
+                if (key === 'all') return true;
+                if (key === 'enabled') return p.isEnabled;
+                if (key === 'disabled') return !p.isEnabled;
+                if (key === 'missing-deps') return p.missingDeps && p.missingDeps.length > 0;
+                if (key === 'duplicates') return p.isDuplicate;
+            }
+            return false;
+        });
+
+        if (targets.length === 0) return;
+
+        if (action === 'resolve-all') {
+            // Group by package name
+            const groups: Record<string, VarPackage[]> = {};
+            targets.forEach(p => {
+                // Only consider packages that are actually duplicates?
+                // No, resolve-all implies checking for duplicates within the target set OR against global?
+                // Usually duplicates are defined globally.
+                // We should only resolve groups that have >1 elements.
+                const id = `${p.meta.creator}.${p.meta.packageName}`;
+                if (!groups[id]) groups[id] = [];
+                groups[id].push(p);
+            });
+
+            const plan: { keep: VarPackage, others: string[] }[] = [];
+            let totalToUpdate = 0;
+
+            for (const pid in groups) {
+                const group = groups[pid];
+                // If the group has only 1 item in the filtered view, but that item IS a duplicate globally,
+                // should we resolve it?
+                // Current logic: We only resolve conflicts WITHIN the selected set?
+                // Or do we resolve conflicts for any selected item against the world?
+                // User expects "Fix Conflicts" for "Creator X". This likely means "Fix conflicts where Creator X involved".
+                // But wait, `p` includes ALL packages. `targets` are filtered.
+                // If I filter by Creator X, I might see pkg A v1.
+                // Pkg A v2 might be by Creator Y? (Unlikely for same package).
+                // So generally safe.
+
+                // BUT: If I filter by "Status: Duplicates", group will have all versions.
+
+                // Issue: If `targets` doesn't contain all versions (e.g. filtered by tag), we might resolving partially?
+                // We should probably find ALL duplicates for the target packages from the global `packages` list to be safe.
+
+                // Improved Logic:
+                // 1. Identify Unique Packages (Name+Creator) in targets that are marked as duplicate.
+                // 2. For each, find ALL versions in `packages` (global).
+                // 3. Resolve them.
+
+                if (group.length <= 1) {
+                    // Check global packages if this item is a duplicate
+                    if (group.length === 1 && group[0].isDuplicate) {
+                        const p = group[0];
+                        const allVersions = packages.filter(pk => pk.meta.creator === p.meta.creator && pk.meta.packageName === p.meta.packageName);
+                        if (allVersions.length > 1) {
+                            // Use this global group
+                            group.length = 0; // Clear
+                            group.push(...allVersions);
+                        }
+                    } else {
+                        continue;
+                    }
+                }
+                if (group.length <= 1) continue;
+
+                // Sort by version (descending)
+                group.sort((a, b) => {
+                    const vA = parseInt(a.meta.version) || 0;
+                    const vB = parseInt(b.meta.version) || 0;
+                    return vB - vA;
+                });
+
+                const keep = group[0];
+                const others = group.slice(1).map(x => x.filePath);
+                plan.push({ keep, others });
+                totalToUpdate += others.length;
+            }
+
+            if (plan.length === 0) {
+                addToast("No solvable conflicts found in selection", 'info');
+                return;
+            }
+
+            setBulkResolveData({ open: true, count: totalToUpdate, plan });
+            return;
+        }
+
+        setLoading(true);
+        try {
+            if (action === 'enable-all') {
+                let count = 0;
+                for (const p of targets) {
+                    if (!p.isEnabled) {
+                        await togglePackage(p, false, true);
+                        count++;
+                    }
+                }
+                addToast(`Enabled ${count} packages in ${key}`, 'success');
+            } else if (action === 'disable-all') {
+                const toDisable = targets.filter(p => p.isEnabled);
+                for (const p of toDisable) {
+                    await togglePackage(p, false, true);
+                }
+                addToast(`Disabled ${toDisable.length} packages in ${key}`, 'success');
+            }
+        } catch (e: any) {
+            console.error(e);
+            addToast("Bulk action failed: " + e.message, 'error');
+        } finally {
+            setLoading(false);
+            scanPackages();
+        }
+    };
+
     if (!activeLibraryPath) {
         // @ts-ignore
         if (!window.go) {
@@ -958,6 +1162,16 @@ function App() {
                     confirmStyle="primary"
                 />
 
+                <ConfirmationModal
+                    isOpen={bulkResolveData.open}
+                    onClose={() => setBulkResolveData(prev => ({ ...prev, open: false }))}
+                    onConfirm={handleConfirmBulkResolve}
+                    title="Confirm Bulk Resolution"
+                    message={`This will automatically resolve conflicts for ${bulkResolveData.plan.length} distinct packages. ${bulkResolveData.count} older versions will be disabled or merged, leaving only the newest version active. This action cannot be undone easily.\n\nAre you sure you want to proceed?`}
+                    confirmText="Fix All Conflicts"
+                    confirmStyle="primary"
+                />
+
                 {/* Hide sidebar on small screens when not needed, or use CSS media queries */}
                 {/* Mobile Overlay Backdrop */}
                 <AnimatePresence>
@@ -988,6 +1202,9 @@ function App() {
                             onFilterCreator={setSelectedCreator}
                             selectedType={selectedType}
                             onFilterType={setSelectedType}
+                            creatorStatus={creatorStatus}
+                            typeStatus={typeStatus}
+                            onSidebarAction={handleSidebarAction}
                             onOpenSettings={() => setIsSettingsOpen(true)}
 
                             // Library Switcher Props
