@@ -280,6 +280,16 @@ function App() {
     // Details Panel Visibility
     const [isDetailsPanelOpen, setIsDetailsPanelOpen] = useState(false);
 
+    // Persist active tab for RightSidebar
+    const [activeRightSidebarTab, setActiveRightSidebarTab] = useState<'details' | 'contents'>(() => {
+        return (localStorage.getItem('rightSidebarTab') as 'details' | 'contents') || 'details';
+    });
+
+    const handleRightTabChange = (tab: 'details' | 'contents') => {
+        setActiveRightSidebarTab(tab);
+        localStorage.setItem('rightSidebarTab', tab);
+    };
+
     const handlePackageClick = (pkg: VarPackage, e?: React.MouseEvent) => {
         if (e && (e.ctrlKey || e.metaKey)) {
             // Multi-select toggle
@@ -1473,6 +1483,8 @@ function App() {
                                     pkg={selectedPackage}
                                     onClose={() => { setIsDetailsPanelOpen(false); setSelectedPackage(null); setSelectedIds(new Set()); }}
                                     onResolve={handleOpenResolve}
+                                    activeTab={activeRightSidebarTab}
+                                    onTabChange={handleRightTabChange}
                                 />
                             )}
                         </AnimatePresence>

@@ -302,9 +302,7 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
                 </div>
             </div>
 
-            <div className="p-4 border-t border-gray-700 text-xs text-gray-500 text-center">
-                v1.1.0
-            </div>
+
 
             {/* Sidebar Context Menu */}
             {contextMenu && (
