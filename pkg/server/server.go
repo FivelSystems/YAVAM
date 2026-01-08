@@ -186,8 +186,34 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		}
 
 		files := r.MultipartForm.File["file"]
-		// User requested root path
-		downloadDir := activePath
+		// User requested path (or default to active)
+		targetPath := r.FormValue("path")
+		if targetPath == "" {
+			targetPath = activePath
+		}
+
+		// Security Check
+		cleanTarget := strings.ToLower(filepath.Clean(targetPath))
+		cleanActive := strings.ToLower(filepath.Clean(activePath))
+		allowed := false
+
+		if cleanTarget == cleanActive {
+			allowed = true
+		} else {
+			for _, lib := range s.libraries {
+				if strings.ToLower(filepath.Clean(lib)) == cleanTarget {
+					allowed = true
+					break
+				}
+			}
+		}
+
+		if !allowed {
+			s.writeError(w, "Access denied: Invalid library path", 403)
+			return
+		}
+
+		downloadDir := targetPath
 
 		count := 0
 		for _, fileHeader := range files {
@@ -281,6 +307,43 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": true,
 		})
+	})
+
+	// Resolve Endpoint
+	mux.HandleFunc("/api/resolve", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			KeepPath    string   `json:"keepPath"`
+			Others      []string `json:"others"`
+			LibraryPath string   `json:"libraryPath"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.writeError(w, err.Error(), 400)
+			return
+		}
+
+		// Security Check: Ensure all paths are somewhat valid?
+		// Manager usually handles exact validation, but ensuring containment is good practice.
+		// But LibraryPath might be dynamic.
+		// For now, assume Manager logic is robust or add basic check:
+		if req.LibraryPath == "" {
+			req.LibraryPath = activePath
+		}
+
+		// Call Manager
+		res, err := s.manager.ResolveConflicts(req.KeepPath, req.Others, req.LibraryPath)
+		if err != nil {
+			s.log(fmt.Sprintf("Error resolving conflicts: %v", err))
+			s.writeError(w, err.Error(), 500)
+			return
+		}
+
+		s.log(fmt.Sprintf("Resolved conflicts. Merged: %d, Disabled: %d", res.Merged, res.Disabled))
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(res)
 	})
 
 	// Restore Endpoint

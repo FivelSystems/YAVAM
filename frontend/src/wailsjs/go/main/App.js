@@ -54,6 +54,10 @@ export function OpenFolderInExplorer(arg1) {
   return window['go']['main']['App']['OpenFolderInExplorer'](arg1);
 }
 
+export function ResolveConflicts(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ResolveConflicts'](arg1, arg2, arg3);
+}
+
 export function ScanPackages(arg1) {
   return window['go']['main']['App']['ScanPackages'](arg1);
 }
