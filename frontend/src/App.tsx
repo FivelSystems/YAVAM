@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { RefreshCw, Search, X, ChevronLeft, ChevronRight, Package, PanelLeft, LayoutGrid, List, Filter, WifiOff } from 'lucide-react';
+import { RefreshCw, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Package, PanelLeft, LayoutGrid, List, Filter, WifiOff } from 'lucide-react';
 import clsx from 'clsx';
 import DragDropOverlay from './components/DragDropOverlay';
 import ContextMenu from './components/ContextMenu';
@@ -58,7 +58,17 @@ function App() {
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 50;
+    const [itemsPerPage, setItemsPerPage] = useState(() => parseInt(localStorage.getItem('itemsPerPage') || '25'));
+
+    // Reset pagination when filters change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery, tagSearchQuery, currentFilter, selectedCreator, selectedType, selectedTags.length, itemsPerPage]);
+
+    const handleSetItemsPerPage = (val: number) => {
+        setItemsPerPage(val);
+        localStorage.setItem('itemsPerPage', val.toString());
+    };
 
     // Settings
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -471,6 +481,8 @@ function App() {
                         setGridSize(size);
                         localStorage.setItem("gridSize", size.toString());
                     }}
+                    itemsPerPage={itemsPerPage}
+                    setItemsPerPage={handleSetItemsPerPage}
                 />
                 <div className="text-center space-y-6 max-w-md w-full p-8 bg-gray-800 rounded-xl shadow-2xl border border-gray-700">
                     {/* ... (Welcome content same as before) ... */}
@@ -561,6 +573,8 @@ function App() {
                         setGridSize(size);
                         localStorage.setItem("gridSize", size.toString());
                     }}
+                    itemsPerPage={itemsPerPage}
+                    setItemsPerPage={handleSetItemsPerPage}
                 />
 
                 <ConfirmationModal
@@ -749,36 +763,106 @@ function App() {
                     </header>
 
                     <div className="flex-1 flex overflow-hidden">
-                        <div className="flex-1 overflow-auto p-4 custom-scrollbar flex flex-col">
-                            <CardGrid
-                                packages={filteredPkgs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)}
-                                currentPath={vamPath}
-                                totalCount={packages.length}
-                                onContextMenu={handleContextMenu}
-                                onSelect={handlePackageClick}
-                                selectedPkgId={selectedPackage?.filePath}
-                                viewMode={viewMode}
-                                gridSize={gridSize}
-                            />
+                        <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
+                            <div className="flex-1 overflow-auto p-4 custom-scrollbar">
+                                <CardGrid
+                                    packages={filteredPkgs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)}
+                                    currentPath={vamPath}
+                                    totalCount={packages.length}
+                                    onContextMenu={handleContextMenu}
+                                    onSelect={handlePackageClick}
+                                    selectedPkgId={selectedPackage?.filePath}
+                                    viewMode={viewMode}
+                                    gridSize={gridSize}
+                                />
+                            </div>
 
+                            {/* Pagination Footer */}
                             {filteredPkgs.length > itemsPerPage && (
-                                <div className="flex justify-center items-center gap-4 py-4 mt-4 border-t border-gray-700 bg-gray-800/50 backdrop-blur sticky bottom-0">
+                                <div className="p-3 border-t border-gray-700 bg-gray-800 shadow-xl z-20 flex justify-center items-center gap-2 shrink-0 overflow-x-auto">
+                                    {/* First Page */}
+                                    <button
+                                        onClick={() => setCurrentPage(1)}
+                                        disabled={currentPage === 1}
+                                        className="p-1.5 rounded-lg bg-gray-700 disabled:opacity-30 hover:bg-gray-600 disabled:hover:bg-gray-700 transition-colors text-gray-300"
+                                        title="First Page"
+                                    >
+                                        <ChevronsLeft size={18} />
+                                    </button>
+                                    {/* Previous Page */}
                                     <button
                                         onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                                         disabled={currentPage === 1}
-                                        className="p-2 rounded bg-gray-700 disabled:opacity-50 hover:bg-gray-600 disabled:hover:bg-gray-700 transition"
+                                        className="p-1.5 rounded-lg bg-gray-700 disabled:opacity-30 hover:bg-gray-600 disabled:hover:bg-gray-700 transition-colors text-gray-300"
+                                        title="Previous Page"
                                     >
-                                        <ChevronLeft size={20} />
+                                        <ChevronLeft size={18} />
                                     </button>
-                                    <span className="text-gray-400">
-                                        Page {currentPage} of {Math.ceil(filteredPkgs.length / itemsPerPage)}
-                                    </span>
+
+                                    {/* Page Numbers */}
+                                    <div className="flex items-center gap-1 mx-2">
+                                        {(() => {
+                                            const totalPages = Math.ceil(filteredPkgs.length / itemsPerPage);
+                                            const maxVisible = 5;
+                                            let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+                                            let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+
+                                            if (endPage - startPage + 1 < maxVisible) {
+                                                startPage = Math.max(1, endPage - maxVisible + 1);
+                                            }
+
+                                            const pages = [];
+                                            if (startPage > 1) {
+                                                pages.push(
+                                                    <button key={1} onClick={() => setCurrentPage(1)} className="w-8 h-8 rounded-lg bg-gray-700 hover:bg-gray-600 text-xs font-medium text-gray-400">1</button>
+                                                );
+                                                if (startPage > 2) pages.push(<span key="dots1" className="text-gray-600">...</span>);
+                                            }
+
+                                            for (let i = startPage; i <= endPage; i++) {
+                                                pages.push(
+                                                    <button
+                                                        key={i}
+                                                        onClick={() => setCurrentPage(i)}
+                                                        className={clsx(
+                                                            "w-8 h-8 rounded-lg text-xs font-medium transition-colors",
+                                                            currentPage === i
+                                                                ? "bg-blue-600 text-white shadow-lg shadow-blue-900/50"
+                                                                : "bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white"
+                                                        )}
+                                                    >
+                                                        {i}
+                                                    </button>
+                                                );
+                                            }
+
+                                            if (endPage < totalPages) {
+                                                if (endPage < totalPages - 1) pages.push(<span key="dots2" className="text-gray-600">...</span>);
+                                                pages.push(
+                                                    <button key={totalPages} onClick={() => setCurrentPage(totalPages)} className="w-8 h-8 rounded-lg bg-gray-700 hover:bg-gray-600 text-xs font-medium text-gray-400">{totalPages}</button>
+                                                );
+                                            }
+                                            return pages;
+                                        })()}
+                                    </div>
+
+                                    {/* Next Page */}
                                     <button
                                         onClick={() => setCurrentPage(p => Math.min(Math.ceil(filteredPkgs.length / itemsPerPage), p + 1))}
                                         disabled={currentPage === Math.ceil(filteredPkgs.length / itemsPerPage)}
-                                        className="p-2 rounded bg-gray-700 disabled:opacity-50 hover:bg-gray-600 disabled:hover:bg-gray-700 transition"
+                                        className="p-1.5 rounded-lg bg-gray-700 disabled:opacity-30 hover:bg-gray-600 disabled:hover:bg-gray-700 transition-colors text-gray-300"
+                                        title="Next Page"
                                     >
-                                        <ChevronRight size={20} />
+                                        <ChevronRight size={18} />
+                                    </button>
+                                    {/* Last Page */}
+                                    <button
+                                        onClick={() => setCurrentPage(Math.ceil(filteredPkgs.length / itemsPerPage))}
+                                        disabled={currentPage === Math.ceil(filteredPkgs.length / itemsPerPage)}
+                                        className="p-1.5 rounded-lg bg-gray-700 disabled:opacity-30 hover:bg-gray-600 disabled:hover:bg-gray-700 transition-colors text-gray-300"
+                                        title="Last Page"
+                                    >
+                                        <ChevronsRight size={18} />
                                     </button>
                                 </div>
                             )}
