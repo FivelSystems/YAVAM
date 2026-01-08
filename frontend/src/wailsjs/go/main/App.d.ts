@@ -21,6 +21,8 @@ export function GetLocalIP():Promise<string>;
 
 export function GetPackageContents(arg1:string):Promise<Array<models.PackageContent>>;
 
+export function GetPackageThumbnail(arg1:string):Promise<string>;
+
 export function GetUserDownloadsDir():Promise<string>;
 
 export function Greet(arg1:string):Promise<string>;
@@ -31,7 +33,7 @@ export function OpenFolderInExplorer(arg1:string):Promise<void>;
 
 export function ResolveConflicts(arg1:string,arg2:Array<string>,arg3:string):Promise<manager.ResolveConflictResult>;
 
-export function ScanPackages(arg1:string):Promise<models.ScanResult>;
+export function ScanPackages(arg1:string):Promise<void>;
 
 export function SelectDirectory():Promise<string>;
 
