@@ -445,7 +445,16 @@ function App() {
             });
             // @ts-ignore
             window.runtime.EventsOn("scan:complete", () => {
-                setPackages(prev => analyzePackages(prev));
+                setPackages(prev => {
+                    const analyzed = analyzePackages(prev);
+                    // Extract tags asynchronously to avoid state update conflict
+                    setTimeout(() => {
+                        const tags = new Set<string>();
+                        analyzed.forEach(p => p.tags?.forEach(t => tags.add(t)));
+                        setAvailableTags(Array.from(tags).sort());
+                    }, 0);
+                    return analyzed;
+                });
                 setLoading(false);
             });
             // @ts-ignore
