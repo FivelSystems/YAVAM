@@ -6,15 +6,15 @@ import { motion } from 'framer-motion';
 interface PackageCardProps {
     pkg: VarPackage;
     onContextMenu: (e: React.MouseEvent, pkg: VarPackage) => void;
-    onSelect: (pkg: VarPackage) => void;
+    onSelect: (pkg: VarPackage, e?: React.MouseEvent) => void;
     isSelected?: boolean;
     viewMode?: 'grid' | 'list';
 }
 
 const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'grid' }: PackageCardProps) => {
 
-    const handleClick = () => {
-        onSelect(pkg);
+    const handleClick = (e: React.MouseEvent) => {
+        onSelect(pkg, e);
     };
 
     // Visual State Logic

@@ -1,4 +1,4 @@
-import { User, ChevronDown, ChevronRight, AlertTriangle, Copy, Layers, Package, Settings, CheckCircle2, CircleOff } from 'lucide-react';
+import { ChevronDown, ChevronRight, AlertTriangle, Copy, Layers, Package, Settings, CheckCircle2, CircleOff } from 'lucide-react';
 import { VarPackage } from '../App';
 import clsx from 'clsx';
 import { useMemo, useState } from 'react';
@@ -165,38 +165,49 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
                                 )}>{statusCounts.all}</span>
                             </button>
 
-                            <button
-                                onClick={() => setFilter('enabled')}
-                                className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
-                                    currentFilter === 'enabled' ? "bg-green-500/10 text-green-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
-                            >
-                                <div className="flex items-center gap-3"><CheckCircle2 size={18} /> Enabled</div>
-                                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-green-500/20 text-green-400 border border-green-500/10 group-hover:bg-green-500/30 transition-colors">{statusCounts.enabled}</span>
-                            </button>
-                            <button
-                                onClick={() => setFilter('disabled')}
-                                className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
-                                    currentFilter === 'disabled' ? "bg-gray-600/20 text-gray-200" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
-                            >
-                                <div className="flex items-center gap-3"><CircleOff size={18} /> Disabled</div>
-                                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-700 text-gray-300 border border-gray-600 group-hover:bg-gray-600 transition-colors">{statusCounts.disabled}</span>
-                            </button>
-                            <button
-                                onClick={() => setFilter('missing-deps')}
-                                className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
-                                    currentFilter === 'missing-deps' ? "bg-red-500/10 text-red-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
-                            >
-                                <div className="flex items-center gap-3"><AlertTriangle size={18} /> Missing Refs</div>
-                                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-500/20 text-red-400 border border-red-500/10 group-hover:bg-red-500/30 transition-colors">{statusCounts.missingDeps}</span>
-                            </button>
-                            <button
-                                onClick={() => setFilter('duplicates')}
-                                className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
-                                    currentFilter === 'duplicates' ? "bg-yellow-500/10 text-yellow-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
-                            >
-                                <div className="flex items-center gap-3"><Copy size={18} /> Multiple Versions</div>
-                                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-yellow-500/20 text-yellow-400 border border-yellow-500/10 group-hover:bg-yellow-500/30 transition-colors">{statusCounts.duplicates}</span>
-                            </button>
+                            {statusCounts.enabled > 0 && (
+                                <button
+                                    onClick={() => setFilter(currentFilter === 'enabled' ? 'all' : 'enabled')}
+                                    className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
+                                        currentFilter === 'enabled' ? "bg-green-500/10 text-green-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
+                                >
+                                    <div className="flex items-center gap-3"><CheckCircle2 size={18} /> Enabled</div>
+                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-green-500/20 text-green-400 border border-green-500/10 group-hover:bg-green-500/30 transition-colors">{statusCounts.enabled}</span>
+                                </button>
+                            )}
+
+                            {statusCounts.disabled > 0 && (
+                                <button
+                                    onClick={() => setFilter(currentFilter === 'disabled' ? 'all' : 'disabled')}
+                                    className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
+                                        currentFilter === 'disabled' ? "bg-gray-600/20 text-gray-200" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
+                                >
+                                    <div className="flex items-center gap-3"><CircleOff size={18} /> Disabled</div>
+                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-700 text-gray-300 border border-gray-600 group-hover:bg-gray-600 transition-colors">{statusCounts.disabled}</span>
+                                </button>
+                            )}
+
+                            {statusCounts.missingDeps > 0 && (
+                                <button
+                                    onClick={() => setFilter(currentFilter === 'missing-deps' ? 'all' : 'missing-deps')}
+                                    className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
+                                        currentFilter === 'missing-deps' ? "bg-red-500/10 text-red-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
+                                >
+                                    <div className="flex items-center gap-3"><AlertTriangle size={18} /> Missing Refs</div>
+                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-500/20 text-red-400 border border-red-500/10 group-hover:bg-red-500/30 transition-colors">{statusCounts.missingDeps}</span>
+                                </button>
+                            )}
+
+                            {statusCounts.duplicates > 0 && (
+                                <button
+                                    onClick={() => setFilter(currentFilter === 'duplicates' ? 'all' : 'duplicates')}
+                                    className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
+                                        currentFilter === 'duplicates' ? "bg-yellow-500/10 text-yellow-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
+                                >
+                                    <div className="flex items-center gap-3"><Copy size={18} /> Multiple Versions</div>
+                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-yellow-500/20 text-yellow-400 border border-yellow-500/10 group-hover:bg-yellow-500/30 transition-colors">{statusCounts.duplicates}</span>
+                                </button>
+                            )}
                         </div>
                     )}
                 </div>
@@ -212,17 +223,10 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
 
                     {!collapsed.creators && (
                         <div className="space-y-1">
-                            <button
-                                onClick={() => onFilterCreator(null)}
-                                className={clsx("w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm",
-                                    selectedCreator === null ? "bg-blue-600/10 text-blue-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
-                            >
-                                <User size={18} /> All Creators
-                            </button>
                             {creators.map(([name, count]) => (
                                 <button
                                     key={name}
-                                    onClick={() => onFilterCreator(name)}
+                                    onClick={() => onFilterCreator(selectedCreator === name ? null : name)}
                                     className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
                                         selectedCreator === name ? "bg-blue-600/10 text-blue-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
                                 >
@@ -246,17 +250,10 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
 
                     {!collapsed.types && (
                         <div className="space-y-1">
-                            <button
-                                onClick={() => onFilterType(null)}
-                                className={clsx("w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm",
-                                    selectedType === null ? "bg-blue-600/10 text-blue-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
-                            >
-                                <Layers size={18} /> All Categories
-                            </button>
                             {types.map(([name, count]) => (
                                 <button
                                     key={name}
-                                    onClick={() => onFilterType(name)}
+                                    onClick={() => onFilterType(selectedType === name ? null : name)}
                                     className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
                                         selectedType === name ? "bg-blue-600/10 text-blue-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
                                 >
