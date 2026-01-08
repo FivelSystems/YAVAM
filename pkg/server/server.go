@@ -447,6 +447,7 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		}
 		var req struct {
 			FilePaths []string `json:"filePaths"`
+			DestLib   string   `json:"destLib"`
 			Overwrite bool     `json:"overwrite"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -454,8 +455,11 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 			return
 		}
 
-		// Use activePath as destination library
-		// Note: Manager CopyPackagesToLibrary handles file copy.
+		destPath := req.DestLib
+		if destPath == "" {
+			destPath = activePath // Default to active library if not specified
+		}
+
 		// Security check: ensure source files are in allowed libraries?
 		// CopyPackagesToLibrary reads from src.
 		// We should validate sources are in s.libraries OR activePath.
@@ -478,7 +482,7 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 			}
 		}
 
-		collisions, err := s.manager.CopyPackagesToLibrary(req.FilePaths, activePath, req.Overwrite)
+		collisions, err := s.manager.CopyPackagesToLibrary(req.FilePaths, destPath, req.Overwrite)
 		if err != nil {
 			s.log(fmt.Sprintf("Error installing packages: %v", err))
 			s.writeError(w, err.Error(), 500)
@@ -488,7 +492,7 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		if len(collisions) > 0 {
 			s.log(fmt.Sprintf("Install collisions detected: %d files", len(collisions)))
 		} else {
-			s.log(fmt.Sprintf("Installed %d packages to %s", len(req.FilePaths), filepath.Base(activePath)))
+			s.log(fmt.Sprintf("Installed %d packages to %s", len(req.FilePaths), filepath.Base(destPath)))
 		}
 
 		w.Header().Set("Content-Type", "application/json")
