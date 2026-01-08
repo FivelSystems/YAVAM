@@ -274,16 +274,8 @@ function App() {
             setSelectedPackage(pkg);
         } else {
             // Single select
-            if (selectedPackage?.filePath === pkg.filePath && selectedIds.size === 1) {
-                // Deselect if clicking same? No, standard Windows behavior is keep selected.
-                // But sidebar toggle behavior was present. User said "Sidebar panel... hide it when we have more than one".
-                // Let's keep toggle behavior for single click if it's the ONLY one selected.
-                setSelectedPackage(null);
-                setSelectedIds(new Set());
-            } else {
-                setSelectedPackage(pkg);
-                setSelectedIds(new Set([pkg.filePath]));
-            }
+            setSelectedPackage(pkg);
+            setSelectedIds(new Set([pkg.filePath]));
         }
     };
 

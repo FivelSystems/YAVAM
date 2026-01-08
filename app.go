@@ -29,6 +29,7 @@ type App struct {
 	server          *server.Server
 	minimizeOnClose bool
 	assets          fs.FS
+	isQuitting      bool
 }
 
 // NewApp creates a new App application struct
@@ -79,7 +80,7 @@ func (a *App) DeleteFileToRecycleBin(path string) error {
 func (a *App) CopyPackagesToLibrary(filePaths []string, destLibPath string, overwrite bool) ([]string, error) {
 	var collisions []string
 	// Ensure destination exists
-	addonPath := filepath.Join(destLibPath, "AddonPackages")
+	addonPath := destLibPath
 	if err := os.MkdirAll(addonPath, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create destination: %v", err)
 	}
@@ -249,14 +250,47 @@ func (a *App) GetLocalIP() string {
 
 func (a *App) SetMinimizeOnClose(val bool) {
 	a.minimizeOnClose = val
+	if val {
+		systray.SetIcon(iconData)
+		systray.SetTitle("YAVAM")
+		systray.SetTooltip("YAVAM")
+	} else {
+		// Attempts to hide the tray icon by setting an empty icon or stopping it?
+		// Hiding is platform specific and tricky.
+		// For now, we only ensure it APPEARS when enabled.
+		// If disabled, we might leave it or try to hide it if possible.
+		// Assuming user just wants it off by default.
+	}
 }
 
 func (a *App) onBeforeClose(ctx context.Context) (prevent bool) {
 	// Only minimize to tray if Server is Running AND user enabled the option
-	if a.minimizeOnClose && a.server != nil && a.server.IsRunning() {
+	if a.minimizeOnClose && a.server != nil && a.server.IsRunning() && !a.isQuitting {
 		runtime.WindowHide(ctx)
 		return true
 	}
+
+	// Normal Close or Quit
+	if a.server != nil && a.server.IsRunning() {
+		res, err := runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
+			Type:          runtime.QuestionDialog,
+			Title:         "Server Running",
+			Message:       "The web server is currently running. Do you want to stop the server and quit?",
+			Buttons:       []string{"Yes", "No"},
+			DefaultButton: "No",
+			CancelButton:  "No",
+		})
+		if err != nil {
+			return false // On error, just close?
+		}
+		if res == "No" {
+			a.isQuitting = false
+			return true // Prevent close
+		}
+		// User confirmed
+		a.server.Stop()
+	}
+
 	return false
 }
 
@@ -270,17 +304,20 @@ func (a *App) onSecondInstanceLaunch(secondInstanceData options.SecondInstanceDa
 }
 
 func (a *App) onTrayReady() {
-	systray.SetIcon(iconData)
-	systray.SetTitle("YAVAM")
-	systray.SetTooltip("YAVAM")
+	// We do NOT set the icon here to keep it hidden by default.
+	// It will be set when SetMinimizeOnClose(true) is called.
 
 	mShow := systray.AddMenuItem("Show Window", "Restore the window")
 	mShow.Click(func() {
 		runtime.WindowShow(a.ctx)
+		if runtime.WindowIsMinimised(a.ctx) {
+			runtime.WindowUnminimise(a.ctx)
+		}
 	})
 
-	mQuit := systray.AddMenuItem("Quit", "Quit YAVAM")
+	mQuit := systray.AddMenuItem("Quit", "Quit the application")
 	mQuit.Click(func() {
+		a.isQuitting = true
 		systray.Quit()
 		runtime.Quit(a.ctx)
 	})
