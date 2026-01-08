@@ -487,7 +487,7 @@ function App() {
             // Web Mode
             try {
                 const pkgs = await fetch(`/api/packages?path=${encodeURIComponent(activeLibraryPath)}`).then(r => r.json());
-                setPackages(pkgs || []);
+                setPackages(analyzePackages(pkgs || []));
                 const tags = new Set<string>();
                 pkgs?.forEach((p: any) => p.tags?.forEach((t: string) => tags.add(t)));
                 setAvailableTags(Array.from(tags));
