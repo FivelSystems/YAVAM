@@ -23,6 +23,7 @@ type VarPackage struct {
 	IsFavorite      bool     `json:"isFavorite"`
 	IsHidden        bool     `json:"isHidden"`
 	Type            string   `json:"type"`
+	Categories      []string `json:"categories"`
 	Tags            []string `json:"tags,omitempty"`
 }
 

@@ -68,10 +68,24 @@ const RightSidebar = ({ pkg, onClose, onResolve }: RightSidebarProps) => {
         setLoading(true);
         try {
             // @ts-ignore
-            const res = await window.go.main.App.GetPackageContents(pkg.filePath);
-            setContents(res || []);
+            if (window.go) {
+                // @ts-ignore
+                const res = await window.go.main.App.GetPackageContents(pkg.filePath);
+                setContents(res || []);
+            } else {
+                // Web Mode Logic
+                const res = await fetch('/api/contents', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filePath: pkg.filePath })
+                });
+                if (!res.ok) throw new Error("Failed to fetch contents");
+                const data = await res.json();
+                setContents(data || []);
+            }
         } catch (e) {
             console.error(e);
+            setContents([]);
         } finally {
             setLoading(false);
         }

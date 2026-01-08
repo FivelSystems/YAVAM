@@ -34,6 +34,7 @@ export interface VarPackage {
     missingDeps: string[];
     isDuplicate: boolean;
     type?: string;
+    categories: string[];
     tags?: string[];
 }
 
@@ -454,8 +455,15 @@ function App() {
         // Creator Filter
         if (selectedCreator) res = res.filter(p => p.meta?.creator === selectedCreator);
 
-        // Type Filter
-        if (selectedType) res = res.filter(p => p.type === selectedType);
+        // Type Filter (Category)
+        if (selectedType) {
+            res = res.filter(p => {
+                if (p.categories && p.categories.length > 0) {
+                    return p.categories.includes(selectedType);
+                }
+                return p.type === selectedType;
+            });
+        }
 
         // Tags Filter
         if (selectedTags.length > 0) {
