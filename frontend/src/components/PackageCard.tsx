@@ -187,7 +187,7 @@ const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'gri
                 <div className="h-0 group-hover:h-auto overflow-hidden transition-all duration-300">
                     <div className="text-[10px] text-gray-400 mt-2 border-t border-gray-700/50 pt-2 flex justify-between">
                         <span>{(pkg.size / 1024 / 1024).toFixed(1)} MB</span>
-                        {pkg.isEnabled && pkg.missingDeps && <span className="text-red-400 font-bold">{pkg.missingDeps.length} Missing</span>}
+                        {pkg.isEnabled && pkg.missingDeps && pkg.missingDeps.length > 0 && <span className="text-red-400 font-bold">{pkg.missingDeps.length} Missing</span>}
                         {pkg.isEnabled && pkg.isDuplicate && <span className="text-yellow-400 font-bold">Conflict</span>}
                         {!pkg.isEnabled && <span>Disabled</span>}
                     </div>
