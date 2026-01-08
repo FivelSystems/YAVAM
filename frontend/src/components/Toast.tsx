@@ -1,9 +1,9 @@
 import React, { useEffect } from 'react';
-import { X, CheckCircle, AlertCircle, Info } from 'lucide-react';
+import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react';
 import { clsx } from 'clsx';
 import { motion } from 'framer-motion';
 
-export type ToastType = 'success' | 'error' | 'info';
+export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
 export interface ToastItem {
     id: string;
@@ -25,13 +25,15 @@ export const Toast: React.FC<ToastProps> = ({ toast, onRemove }) => {
     const icons = {
         success: <CheckCircle size={20} className="text-green-400" />,
         error: <AlertCircle size={20} className="text-red-400" />,
-        info: <Info size={20} className="text-blue-400" />
+        info: <Info size={20} className="text-blue-400" />,
+        warning: <AlertTriangle size={20} className="text-yellow-400" />
     };
 
     const bgColors = {
         success: "bg-gray-800 border-green-500/20",
         error: "bg-gray-800 border-red-500/20",
-        info: "bg-gray-800 border-blue-500/20"
+        info: "bg-gray-800 border-blue-500/20",
+        warning: "bg-gray-800 border-yellow-500/20"
     };
 
     return (

@@ -1,7 +1,7 @@
-import { ChevronDown, ChevronRight, AlertTriangle, Copy, Layers, Package, Settings, CheckCircle2, CircleOff } from 'lucide-react';
+import { ChevronDown, ChevronRight, AlertTriangle, Copy, Layers, Package, Settings, CheckCircle2, CircleOff, Power, Hammer } from 'lucide-react';
 import { VarPackage } from '../App';
 import clsx from 'clsx';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 
 interface SidebarProps {
     packages: VarPackage[];
@@ -18,11 +18,24 @@ interface SidebarProps {
     onSelectLibrary: (index: number) => void;
     onRemoveLibrary?: (index: number) => void;
     onAddLibrary?: () => void;
+    // Status & Actions
+    creatorStatus: Record<string, 'normal' | 'warning' | 'error'>;
+    typeStatus: Record<string, 'normal' | 'warning' | 'error'>;
+    onSidebarAction: (action: 'enable-all' | 'disable-all' | 'resolve-all', groupType: 'creator' | 'type' | 'status', key: string) => void;
 }
 
-const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilterCreator, selectedType, onFilterType, onOpenSettings, libraries, currentLibIndex, onSelectLibrary, onRemoveLibrary, onAddLibrary }: SidebarProps) => {
+const getStatusClasses = (status: 'normal' | 'warning' | 'error' | undefined, isSelected: boolean) => {
+    if (status === 'warning') return "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30";
+    if (status === 'error') return "bg-red-500/20 text-red-400 border border-red-500/30";
+    return isSelected
+        ? "bg-blue-600/20 text-blue-300" // Normal Selected
+        : "bg-gray-700 text-gray-400 group-hover:bg-gray-600"; // Normal Unselected
+};
+
+const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilterCreator, selectedType, onFilterType, onOpenSettings, libraries, currentLibIndex, onSelectLibrary, onRemoveLibrary, onAddLibrary, creatorStatus, typeStatus, onSidebarAction }: SidebarProps) => {
     const [collapsed, setCollapsed] = useState({ status: false, creators: true, types: false });
     const [isLibDropdownOpen, setIsLibDropdownOpen] = useState(false);
+    const [contextMenu, setContextMenu] = useState<{ open: boolean, x: number, y: number, groupType: 'creator' | 'type' | 'status', key: string } | null>(null);
 
     const currentLibPath = libraries && libraries[currentLibIndex] ? libraries[currentLibIndex] : "No Library Selected";
     const currentLibName = currentLibPath.split(/[/\\]/).pop() || "Library";
@@ -31,18 +44,24 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
         setCollapsed(prev => ({ ...prev, [section]: !prev[section] }));
     };
 
+    const handleContextMenu = (e: React.MouseEvent, groupType: 'creator' | 'type' | 'status', key: string) => {
+        e.preventDefault();
+        setContextMenu({ open: true, x: e.clientX, y: e.clientY, groupType, key });
+    };
+
+    // Close context menu on global click
+    useEffect(() => {
+        const close = () => setContextMenu(null);
+        window.addEventListener('click', close);
+        return () => window.removeEventListener('click', close);
+    }, []);
+
     const types = useMemo(() => {
         const counts: Record<string, number> = {};
         packages.forEach(p => {
-            if (p.categories && p.categories.length > 0) {
-                p.categories.forEach(c => {
-                    counts[c] = (counts[c] || 0) + 1;
-                });
-            } else {
-                // Fallback to type if categories missing (legacy/compat)
-                const t = p.type || "Unknown";
-                counts[t] = (counts[t] || 0) + 1;
-            }
+            // Use Primary Type only to avoid noise
+            const t = p.type || "Unknown";
+            counts[t] = (counts[t] || 0) + 1;
         });
         return Object.entries(counts).sort((a, b) => b[1] - a[1]);
     }, [packages]);
@@ -68,7 +87,6 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
 
     return (
         <aside className="w-64 h-full bg-gray-800 border-r border-gray-700 flex flex-col shadow-xl z-20">
-            {/* ... header ... */}
             {/* ... header ... */}
             <div className="p-4 border-b border-gray-700 bg-gray-800/50">
                 <div className="flex items-center gap-2 mb-2">
@@ -163,6 +181,7 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
                         <div className="space-y-1 animation-fade-in">
                             <button
                                 onClick={() => setFilter('all')}
+                                onContextMenu={(e) => handleContextMenu(e, 'status', 'all')}
                                 className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
                                     currentFilter === 'all' ? "bg-blue-600/10 text-blue-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
                             >
@@ -175,6 +194,7 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
                             {statusCounts.enabled > 0 && (
                                 <button
                                     onClick={() => setFilter(currentFilter === 'enabled' ? 'all' : 'enabled')}
+                                    onContextMenu={(e) => handleContextMenu(e, 'status', 'enabled')}
                                     className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
                                         currentFilter === 'enabled' ? "bg-green-500/10 text-green-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
                                 >
@@ -186,6 +206,7 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
                             {statusCounts.disabled > 0 && (
                                 <button
                                     onClick={() => setFilter(currentFilter === 'disabled' ? 'all' : 'disabled')}
+                                    onContextMenu={(e) => handleContextMenu(e, 'status', 'disabled')}
                                     className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
                                         currentFilter === 'disabled' ? "bg-gray-600/20 text-gray-200" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
                                 >
@@ -197,6 +218,7 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
                             {statusCounts.missingDeps > 0 && (
                                 <button
                                     onClick={() => setFilter(currentFilter === 'missing-deps' ? 'all' : 'missing-deps')}
+                                    onContextMenu={(e) => handleContextMenu(e, 'status', 'missing-deps')}
                                     className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
                                         currentFilter === 'missing-deps' ? "bg-red-500/10 text-red-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
                                 >
@@ -208,6 +230,7 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
                             {statusCounts.duplicates > 0 && (
                                 <button
                                     onClick={() => setFilter(currentFilter === 'duplicates' ? 'all' : 'duplicates')}
+                                    onContextMenu={(e) => handleContextMenu(e, 'status', 'duplicates')}
                                     className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
                                         currentFilter === 'duplicates' ? "bg-yellow-500/10 text-yellow-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
                                 >
@@ -234,11 +257,14 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
                                 <button
                                     key={name}
                                     onClick={() => onFilterCreator(selectedCreator === name ? null : name)}
+                                    // Add Context Menu Trigger
+                                    onContextMenu={(e) => handleContextMenu(e, 'creator', name)}
                                     className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
                                         selectedCreator === name ? "bg-blue-600/10 text-blue-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
                                 >
                                     <span className="truncate text-left flex-1">{name}</span>
-                                    <span className="text-xs bg-gray-700 px-1.5 py-0.5 rounded-full group-hover:bg-gray-600 text-gray-300">{count}</span>
+                                    {/* Use getStatusClasses for the badge */}
+                                    <span className={clsx("text-xs px-1.5 py-0.5 rounded-full transition-colors border border-transparent", getStatusClasses(creatorStatus[name], selectedCreator === name))}>{count}</span>
                                 </button>
                             ))}
                         </div>
@@ -261,11 +287,14 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
                                 <button
                                     key={name}
                                     onClick={() => onFilterType(selectedType === name ? null : name)}
+                                    // Add Context Menu Trigger
+                                    onContextMenu={(e) => handleContextMenu(e, 'type', name)}
                                     className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
                                         selectedType === name ? "bg-blue-600/10 text-blue-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
                                 >
                                     <span className="truncate text-left flex-1">{name}</span>
-                                    <span className="text-xs bg-gray-700 px-1.5 py-0.5 rounded-full group-hover:bg-gray-600 text-gray-300">{count}</span>
+                                    {/* Use getStatusClasses for the badge */}
+                                    <span className={clsx("text-xs px-1.5 py-0.5 rounded-full transition-colors border border-transparent", getStatusClasses(typeStatus[name], selectedType === name))}>{count}</span>
                                 </button>
                             ))}
                         </div>
@@ -276,6 +305,45 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
             <div className="p-4 border-t border-gray-700 text-xs text-gray-500 text-center">
                 v1.1.0
             </div>
+
+            {/* Sidebar Context Menu */}
+            {contextMenu && (
+                <div
+                    className="fixed z-50 bg-gray-800 border border-gray-700 rounded-lg shadow-xl py-1 min-w-[160px]"
+                    style={{ top: contextMenu.y, left: contextMenu.x }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="px-3 py-1 text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-700/50 mb-1 truncate max-w-[200px]">
+                        {contextMenu.key}
+                    </div>
+                    <button onClick={() => { onSidebarAction('enable-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
+                        <CheckCircle2 size={14} className="text-green-500" /> Enable All
+                    </button>
+                    <button onClick={() => { onSidebarAction('disable-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
+                        <Power size={14} className="text-gray-400" /> Disable All
+                    </button>
+                    {/* Conditional Fix Conflicts Button */}
+                    {packages.some(p => {
+                        if (contextMenu.groupType === 'creator') return (p.meta.creator || "Unknown") === contextMenu.key && p.isDuplicate;
+                        if (contextMenu.groupType === 'type') {
+                            const t = p.type || "Unknown";
+                            return t === contextMenu.key && p.isDuplicate;
+                        }
+                        if (contextMenu.groupType === 'status') {
+                            if (contextMenu.key === 'all') return p.isDuplicate;
+                            if (contextMenu.key === 'enabled') return p.isEnabled && p.isDuplicate;
+                            if (contextMenu.key === 'disabled') return !p.isEnabled && p.isDuplicate;
+                            if (contextMenu.key === 'missing-deps') return p.missingDeps && p.missingDeps.length > 0 && p.isDuplicate;
+                            if (contextMenu.key === 'duplicates') return true;
+                        }
+                        return false;
+                    }) && (
+                            <button onClick={() => { onSidebarAction('resolve-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
+                                <Hammer size={14} className="text-yellow-500" /> Fix Conflicts
+                            </button>
+                        )}
+                </div>
+            )}
         </aside>
     );
 };

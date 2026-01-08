@@ -80,27 +80,34 @@ func (m *Manager) ScanAndAnalyze(ctx context.Context, rootPath string, onPackage
 				p.Meta = meta
 
 				// Sort Categories for stability and primary type selection
+				// Sort Categories to determine Primary Type (Lowest value wins)
 				sort.Slice(categories, func(i, j int) bool {
 					prio := func(s string) int {
 						switch s {
-						case "Scene":
-							return 0
+						// Character Content (Highest Priority)
 						case "Look":
-							return 1
+							return 0
 						case "Clothing":
-							return 2
+							return 1
 						case "Hair":
+							return 2
+						case "Skin":
 							return 3
 						case "Morph":
 							return 4
-						case "Skin":
-							return 5
-						case "Asset":
-							return 6
+						// Functionality (High Priority)
 						case "Script":
+							return 5
+						// Gameplay/World (Medium Priority)
+						case "Scene":
+							return 6
+						case "Environment": // Forward compatibility
 							return 7
+						// Generic Assets (Low Priority)
+						case "Asset":
+							return 8
 						default:
-							return 10
+							return 99
 						}
 					}
 					pi, pj := prio(categories[i]), prio(categories[j])
