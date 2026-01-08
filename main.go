@@ -14,7 +14,7 @@ var assets embed.FS
 
 func main() {
 	// Create an instance of the app structure
-	app := NewApp()
+	app := NewApp(assets)
 
 	// Start System Tray in a goroutine (so Wails can run on main thread)
 	go func() {
@@ -39,6 +39,10 @@ func main() {
 		DragAndDrop: &options.DragAndDrop{
 			EnableFileDrop:     true,
 			DisableWebViewDrop: false,
+		},
+		SingleInstanceLock: &options.SingleInstanceLock{
+			UniqueId:               "a4b2c8d1-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+			OnSecondInstanceLaunch: app.onSecondInstanceLaunch,
 		},
 	})
 

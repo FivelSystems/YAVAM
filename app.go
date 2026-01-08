@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"varmanager/pkg/manager"
@@ -14,6 +15,7 @@ import (
 	_ "embed"
 
 	"github.com/energye/systray"
+	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -26,12 +28,14 @@ type App struct {
 	manager         *manager.Manager
 	server          *server.Server
 	minimizeOnClose bool
+	assets          fs.FS
 }
 
 // NewApp creates a new App application struct
-func NewApp() *App {
+func NewApp(assets fs.FS) *App {
 	return &App{
 		manager: manager.NewManager(),
+		assets:  assets,
 	}
 }
 
@@ -39,7 +43,17 @@ func NewApp() *App {
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-	a.server = server.NewServer(ctx, a.manager, func() {
+
+	// Sub into frontend/dist
+	subAssets, err := fs.Sub(a.assets, "frontend/dist")
+	if err != nil {
+		// Fallback or panic? In dev mode this might fail if using real fs?
+		// Actually Wails passes `embed.FS` in main.go
+		// If it fails, maybe we just pass raw assets?
+		subAssets = a.assets
+	}
+
+	a.server = server.NewServer(ctx, a.manager, subAssets, func() {
 		runtime.WindowShow(ctx)
 	})
 }
@@ -220,6 +234,12 @@ func (a *App) StopServer() error {
 	return a.server.Stop()
 }
 
+func (a *App) UpdateServerLibraries(libraries []string) {
+	if a.server != nil {
+		a.server.UpdateLibraries(libraries)
+	}
+}
+
 func (a *App) GetLocalIP() string {
 	if a.server == nil {
 		return ""
@@ -238,6 +258,15 @@ func (a *App) onBeforeClose(ctx context.Context) (prevent bool) {
 		return true
 	}
 	return false
+}
+
+func (a *App) onSecondInstanceLaunch(secondInstanceData options.SecondInstanceData) {
+	runtime.WindowShow(a.ctx)
+	if runtime.WindowIsMinimised(a.ctx) {
+		runtime.WindowUnminimise(a.ctx)
+	}
+	runtime.WindowSetAlwaysOnTop(a.ctx, true)
+	runtime.WindowSetAlwaysOnTop(a.ctx, false)
 }
 
 func (a *App) onTrayReady() {

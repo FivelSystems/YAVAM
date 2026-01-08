@@ -397,6 +397,15 @@ function App() {
         }
     }, [vamPath]);
 
+    // Sync libraries to server if running
+    useEffect(() => {
+        // @ts-ignore
+        if (window.go && serverEnabled) {
+            // @ts-ignore
+            window.go.main.App.UpdateServerLibraries(libraries).catch(e => console.error(e));
+        }
+    }, [libraries, serverEnabled]);
+
     useEffect(() => {
         filterPackages();
         setCurrentPage(1);
@@ -414,7 +423,7 @@ function App() {
                 setAvailableTags(res.tags || []);
             } else {
                 // Web Mode
-                const pkgs = await fetch('/api/packages').then(r => r.json());
+                const pkgs = await fetch(`/api/packages?path=${encodeURIComponent(vamPath)}`).then(r => r.json());
                 setPackages(pkgs || []);
                 // Extract tags from pkgs if backend doesn't send them separately (my /api/packages endpoint sends [Package] list currently, not ScanResult)
                 // Wait, my endpoint sends res.Packages which is []VarPackage.

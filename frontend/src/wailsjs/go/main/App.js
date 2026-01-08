@@ -81,3 +81,7 @@ export function StopServer() {
 export function TogglePackage(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['TogglePackage'](arg1, arg2, arg3, arg4);
 }
+
+export function UpdateServerLibraries(arg1) {
+  return window['go']['main']['App']['UpdateServerLibraries'](arg1);
+}
