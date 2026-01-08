@@ -74,6 +74,6 @@ export function StopServer() {
   return window['go']['main']['App']['StopServer']();
 }
 
-export function TogglePackage(arg1, arg2, arg3) {
-  return window['go']['main']['App']['TogglePackage'](arg1, arg2, arg3);
+export function TogglePackage(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['TogglePackage'](arg1, arg2, arg3, arg4);
 }

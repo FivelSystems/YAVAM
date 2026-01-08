@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { RefreshCw, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Package, PanelLeft, LayoutGrid, List, Filter, WifiOff } from 'lucide-react';
 import clsx from 'clsx';
+import { Toast, ToastItem, ToastType } from './components/Toast';
 import DragDropOverlay from './components/DragDropOverlay';
 import ContextMenu from './components/ContextMenu';
 import LoadingToast from './components/LoadingToast';
@@ -59,6 +60,17 @@ function App() {
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(() => parseInt(localStorage.getItem('itemsPerPage') || '25'));
+    const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+    const addToast = (message: string, type: ToastType = 'info') => {
+        const id = Date.now().toString(36) + Math.random().toString(36).substr(2);
+        setToasts(prev => [...prev, { id, message, type }]);
+    };
+
+    const removeToast = (id: string) => {
+        setToasts(prev => prev.filter(t => t.id !== id));
+    };
+
 
     // Reset pagination when filters change
     useEffect(() => {
@@ -108,6 +120,9 @@ function App() {
 
     // Delete Confirmation State
     const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean, pkg: VarPackage | null }>({ open: false, pkg: null });
+
+    // Collision Confirmation State
+    const [collisionData, setCollisionData] = useState<{ open: boolean, pkg: VarPackage | null }>({ open: false, pkg: null });
 
     const handlePackageClick = (pkg: VarPackage) => {
         if (selectedPackage?.filePath === pkg.filePath) {
@@ -261,7 +276,7 @@ function App() {
             scanPackages();
         } catch (e) {
             console.error(e);
-            alert("Upload failed: " + e);
+            addToast("Upload failed: " + e, 'error');
         } finally {
             setLoading(false);
         }
@@ -286,24 +301,26 @@ function App() {
         });
     };
 
-    const togglePackage = async (pkg: VarPackage) => {
+    const togglePackage = async (pkg: VarPackage, merge = false) => {
         try {
             let newPath = "";
             // @ts-ignore
             if (window.go) {
                 // @ts-ignore
-                newPath = await window.go.main.App.TogglePackage(pkg.filePath, !pkg.isEnabled, vamPath);
+                newPath = await window.go.main.App.TogglePackage(pkg.filePath, !pkg.isEnabled, vamPath, merge);
             } else {
                 // Web Mode
                 const res = await fetch('/api/toggle', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ filePath: pkg.filePath, enable: !pkg.isEnabled })
+                    body: JSON.stringify({ filePath: pkg.filePath, enable: !pkg.isEnabled, merge: merge })
                 }).then(r => r.json());
 
-                if (res.error) throw new Error(res.error);
+                if (!res.success) throw new Error(res.message || res.error || "Unknown error");
                 newPath = res.newPath;
             }
+
+            addToast(pkg.isEnabled ? "Package disabled" : "Package enabled", 'success');
 
             // Optimistic update with path correction
             setPackages(prev => {
@@ -312,16 +329,30 @@ function App() {
                 );
                 return recalculateDuplicates(updated);
             });
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
-            alert("Failed to toggle: " + e);
+            const errStr = e.toString();
+            // Check for collision
+            if (errStr.includes("destination file already exists") || errStr.includes("already active") || errStr.includes("already exists")) {
+                setCollisionData({ open: true, pkg });
+                return;
+            }
+
+            addToast("Failed to toggle: " + e, 'error');
+        }
+    };
+
+    const handleConfirmCollision = () => {
+        if (collisionData.pkg) {
+            togglePackage(collisionData.pkg, true); // Retry with merge
+            setCollisionData({ open: false, pkg: null });
         }
     };
 
     // Context Menu Handlers
     const handleOpenFolder = async (pkg: VarPackage) => {
         // @ts-ignore
-        if (!window.go) return alert("Not available in web mode");
+        if (!window.go) return addToast("Not available in web mode", 'error');
         try {
             // @ts-ignore
             await window.go.main.App.OpenFolderInExplorer(pkg.filePath);
@@ -332,25 +363,27 @@ function App() {
     const handleCopyPath = async (pkg: VarPackage) => {
         try {
             await navigator.clipboard.writeText(pkg.filePath);
-            // Optional: Toast feedback?
+            addToast("Path copied to clipboard", 'success');
         } catch (e) { console.error(e); }
     };
 
     const handleCopyFile = async (pkg: VarPackage) => {
         // @ts-ignore
-        if (!window.go) return alert("Not available in web mode");
+        if (!window.go) return addToast("Not available in web mode", 'error');
         try {
             // @ts-ignore
             await window.go.main.App.CopyFileToClipboard(pkg.filePath);
+            addToast("File copied to clipboard", 'success');
         } catch (e) { console.error(e); }
     };
 
     const handleCutFile = async (pkg: VarPackage) => {
         // @ts-ignore
-        if (!window.go) return alert("Not available in web mode");
+        if (!window.go) return addToast("Not available in web mode", 'error');
         try {
             // @ts-ignore
             await window.go.main.App.CutFileToClipboard(pkg.filePath);
+            addToast("File cut to clipboard", 'success');
         } catch (e) { console.error(e); }
     };
 
@@ -593,6 +626,16 @@ function App() {
                     message={`Are you sure you want to delete "${deleteConfirm.pkg?.fileName}"? It will be moved to the Recycle Bin.`}
                     confirmText="Delete"
                     confirmStyle="danger"
+                />
+
+                <ConfirmationModal
+                    isOpen={collisionData.open}
+                    onClose={() => setCollisionData({ open: false, pkg: null })}
+                    onConfirm={handleConfirmCollision}
+                    title="Package Collision"
+                    message={`A package with the same name already exists in the destination. Since versions match, would you like to merge/overwrite it?`}
+                    confirmText="Merge & Overwrite"
+                    confirmStyle="primary"
                 />
 
                 {/* Hide sidebar on small screens when not needed, or use CSS media queries */}
@@ -904,6 +947,14 @@ function App() {
                         onDelete={handleDeleteClick}
                     />
                 )}
+            </div>
+            {/* Toasts Container */}
+            <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end pointer-events-none">
+                <AnimatePresence>
+                    {toasts.map(toast => (
+                        <Toast key={toast.id} toast={toast} onRemove={removeToast} />
+                    ))}
+                </AnimatePresence>
             </div>
         </div>
     );

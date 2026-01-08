@@ -10,11 +10,13 @@ import (
 
 	"varmanager/pkg/server"
 
+	_ "embed"
+
 	"github.com/energye/systray"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-//go:embed build/appicon.png
+//go:embed build/windows/icon.ico
 var iconData []byte
 
 // App struct
@@ -108,10 +110,10 @@ func (a *App) GetFilters(vamPath string) ([]string, error) {
 }
 
 // TogglePackage enables or disables a package
-func (a *App) TogglePackage(pkgPath string, enable bool, vamPath string) (string, error) {
+func (a *App) TogglePackage(pkgPath string, enable bool, vamPath string, merge bool) (string, error) {
 	// For this call we don't strictly need the full list if we trust the path,
 	// passing nil for list for now as implementation above didn't use it except to search validation which we removed.
-	return a.manager.TogglePackage(nil, pkgPath, enable, vamPath)
+	return a.manager.TogglePackage(nil, pkgPath, enable, vamPath, merge)
 }
 
 // DisableOldVersions removes older versions of a package
