@@ -24,6 +24,7 @@ type Server struct {
 	mu        sync.Mutex
 	logMutex  sync.Mutex
 	manager   *manager.Manager
+	libraries []string // List of allowed library paths
 	onRestore func()
 }
 
@@ -32,6 +33,7 @@ func NewServer(ctx context.Context, m *manager.Manager, onRestore func()) *Serve
 		ctx:       ctx,
 		manager:   m,
 		onRestore: onRestore,
+		libraries: []string{},
 	}
 }
 
@@ -89,7 +91,7 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) Start(port string, path string) error {
+func (s *Server) Start(port string, activePath string, libraries []string) error {
 	s.mu.Lock()
 	if s.running {
 		s.mu.Unlock()
@@ -98,9 +100,11 @@ func (s *Server) Start(port string, path string) error {
 	s.mu.Unlock()
 
 	// Check if path exists
-	if path == "" {
+	if activePath == "" {
 		return fmt.Errorf("invalid path")
 	}
+
+	s.libraries = libraries
 
 	mux := http.NewServeMux()
 
@@ -108,7 +112,31 @@ func (s *Server) Start(port string, path string) error {
 	mux.HandleFunc("/api/packages", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
-		res, err := s.manager.ScanAndAnalyze(path)
+		// Allow client to request a specific library, default to activePath
+		targetPath := r.URL.Query().Get("path")
+		if targetPath == "" {
+			targetPath = activePath
+		}
+
+		// Security: Ensure targetPath is in allowed libraries
+		allowed := false
+		for _, lib := range s.libraries {
+			if lib == targetPath {
+				allowed = true
+				break
+			}
+		}
+		// Also allow the initial active path even if not explicitly in list (edge case)
+		if targetPath == activePath {
+			allowed = true
+		}
+
+		if !allowed {
+			s.writeError(w, "Access denied to this library path", 403)
+			return
+		}
+
+		res, err := s.manager.ScanAndAnalyze(targetPath)
 		if err != nil {
 			s.writeError(w, err.Error(), 500)
 			return
@@ -121,8 +149,9 @@ func (s *Server) Start(port string, path string) error {
 	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"webMode": true,
-			"path":    path,
+			"webMode":   true,
+			"path":      activePath,
+			"libraries": s.libraries,
 		})
 	})
 
@@ -141,7 +170,7 @@ func (s *Server) Start(port string, path string) error {
 
 		files := r.MultipartForm.File["file"]
 		// User requested root path
-		downloadDir := path
+		downloadDir := activePath
 
 		count := 0
 		for _, fileHeader := range files {
@@ -187,7 +216,7 @@ func (s *Server) Start(port string, path string) error {
 			return
 		}
 
-		newPath, err := s.manager.TogglePackage(nil, req.FilePath, req.Enable, path, req.Merge)
+		newPath, err := s.manager.TogglePackage(nil, req.FilePath, req.Enable, activePath, req.Merge)
 		if err != nil {
 			s.log(fmt.Sprintf("Error toggling package: %v", err))
 			s.writeError(w, err.Error(), 500)
@@ -218,7 +247,7 @@ func (s *Server) Start(port string, path string) error {
 		}
 
 		// Security Check
-		rel, err := filepath.Rel(path, req.FilePath)
+		rel, err := filepath.Rel(activePath, req.FilePath)
 		if err != nil || strings.HasPrefix(rel, "..") {
 			s.writeError(w, "Security violation: Invalid file path", 403)
 			return
@@ -262,9 +291,49 @@ func (s *Server) Start(port string, path string) error {
 	}
 
 	distFs := http.FileServer(http.Dir(distPath))
-	filesFs := http.FileServer(http.Dir(path))
 
-	mux.Handle("/files/", http.StripPrefix("/files/", filesFs))
+	// Custom File Serving Logic
+	mux.HandleFunc("/files/", func(w http.ResponseWriter, r *http.Request) {
+		// Expected format: /files/encodedpath OR /files/?path=... (cleaner to key off valid paths)
+		// Simplest: The frontend requests the file by partial path, but we need to know WHICH library.
+		// Actually, the package struct usually contains "filePath". In web mode, we might need to send absolute path?
+		// If we send absolute path, we just check if it starts with any of allowed libraries.
+
+		// relPath := strings.TrimPrefix(r.URL.Path, "/files/")
+		// Warning: This implies the client sends relative path?
+		// Or if the client sends "/files/C:/Users/..." unescaped?
+		// Let's assume the client might send a query param or we map it.
+		// Better: frontend constructs url like `/files/?path=${pkg.filePath}`
+
+		targetFile := r.URL.Query().Get("path")
+		if targetFile == "" {
+			// Fallback to URL path logic if query is missing (legacy)
+			// But stripping prefix from absolute path is messy.
+			http.NotFound(w, r)
+			return
+		}
+
+		// Security Check: targetFile must be inside one of the libraries
+		allowed := false
+		for _, lib := range s.libraries {
+			if strings.HasPrefix(targetFile, lib) {
+				allowed = true
+				break
+			}
+		}
+		// Also check activePath
+		if strings.HasPrefix(targetFile, activePath) {
+			allowed = true
+		}
+
+		if !allowed {
+			s.writeError(w, "Access denied: File not in allowed libraries", 403)
+			return
+		}
+
+		http.ServeFile(w, r, targetFile)
+	})
+
 	mux.Handle("/", distFs)
 
 	s.httpSrv = &http.Server{
@@ -283,7 +352,7 @@ func (s *Server) Start(port string, path string) error {
 	s.mu.Unlock()
 
 	s.log(fmt.Sprintf("Starting server on port %s...", port))
-	s.log(fmt.Sprintf("Serving library from: %s", path))
+	s.log(fmt.Sprintf("Serving library from: %s", activePath))
 	s.log("Web interface available at root URL.")
 
 	go func() {

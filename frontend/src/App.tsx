@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { RefreshCw, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Package, PanelLeft, LayoutGrid, List, Filter, WifiOff } from 'lucide-react';
+import { RefreshCw, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Package, PanelLeft, LayoutGrid, List, Filter, WifiOff, AlertTriangle } from 'lucide-react';
 import clsx from 'clsx';
 import { Toast, ToastItem, ToastType } from './components/Toast';
 import DragDropOverlay from './components/DragDropOverlay';
@@ -40,8 +40,123 @@ export interface VarPackage {
 function App() {
     // New Handler for Sidebar Selection
 
+    // Helper to switch library
+    const handleSwitchLibrary = (index: number) => {
+        if (index < 0 || index >= libraries.length) return;
+        setActiveLibIndex(index);
+        const path = libraries[index];
+        setVamPath(path);
+        localStorage.setItem("vamPath", path);
+        // Toast?
+    };
+
+    const handleAddLibrary = (path: string) => {
+        if (!path) return;
+
+        setLibraries(prev => {
+            if (prev.includes(path)) {
+                // Already exists, just switch to it
+                const idx = prev.indexOf(path);
+                setActiveLibIndex(idx);
+                setVamPath(path);
+                localStorage.setItem("vamPath", path);
+                return prev;
+            }
+            const newLibs = [...prev, path];
+            localStorage.setItem("savedLibraries", JSON.stringify(newLibs));
+
+            // Switch to new
+            setActiveLibIndex(newLibs.length - 1);
+            setVamPath(path);
+            localStorage.setItem("vamPath", path);
+            return newLibs;
+        });
+    };
+
+    const handleRemoveLibrary = (index: number) => {
+        setLibraries(prev => {
+            const newLibs = [...prev];
+            newLibs.splice(index, 1);
+            localStorage.setItem("savedLibraries", JSON.stringify(newLibs));
+
+            // Adjust active index if needed
+            if (activeLibIndex >= newLibs.length) {
+                setActiveLibIndex(newLibs.length - 1);
+                const path = newLibs[newLibs.length - 1] || "";
+                setVamPath(path);
+                localStorage.setItem("vamPath", path);
+            } else if (index === activeLibIndex) {
+                // Removed current, switching to same index (which is now next item) or prev?
+                // Actually if I remove index 0, the new index 0 is valid.
+                const path = newLibs[activeLibIndex] || "";
+                setVamPath(path);
+                localStorage.setItem("vamPath", path);
+            } else if (index < activeLibIndex) {
+                // Removed item before current, shift index down
+                setActiveLibIndex(prevIdx => prevIdx - 1);
+            }
+
+            return newLibs;
+        });
+    };
+
+    const handleBrowseAndAdd = async () => {
+        // @ts-ignore
+        if (window.go) {
+            try {
+                // @ts-ignore
+                const p = await window.go.main.App.SelectDirectory();
+                if (p) handleAddLibrary(p);
+            } catch (e) {
+                console.error(e);
+            }
+        }
+    };
+
     const [selectedPackage, setSelectedPackage] = useState<VarPackage | null>(null);
-    const [vamPath, setVamPath] = useState<string>(localStorage.getItem("vamPath") || "");
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+    // Library Management
+    const [libraries, setLibraries] = useState<string[]>(() => {
+        const saved = localStorage.getItem("savedLibraries");
+        const initial = saved ? JSON.parse(saved) : [];
+        const current = localStorage.getItem("vamPath");
+        if (current && !initial.includes(current)) {
+            return [current, ...initial];
+        }
+        return initial.length > 0 ? initial : [];
+    });
+
+    // Determine active index based on current vamPath or default to 0
+    const [activeLibIndex, setActiveLibIndex] = useState(() => {
+        const current = localStorage.getItem("vamPath");
+        const saved = localStorage.getItem("savedLibraries");
+        const libs = saved ? JSON.parse(saved) : [];
+        if (current) {
+            const idx = libs.indexOf(current);
+            if (idx !== -1) return idx;
+            // If current path isn't in list (e.g. freshly added/legacy), logic above adds it to front? 
+            // Logic above in libraries init uses logic to include it.
+            // But useState initializers run once. 
+            // Let's rely on effect to sync?
+            return 0;
+        }
+        return 0;
+    });
+
+    // Derived vamPath (source of truth is libraries[activeLibIndex])
+    // But we also need to support the case where no libraries exist yet.
+    // So we use a state for vamPath that syncs, or just use derived?
+    // Existing logic relies on `vamPath` state. Let's keep `vamPath` state but update it when library switches.
+    const [vamPath, setVamPath] = useState<string>(() => {
+        const current = localStorage.getItem("vamPath");
+        if (current) return current;
+        // Fallback to first library if available
+        const saved = localStorage.getItem("savedLibraries");
+        const libs = saved ? JSON.parse(saved) : [];
+        return libs.length > 0 ? libs[0] : "";
+    });
+
     const [packages, setPackages] = useState<VarPackage[]>([]);
     const [filteredPkgs, setFilteredPkgs] = useState<VarPackage[]>([]);
     const [availableTags, setAvailableTags] = useState<string[]>([]);
@@ -84,7 +199,6 @@ function App() {
 
     // Settings
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const [downloadPath, setDownloadPath] = useState<string>(localStorage.getItem("downloadPath") || "");
     const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768);
     const [viewMode, setViewMode] = useState<'grid' | 'list'>(window.innerWidth < 768 ? 'list' : 'grid');
     const [gridSize, setGridSize] = useState(parseInt(localStorage.getItem("gridSize") || "150"));
@@ -124,23 +238,132 @@ function App() {
     // Collision Confirmation State
     const [collisionData, setCollisionData] = useState<{ open: boolean, pkg: VarPackage | null }>({ open: false, pkg: null });
 
-    const handlePackageClick = (pkg: VarPackage) => {
-        if (selectedPackage?.filePath === pkg.filePath) {
-            setSelectedPackage(null);
-        } else {
+    // Install Modal State
+    const [installModal, setInstallModal] = useState<{ open: boolean, pkgs: VarPackage[] }>({ open: false, pkgs: [] });
+    // Install Collision
+    const [installCollision, setInstallCollision] = useState<{ open: boolean, collisions: string[], libPath: string, pkgs: VarPackage[] }>({ open: false, collisions: [], libPath: "", pkgs: [] });
+
+    const handlePackageClick = (pkg: VarPackage, e?: React.MouseEvent) => {
+        if (e && (e.ctrlKey || e.metaKey)) {
+            // Multi-select toggle
+            setSelectedIds(prev => {
+                const newSet = new Set(prev);
+                if (newSet.has(pkg.filePath)) newSet.delete(pkg.filePath);
+                else newSet.add(pkg.filePath);
+                return newSet;
+            });
+            // Update primary selection for RightSidebar if only 1 remains?
+            // Actually RightSidebar logic will be: show if selectIds.size === 1
+            // We also keep selectedPackage for backwards compat in other funcs? 
+            // Ideally we sync selectedPackage to "last clicked" or null if multiple?
             setSelectedPackage(pkg);
+        } else if (e && e.shiftKey && selectedPackage) {
+            // Shift select (range) - naive implementation: select all between last and current in filtered
+            const start = filteredPkgs.findIndex(p => p.filePath === selectedPackage.filePath);
+            const end = filteredPkgs.findIndex(p => p.filePath === pkg.filePath);
+            if (start !== -1 && end !== -1) {
+                const min = Math.min(start, end);
+                const max = Math.max(start, end);
+                const range = filteredPkgs.slice(min, max + 1).map(p => p.filePath);
+                setSelectedIds(prev => {
+                    const newSet = new Set(prev);
+                    range.forEach(id => newSet.add(id));
+                    return newSet;
+                });
+            }
+            setSelectedPackage(pkg);
+        } else {
+            // Single select
+            if (selectedPackage?.filePath === pkg.filePath && selectedIds.size === 1) {
+                // Deselect if clicking same? No, standard Windows behavior is keep selected.
+                // But sidebar toggle behavior was present. User said "Sidebar panel... hide it when we have more than one".
+                // Let's keep toggle behavior for single click if it's the ONLY one selected.
+                setSelectedPackage(null);
+                setSelectedIds(new Set());
+            } else {
+                setSelectedPackage(pkg);
+                setSelectedIds(new Set([pkg.filePath]));
+            }
         }
     };
 
     const handleContextMenu = (e: React.MouseEvent, pkg: VarPackage) => {
         e.preventDefault();
+        // If pkg is NOT in selectedIds, select it (exclusive)
+        if (!selectedIds.has(pkg.filePath)) {
+            setSelectedPackage(pkg);
+            setSelectedIds(new Set([pkg.filePath]));
+        }
         setContextMenu({
             open: true,
             x: e.clientX,
             y: e.clientY,
-            pkg: pkg
+            pkg: pkg // Context menu usually operates on "clicked" item, but if selection exists, it might operate on selection.
+            // We pass 'pkg' as the anchor, but actions should check selectedIds
         });
     };
+
+    // Server State
+    const [serverEnabled, setServerEnabled] = useState(false);
+    const [serverPort, setServerPort] = useState("18888");
+    const [localIP, setLocalIP] = useState("Loading...");
+    const [serverLogs, setServerLogs] = useState<string[]>([]);
+
+    useEffect(() => {
+        // @ts-ignore
+        if (window.go && window.runtime) {
+            // @ts-ignore
+            window.go.main.App.GetLocalIP().then(ip => setLocalIP(ip));
+            // @ts-ignore
+            window.runtime.EventsOn("server:log", (msg: string) => {
+                setServerLogs(prev => [...prev, msg].slice(-100));
+            });
+        } else {
+            // Web Mode: Fetch config
+            fetch('/api/config')
+                .then(res => res.json())
+                .then(data => {
+                    setLocalIP("Remote/Web Mode");
+                    if (data.libraries && Array.isArray(data.libraries)) {
+                        setLibraries(data.libraries);
+                    }
+                    if (data.path && !vamPath) {
+                        // Only set if we don't have one selected? 
+                        // actually we should trust server config on initial load if local state is empty
+                        setVamPath(data.path);
+                    }
+                })
+                .catch(err => console.error("Failed to fetch server config", err));
+        }
+
+        return () => {
+            // @ts-ignore
+            if (window.runtime) {
+                // @ts-ignore
+                window.runtime.EventsOff("server:log");
+            }
+        };
+    }, []);
+
+    const handleToggleServer = async () => {
+        // @ts-ignore
+        if (window.go) {
+            if (serverEnabled) {
+                // @ts-ignore
+                await window.go.main.App.StopServer();
+                setServerEnabled(false);
+            } else {
+                try {
+                    // @ts-ignore
+                    await window.go.main.App.StartServer(serverPort, vamPath, libraries);
+                    setServerEnabled(true);
+                } catch (e) {
+                    alert("Failed to start server: " + e);
+                }
+            }
+        }
+    };
+
 
     // Filters
 
@@ -387,23 +610,6 @@ function App() {
         } catch (e) { console.error(e); }
     };
 
-    const handleDownloadPackage = async (pkg: VarPackage) => {
-        // @ts-ignore
-        if (!window.go) {
-            // Try naive download
-            // Assumes file is within library path
-            // We can try to construct a URL if we assume standard structure or just alert
-            return alert("Download not fully implemented for web mode yet.");
-        }
-        try {
-            // @ts-ignore
-            await window.go.main.App.DownloadPackage(pkg.filePath, downloadPath);
-            // Optional: Toast or notification here
-        } catch (e) {
-            console.error(e);
-            alert("Failed to download: " + e);
-        }
-    };
 
     const handleDeleteClick = (pkg: VarPackage) => {
         setDeleteConfirm({ open: true, pkg });
@@ -490,33 +696,6 @@ function App() {
                 <SettingsModal
                     isOpen={isSettingsOpen}
                     onClose={() => setIsSettingsOpen(false)}
-                    libraryPath={vamPath}
-                    onBrowseLibrary={async () => {
-                        try {
-                            // @ts-ignore
-                            const p = await window.go.main.App.SelectDirectory();
-                            if (p) {
-                                setVamPath(p);
-                                localStorage.setItem("vamPath", p);
-                                setIsSettingsOpen(false);
-                            }
-                        } catch (e) { console.error(e); }
-                    }}
-                    downloadPath={downloadPath}
-                    onBrowseDownload={async () => {
-                        try {
-                            // @ts-ignore
-                            const p = await window.go.main.App.SelectDirectory();
-                            if (p) {
-                                setDownloadPath(p);
-                                localStorage.setItem("downloadPath", p);
-                            }
-                        } catch (e) { console.error(e); }
-                    }}
-                    onResetDownload={() => {
-                        setDownloadPath("");
-                        localStorage.removeItem("downloadPath");
-                    }}
                     gridSize={gridSize}
                     setGridSize={(size) => {
                         setGridSize(size);
@@ -524,6 +703,15 @@ function App() {
                     }}
                     itemsPerPage={itemsPerPage}
                     setItemsPerPage={handleSetItemsPerPage}
+                    // Server Props
+                    serverEnabled={serverEnabled}
+                    onToggleServer={handleToggleServer}
+                    serverPort={serverPort}
+                    setServerPort={setServerPort}
+                    localIP={localIP}
+                    logs={serverLogs}
+                    setLogs={setServerLogs}
+                    isWeb={!window.go}
                 />
                 <div className="text-center space-y-6 max-w-md w-full p-8 bg-gray-800 rounded-xl shadow-2xl border border-gray-700">
                     {/* ... (Welcome content same as before) ... */}
@@ -548,8 +736,7 @@ function App() {
                                     // @ts-ignore
                                     const p = await window.go.main.App.SelectDirectory();
                                     if (p) {
-                                        setVamPath(p);
-                                        localStorage.setItem("vamPath", p);
+                                        handleAddLibrary(p);
                                     }
                                 } catch (err) {
                                     console.error(err);
@@ -583,32 +770,6 @@ function App() {
                 <SettingsModal
                     isOpen={isSettingsOpen}
                     onClose={() => setIsSettingsOpen(false)}
-                    libraryPath={vamPath}
-                    onBrowseLibrary={async () => {
-                        try {
-                            // @ts-ignore
-                            const p = await window.go.main.App.SelectDirectory();
-                            if (p) {
-                                setVamPath(p);
-                                localStorage.setItem("vamPath", p);
-                            }
-                        } catch (e) { console.error(e); }
-                    }}
-                    downloadPath={downloadPath}
-                    onBrowseDownload={async () => {
-                        try {
-                            // @ts-ignore
-                            const p = await window.go.main.App.SelectDirectory();
-                            if (p) {
-                                setDownloadPath(p);
-                                localStorage.setItem("downloadPath", p);
-                            }
-                        } catch (e) { console.error(e); }
-                    }}
-                    onResetDownload={() => {
-                        setDownloadPath("");
-                        localStorage.removeItem("downloadPath");
-                    }}
                     gridSize={gridSize}
                     setGridSize={(size) => {
                         setGridSize(size);
@@ -616,8 +777,16 @@ function App() {
                     }}
                     itemsPerPage={itemsPerPage}
                     setItemsPerPage={handleSetItemsPerPage}
+                    // Server Props
+                    serverEnabled={serverEnabled}
+                    onToggleServer={handleToggleServer}
+                    serverPort={serverPort}
+                    setServerPort={setServerPort}
+                    localIP={localIP}
+                    logs={serverLogs}
+                    setLogs={setServerLogs}
+                    isWeb={!window.go}
                 />
-
                 <ConfirmationModal
                     isOpen={deleteConfirm.open}
                     onClose={() => setDeleteConfirm({ open: false, pkg: null })}
@@ -654,11 +823,11 @@ function App() {
 
                 {/* Sidebar Wrapper */}
                 <div className={clsx(
-                    "h-full z-40 transition-all duration-300 ease-in-out bg-gray-800 shrink-0 border-t border-gray-700",
-                    "md:relative",
-                    "fixed inset-y-0 left-0 shadow-2xl md:shadow-none",
+                    "z-40 transition-all duration-300 ease-in-out bg-gray-800 shrink-0 border-t border-gray-700",
+                    "md:relative md:h-full",
+                    "fixed left-0 top-8 bottom-0 shadow-2xl md:shadow-none md:top-0 md:bottom-auto",
                     isSidebarOpen ? "w-64 translate-x-0" : "w-0 -translate-x-full md:translate-x-0 md:w-0 overflow-hidden"
-                )} style={{ top: 0 }}>
+                )}>
                     <div className="w-64 h-full"> {/* Inner container to maintain width while parent animates */}
                         <Sidebar
                             packages={packages}
@@ -669,6 +838,16 @@ function App() {
                             selectedType={selectedType}
                             onFilterType={setSelectedType}
                             onOpenSettings={() => setIsSettingsOpen(true)}
+
+                            // Library Switcher Props
+                            libraries={libraries}
+                            currentLibIndex={activeLibIndex}
+                            onSelectLibrary={(index) => handleSwitchLibrary(index)}
+                            // Only allow management on Desktop
+                            // @ts-ignore
+                            onAddLibrary={window.go ? handleBrowseAndAdd : undefined}
+                            // @ts-ignore
+                            onRemoveLibrary={window.go ? handleRemoveLibrary : undefined}
                         />
                     </div>
                 </div>
@@ -822,7 +1001,8 @@ function App() {
                                     totalCount={packages.length}
                                     onContextMenu={handleContextMenu}
                                     onSelect={handlePackageClick}
-                                    selectedPkgId={selectedPackage?.filePath}
+                                    selectedPkgId={selectedIds.size === 1 ? selectedPackage?.filePath : undefined}
+                                    selectedIds={selectedIds}
                                     viewMode={viewMode}
                                     gridSize={gridSize}
                                 />
@@ -920,10 +1100,10 @@ function App() {
                         </div>
 
                         <AnimatePresence>
-                            {selectedPackage && (
+                            {(selectedPackage && selectedIds.size === 1) && (
                                 <RightSidebar
                                     pkg={selectedPackage}
-                                    onClose={() => setSelectedPackage(null)}
+                                    onClose={() => { setSelectedPackage(null); setSelectedIds(new Set()); }}
                                     onResolve={handleOpenResolve}
                                 />
                             )}
@@ -937,10 +1117,16 @@ function App() {
                         x={contextMenu.x}
                         y={contextMenu.y}
                         pkg={contextMenu.pkg}
+                        selectedCount={selectedIds.size}
                         onClose={() => setContextMenu({ ...contextMenu, open: false })}
-                        onToggle={togglePackage}
+                        onToggle={(pkg) => selectedIds.has(pkg.filePath) && selectedIds.size > 1 ? Array.from(selectedIds).forEach(id => { const p = packages.find(pk => pk.filePath === id); if (p) togglePackage(p) }) : togglePackage(pkg)}
                         onOpenFolder={handleOpenFolder}
-                        onDownload={handleDownloadPackage}
+                        onDownload={(pkg) => {
+                            // Install Logic
+                            // If multiple selected, install all.
+                            const targets = selectedIds.size > 1 ? packages.filter(p => selectedIds.has(p.filePath)) : [pkg];
+                            setInstallModal({ open: true, pkgs: targets });
+                        }}
                         onCopyPath={handleCopyPath}
                         onCopyFile={handleCopyFile}
                         onCutFile={handleCutFile}
@@ -948,6 +1134,93 @@ function App() {
                     />
                 )}
             </div>
+            {/* Install Modal */}
+            <AnimatePresence>
+                {installModal.open && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                        <div className="bg-gray-800 border border-gray-700 rounded-xl shadow-2xl p-6 w-full max-w-sm">
+                            <h2 className="text-xl font-bold text-white mb-4">Install to Library</h2>
+                            <p className="text-gray-400 mb-4">Select the destination library for {installModal.pkgs.length} package(s):</p>
+                            <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar mb-4">
+                                {libraries.filter(l => l !== vamPath).map(lib => (
+                                    <button
+                                        key={lib}
+                                        onClick={async () => {
+                                            // Trigger Install
+                                            // @ts-ignore
+                                            if (window.go) {
+                                                try {
+                                                    const paths = installModal.pkgs.map(p => p.filePath);
+                                                    // @ts-ignore
+                                                    // Try copy without overwrite first
+                                                    const collisions = await window.go.main.App.CopyPackagesToLibrary(paths, lib, false);
+
+                                                    if (collisions && collisions.length > 0) {
+                                                        // Close install modal and show collision modal
+                                                        setInstallModal({ open: false, pkgs: [] });
+                                                        setInstallCollision({ open: true, collisions: collisions, libPath: lib, pkgs: installModal.pkgs });
+                                                        return;
+                                                    }
+
+                                                    addToast(`Installed ${paths.length} packages to ${lib.split(/[/\\]/).pop()}`, 'success');
+                                                    setInstallModal({ open: false, pkgs: [] });
+                                                } catch (e) {
+                                                    addToast("Install failed: " + e, 'error');
+                                                }
+                                            }
+                                        }}
+                                        className="w-full text-left px-3 py-2 rounded bg-gray-700 hover:bg-blue-600 text-gray-200 hover:text-white transition-colors truncate"
+                                        title={lib}
+                                    >
+                                        {lib.split(/[/\\]/).pop()}
+                                    </button>
+                                ))}
+                                {libraries.length <= 1 && <div className="text-gray-500 text-sm italic p-2 text-center">No other libraries configured.</div>}
+                            </div>
+                            <button onClick={() => setInstallModal({ open: false, pkgs: [] })} className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg">Cancel</button>
+                        </div>
+                    </div>
+                )}
+                {/* Install Collision Modal */}
+                {installCollision.open && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                        <div className="bg-gray-800 border border-gray-700 rounded-xl shadow-2xl p-6 w-full max-w-sm">
+                            <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><div className="text-yellow-500"><AlertTriangle size={24} /></div> Warning</h2>
+                            <p className="text-gray-300 mb-2">The following packages already exist in the destination library:</p>
+                            <div className="bg-gray-900 rounded p-2 mb-4 max-h-32 overflow-y-auto text-xs font-mono text-gray-400">
+                                {installCollision.collisions.map(c => <div key={c}>{c}</div>)}
+                            </div>
+                            <p className="text-gray-400 mb-6 text-sm">Do you want to overwrite them?</p>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setInstallCollision({ open: false, collisions: [], libPath: "", pkgs: [] })}
+                                    className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        // Overwrite logic
+                                        try {
+                                            const paths = installCollision.pkgs.map(p => p.filePath);
+                                            // @ts-ignore
+                                            await window.go.main.App.CopyPackagesToLibrary(paths, installCollision.libPath, true);
+                                            addToast(`Installed/Overwrote ${paths.length} packages`, 'success');
+                                            setInstallCollision({ open: false, collisions: [], libPath: "", pkgs: [] });
+                                        } catch (e) {
+                                            addToast("Install failed: " + e, 'error');
+                                        }
+                                    }}
+                                    className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg"
+                                >
+                                    Overwrite
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </AnimatePresence>
+
             {/* Toasts Container */}
             <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end pointer-events-none">
                 <AnimatePresence>

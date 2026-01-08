@@ -9,13 +9,14 @@ interface CardGridProps {
     currentPath?: string;
     totalCount?: number;
     onContextMenu: (e: React.MouseEvent, pkg: VarPackage) => void;
-    onSelect: (pkg: VarPackage) => void;
+    onSelect: (pkg: VarPackage, e?: React.MouseEvent) => void;
     selectedPkgId?: string;
+    selectedIds?: Set<string>;
     viewMode: 'grid' | 'list';
     gridSize?: number;
 }
 
-const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, selectedPkgId, viewMode, gridSize = 150 }: CardGridProps) => {
+const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, selectedPkgId, selectedIds, viewMode, gridSize = 150 }: CardGridProps) => {
 
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -70,7 +71,7 @@ const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, 
                                 pkg={pkg}
                                 onContextMenu={onContextMenu}
                                 onSelect={onSelect}
-                                isSelected={pkg.filePath === selectedPkgId}
+                                isSelected={selectedIds ? selectedIds.has(pkg.filePath) : pkg.filePath === selectedPkgId}
                                 viewMode={viewMode}
                             />
                         </motion.div>
