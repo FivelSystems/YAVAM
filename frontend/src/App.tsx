@@ -1330,6 +1330,7 @@ function App() {
                                                         headers: { "Content-Type": "application/json" },
                                                         body: JSON.stringify({
                                                             filePaths: paths,
+                                                            destLib: lib,
                                                             overwrite: false
                                                         })
                                                     });
@@ -1403,6 +1404,7 @@ function App() {
                                                     headers: { "Content-Type": "application/json" },
                                                     body: JSON.stringify({
                                                         filePaths: paths,
+                                                        destLib: installCollision.libPath,
                                                         overwrite: true
                                                     })
                                                 });
