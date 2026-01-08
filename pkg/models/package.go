@@ -7,6 +7,7 @@ type MetaJSON struct {
 	Description  string                 `json:"description,omitempty"`
 	Dependencies map[string]interface{} `json:"dependencies,omitempty"`
 	Tags         []string               `json:"tags,omitempty"`
+	ImageUrl     string                 `json:"imageUrl,omitempty"`
 }
 
 type VarPackage struct {
