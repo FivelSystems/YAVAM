@@ -99,18 +99,18 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
                             <button
                                 onClick={() => setFilter('disabled')}
                                 className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
-                                    currentFilter === 'disabled' ? "bg-red-500/10 text-red-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
+                                    currentFilter === 'disabled' ? "bg-gray-600/20 text-gray-200" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
                             >
                                 <div className="flex items-center gap-3"><CircleOff size={18} /> Disabled</div>
-                                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-500/20 text-red-400 border border-red-500/10 group-hover:bg-red-500/30 transition-colors">{statusCounts.disabled}</span>
+                                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-700 text-gray-300 border border-gray-600 group-hover:bg-gray-600 transition-colors">{statusCounts.disabled}</span>
                             </button>
                             <button
                                 onClick={() => setFilter('missing-deps')}
                                 className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
-                                    currentFilter === 'missing-deps' ? "bg-orange-500/10 text-orange-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
+                                    currentFilter === 'missing-deps' ? "bg-red-500/10 text-red-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
                             >
                                 <div className="flex items-center gap-3"><AlertTriangle size={18} /> Missing Refs</div>
-                                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-orange-500/20 text-orange-400 border border-orange-500/10 group-hover:bg-orange-500/30 transition-colors">{statusCounts.missingDeps}</span>
+                                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-500/20 text-red-400 border border-red-500/10 group-hover:bg-red-500/30 transition-colors">{statusCounts.missingDeps}</span>
                             </button>
                             <button
                                 onClick={() => setFilter('duplicates')}
