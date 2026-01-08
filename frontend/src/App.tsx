@@ -399,7 +399,16 @@ function App() {
         if (activeLibraryPath) {
             scanPackages();
         }
-    }, [activeLibraryPath]);
+        // Sync activeLibIndex with activeLibraryPath
+        if (activeLibraryPath && libraries.length > 0) {
+            // Case-insensitive match to find index
+            const idx = libraries.findIndex(l => l.toLowerCase() === activeLibraryPath.toLowerCase());
+            // Only update if different to avoid potential loops (though setter handles identity check usually)
+            if (idx !== -1 && idx !== activeLibIndex) {
+                setActiveLibIndex(idx);
+            }
+        }
+    }, [activeLibraryPath, libraries]);
 
     // Sync libraries to server if running
     useEffect(() => {
