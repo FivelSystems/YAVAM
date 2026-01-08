@@ -18,6 +18,8 @@ interface ContextMenuProps {
 
 const ContextMenu = ({ x, y, pkg, onClose, onToggle, onOpenFolder, onDownload, onCopyPath, onCopyFile, onCutFile, onDelete }: ContextMenuProps) => {
     const ref = useRef<HTMLDivElement>(null);
+    // @ts-ignore
+    const isWeb = !window.go;
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -51,13 +53,15 @@ const ContextMenu = ({ x, y, pkg, onClose, onToggle, onOpenFolder, onDownload, o
 
             <div className="border-t border-gray-700 my-1"></div>
 
-            <button
-                onClick={() => { onOpenFolder(pkg); onClose(); }}
-                className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
-            >
-                <FolderOpen size={16} className="text-blue-400" />
-                Open Folder
-            </button>
+            {!isWeb && (
+                <button
+                    onClick={() => { onOpenFolder(pkg); onClose(); }}
+                    className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
+                >
+                    <FolderOpen size={16} className="text-blue-400" />
+                    Open Folder
+                </button>
+            )}
 
             <button
                 onClick={() => { onCopyPath(pkg); onClose(); }}
@@ -67,21 +71,25 @@ const ContextMenu = ({ x, y, pkg, onClose, onToggle, onOpenFolder, onDownload, o
                 Copy Path
             </button>
 
-            <button
-                onClick={() => { onCopyFile(pkg); onClose(); }}
-                className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
-            >
-                <Copy size={16} className="text-gray-400" />
-                Copy File
-            </button>
+            {!isWeb && (
+                <>
+                    <button
+                        onClick={() => { onCopyFile(pkg); onClose(); }}
+                        className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
+                    >
+                        <Copy size={16} className="text-gray-400" />
+                        Copy File
+                    </button>
 
-            <button
-                onClick={() => { onCutFile(pkg); onClose(); }}
-                className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
-            >
-                <Scissors size={16} className="text-gray-400" />
-                Cut File
-            </button>
+                    <button
+                        onClick={() => { onCutFile(pkg); onClose(); }}
+                        className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
+                    >
+                        <Scissors size={16} className="text-gray-400" />
+                        Cut File
+                    </button>
+                </>
+            )}
 
 
             <button
@@ -89,7 +97,7 @@ const ContextMenu = ({ x, y, pkg, onClose, onToggle, onOpenFolder, onDownload, o
                 className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
             >
                 <Download size={16} className="text-blue-400" />
-                Download
+                Install to Library
             </button>
 
             <div className="border-t border-gray-700 my-1"></div>

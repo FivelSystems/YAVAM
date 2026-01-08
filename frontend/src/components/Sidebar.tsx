@@ -39,8 +39,19 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
         return Object.entries(counts).sort((a, b) => b[1] - a[1]); // Sort by count
     }, [packages]);
 
+    const statusCounts = useMemo(() => {
+        return {
+            all: packages.length,
+            enabled: packages.filter(p => p.isEnabled).length,
+            disabled: packages.filter(p => !p.isEnabled).length,
+            missingDeps: packages.filter(p => p.missingDeps && p.missingDeps.length > 0).length,
+            duplicates: packages.filter(p => p.isDuplicate).length
+        };
+    }, [packages]);
+
     return (
         <aside className="w-64 h-full bg-gray-800 border-r border-gray-700 flex flex-col shadow-xl z-20">
+            {/* ... header ... */}
             <div className="p-6 flex items-center justify-between border-b border-gray-700">
                 <div className="flex items-center gap-3">
                     <div className="bg-blue-600 p-2 rounded-lg">
@@ -55,7 +66,7 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
 
             <div className="flex-1 overflow-hidden flex flex-col custom-scrollbar overflow-y-auto">
                 {/* Status Section */}
-                <div className="p-4 pb-0">
+                <div className="p-4 border-b border-gray-700/50">
                     <button
                         onClick={() => toggleSection('status')}
                         className="w-full flex items-center justify-between text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2 hover:text-gray-300"
@@ -68,45 +79,52 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
                         <div className="space-y-1 animation-fade-in">
                             <button
                                 onClick={() => setFilter('all')}
-                                className={clsx("w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm",
+                                className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
                                     currentFilter === 'all' ? "bg-blue-600/10 text-blue-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
                             >
-                                <Layers size={18} /> All Packages
+                                <div className="flex items-center gap-3"><Layers size={18} /> All Packages</div>
+                                <span className={clsx("text-xs px-2 py-0.5 rounded-full font-medium transition-colors",
+                                    currentFilter === 'all' ? "bg-blue-500/20 text-blue-300" : "bg-gray-800 text-gray-400 group-hover:bg-gray-700 group-hover:text-gray-300"
+                                )}>{statusCounts.all}</span>
                             </button>
 
                             <button
                                 onClick={() => setFilter('enabled')}
-                                className={clsx("w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm",
+                                className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
                                     currentFilter === 'enabled' ? "bg-green-500/10 text-green-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
                             >
-                                <CheckCircle2 size={18} /> Enabled
+                                <div className="flex items-center gap-3"><CheckCircle2 size={18} /> Enabled</div>
+                                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-green-500/20 text-green-400 border border-green-500/10 group-hover:bg-green-500/30 transition-colors">{statusCounts.enabled}</span>
                             </button>
                             <button
                                 onClick={() => setFilter('disabled')}
-                                className={clsx("w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm",
+                                className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
                                     currentFilter === 'disabled' ? "bg-red-500/10 text-red-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
                             >
-                                <CircleOff size={18} /> Disabled
+                                <div className="flex items-center gap-3"><CircleOff size={18} /> Disabled</div>
+                                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-500/20 text-red-400 border border-red-500/10 group-hover:bg-red-500/30 transition-colors">{statusCounts.disabled}</span>
                             </button>
                             <button
                                 onClick={() => setFilter('missing-deps')}
-                                className={clsx("w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm",
+                                className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
                                     currentFilter === 'missing-deps' ? "bg-orange-500/10 text-orange-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
                             >
-                                <AlertTriangle size={18} /> Missing Refs
+                                <div className="flex items-center gap-3"><AlertTriangle size={18} /> Missing Refs</div>
+                                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-orange-500/20 text-orange-400 border border-orange-500/10 group-hover:bg-orange-500/30 transition-colors">{statusCounts.missingDeps}</span>
                             </button>
                             <button
                                 onClick={() => setFilter('duplicates')}
-                                className={clsx("w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors text-sm",
+                                className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
                                     currentFilter === 'duplicates' ? "bg-yellow-500/10 text-yellow-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
                             >
-                                <Copy size={18} /> Multiple Versions
+                                <div className="flex items-center gap-3"><Copy size={18} /> Multiple Versions</div>
+                                <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-yellow-500/20 text-yellow-400 border border-yellow-500/10 group-hover:bg-yellow-500/30 transition-colors">{statusCounts.duplicates}</span>
                             </button>
                         </div>
                     )}
                 </div>
 
-                <div className="p-4">
+                <div className="p-4 border-b border-gray-700/50">
                     <button
                         onClick={() => toggleSection('creators')}
                         className="w-full flex items-center justify-between text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2 hover:text-gray-300"
@@ -140,7 +158,7 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
                 </div>
 
                 {/* Categories (Types) Section */}
-                <div className="p-4 pb-0">
+                <div className="p-4 border-b border-gray-700/50">
                     <button
                         onClick={() => toggleSection('types')}
                         className="w-full flex items-center justify-between text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2 hover:text-gray-300"
@@ -175,7 +193,7 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
             </div>
 
             <div className="p-4 border-t border-gray-700 text-xs text-gray-500 text-center">
-                v1.1.0 Beta
+                v1.1.0
             </div>
         </aside>
     );

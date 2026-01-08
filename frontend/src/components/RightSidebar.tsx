@@ -85,7 +85,7 @@ const RightSidebar = ({ pkg, onClose, onResolve }: RightSidebarProps) => {
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: "100%", opacity: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="w-[35%] min-w-[320px] max-w-[600px] bg-gray-900 border-l border-gray-800 flex flex-col h-full shadow-2xl z-20 shrink-0"
+            className="fixed inset-0 w-full md:w-[35%] md:min-w-[320px] md:max-w-[600px] md:relative md:inset-auto z-50 md:z-20 bg-gray-900 border-l border-gray-800 flex flex-col h-full shadow-2xl shrink-0"
         >
             {/* Header */}
             <div className="p-4 border-b border-gray-800 flex justify-between items-start bg-gray-900/50 backdrop-blur-sm sticky top-0 z-10">

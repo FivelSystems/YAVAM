@@ -62,6 +62,10 @@ export function SetAlwaysOnTop(arg1) {
   return window['go']['main']['App']['SetAlwaysOnTop'](arg1);
 }
 
+export function SetMinimizeOnClose(arg1) {
+  return window['go']['main']['App']['SetMinimizeOnClose'](arg1);
+}
+
 export function StartServer(arg1, arg2) {
   return window['go']['main']['App']['StartServer'](arg1, arg2);
 }

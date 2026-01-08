@@ -142,6 +142,14 @@ function App() {
                     }
                 })
                 .catch(() => console.log("Not in web mode or server offline"));
+        } else {
+            // Desktop Mode: Sync preferences
+            const minClose = localStorage.getItem('minimizeOnClose') === 'true';
+            // @ts-ignore
+            if (minClose && window.go?.main?.App?.SetMinimizeOnClose) {
+                // @ts-ignore
+                window.go.main.App.SetMinimizeOnClose(true);
+            }
         }
     }, []);
 
