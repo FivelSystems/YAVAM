@@ -101,6 +101,26 @@ const ContextMenu = ({ x, y, pkg, selectedCount = 0, onClose, onToggle, onOpenFo
                 Install to Library
             </button>
 
+            {isWeb && (
+                <button
+                    onClick={() => {
+                        onClose();
+                        // Download directly
+                        const url = `/files/?path=${encodeURIComponent(pkg.filePath)}`;
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = pkg.fileName;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
+                >
+                    <Download size={16} className="text-green-400" />
+                    Download File
+                </button>
+            )}
+
             <div className="border-t border-gray-700 my-1"></div>
 
             <button
