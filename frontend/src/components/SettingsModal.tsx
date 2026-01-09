@@ -3,6 +3,7 @@ import { X, LayoutGrid, Network, Terminal, AlertTriangle, ExternalLink, HardDriv
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from 'clsx';
 
+
 interface SettingsModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -20,6 +21,7 @@ interface SettingsModalProps {
     logs: string[];
     setLogs: React.Dispatch<React.SetStateAction<string[]>>;
     isWeb: boolean;
+
 }
 
 const SettingsModal = ({
@@ -36,7 +38,8 @@ const SettingsModal = ({
     localIP,
     logs,
     setLogs,
-    isWeb
+    isWeb,
+
 }: SettingsModalProps) => {
 
     const [activeTab, setActiveTab] = useState<'general' | 'network' | 'storage'>('general');
@@ -166,6 +169,8 @@ const SettingsModal = ({
                                                         </div>
                                                     )}
                                                 </div>
+
+
                                             </div>
                                         </div>
                                     </div>

@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sync"
 	"varmanager/pkg/manager"
 	"varmanager/pkg/models"
 
@@ -33,6 +34,10 @@ type App struct {
 	assets          fs.FS
 	isQuitting      bool
 	trayRunning     bool
+
+	// Scan Cancellation
+	scanMu     sync.Mutex
+	scanCancel context.CancelFunc
 }
 
 // NewApp creates a new App application struct
@@ -128,22 +133,39 @@ func (a *App) Greet(name string) string {
 }
 
 // ScanPackages triggers the scan process
+// ScanPackages triggers the scan process
 func (a *App) ScanPackages(vamPath string) error {
 	// Robustness: If user selected "AddonPackages" directly, move up to root
 	if filepath.Base(vamPath) == "AddonPackages" {
 		vamPath = filepath.Dir(vamPath)
 	}
 
+	// Cancel previous scan if running
+	a.scanMu.Lock()
+	if a.scanCancel != nil {
+		a.scanCancel()
+	}
+	// Create new context wrapped around app context
+	ctx, cancel := context.WithCancel(a.ctx)
+	a.scanCancel = cancel
+	a.scanMu.Unlock()
+
 	go func() {
-		err := a.manager.ScanAndAnalyze(a.ctx, vamPath, func(pkg models.VarPackage) {
+		defer cancel()
+
+		err := a.manager.ScanAndAnalyze(ctx, vamPath, func(pkg models.VarPackage) {
 			runtime.EventsEmit(a.ctx, "package:scanned", pkg)
 		}, func(current, total int) {
 			runtime.EventsEmit(a.ctx, "scan:progress", map[string]int{"current": current, "total": total})
 		})
+
 		if err != nil {
-			runtime.EventsEmit(a.ctx, "scan:error", err.Error())
+			if err != context.Canceled {
+				runtime.EventsEmit(a.ctx, "scan:error", err.Error())
+			}
+		} else {
+			runtime.EventsEmit(a.ctx, "scan:complete", true)
 		}
-		runtime.EventsEmit(a.ctx, "scan:complete", true)
 	}()
 
 	return nil
@@ -211,6 +233,23 @@ func (a *App) SelectDirectory() (string, error) {
 // SetAlwaysOnTop toggles the window pinned state
 func (a *App) SetAlwaysOnTop(onTop bool) {
 	runtime.WindowSetAlwaysOnTop(a.ctx, onTop)
+}
+
+// Library Management
+func (a *App) GetConfiguredLibraries() []string {
+	return a.manager.GetLibraries()
+}
+
+func (a *App) AddConfiguredLibrary(path string) error {
+	return a.manager.AddLibrary(path)
+}
+
+func (a *App) RemoveConfiguredLibrary(path string) error {
+	return a.manager.RemoveLibrary(path)
+}
+
+func (a *App) ReorderConfiguredLibraries(paths []string) error {
+	return a.manager.SetLibraries(paths)
 }
 
 // Server Methods

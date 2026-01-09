@@ -3,6 +3,8 @@
 import {models} from '../models';
 import {manager} from '../models';
 
+export function AddConfiguredLibrary(arg1:string):Promise<void>;
+
 export function ClearAppData():Promise<void>;
 
 export function CopyFileToClipboard(arg1:string):Promise<void>;
@@ -18,6 +20,8 @@ export function DisableOldVersions(arg1:string,arg2:string,arg3:string):Promise<
 export function DownloadPackage(arg1:string,arg2:string):Promise<void>;
 
 export function FinishSetup():Promise<void>;
+
+export function GetConfiguredLibraries():Promise<Array<string>>;
 
 export function GetFilters(arg1:string):Promise<Array<string>>;
 
@@ -38,6 +42,10 @@ export function IsConfigured():Promise<boolean>;
 export function OpenAppDataFolder():Promise<void>;
 
 export function OpenFolderInExplorer(arg1:string):Promise<void>;
+
+export function RemoveConfiguredLibrary(arg1:string):Promise<void>;
+
+export function ReorderConfiguredLibraries(arg1:Array<string>):Promise<void>;
 
 export function ResolveConflicts(arg1:string,arg2:Array<string>,arg3:string):Promise<manager.ResolveConflictResult>;
 

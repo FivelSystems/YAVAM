@@ -6,13 +6,13 @@
     "frontend:dev:watcher": "npm run dev",
     "frontend:dev:serverUrl": "auto",
     "author": {
-        "name": "User",
+        "name": "FivelSystems",
         "email": "user@example.com"
     },
     "info": {
-        "companyName": "User",
-        "productName": "VAR Manager",
-        "productVersion": "1.0.1-experimental",
+        "companyName": "FivelSystems",
+        "productName": "YAVAM",
+        "productVersion": "1.1.3-e",
         "copyright": "Copyright \u00a9 2024",
         "comments": "Manage your Virt-A-Mate addon packages"
     },
