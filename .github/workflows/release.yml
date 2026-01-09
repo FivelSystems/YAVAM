@@ -69,7 +69,7 @@ jobs:
         run: |
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           echo "Generating changelog since $PREV_TAG"
-          echo "## Changelog (v${{ env.VERSION }})" > release_notes.md
+          echo "## Changelog (${{ env.VERSION }})" > release_notes.md
           if [ -z "$PREV_TAG" ]; then
              git log --pretty=format:"- %s" >> release_notes.md
           else
