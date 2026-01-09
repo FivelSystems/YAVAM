@@ -61,6 +61,9 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 	var candidate *zip.File
 	candidatePriority := 0
 
+	var fallbackCandidate *zip.File
+	fallbackPriority := 0
+
 	// Helper for parsing .vam files
 	type VamItem struct {
 		Tags string `json:"tags"`
@@ -168,16 +171,48 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 		}
 
 		// Thumbnail Candidate Logic
-		if candidatePriority < 3 && isContent {
+		if candidatePriority < 3 {
 			ext := filepath.Ext(normName)
-			base := normName[:len(normName)-len(ext)]
 
-			if img, ok := fileMap[base+".jpg"]; ok {
-				candidate = img
-				candidatePriority = 3
-			} else if img, ok := fileMap[base+".png"]; ok {
-				candidate = img
-				candidatePriority = 3
+			// --- Fallback Logic: Capture any potential image ---
+			if ext == ".jpg" || ext == ".png" {
+				// Ignore textures and assets folders to avoid noise (too many small images)
+				if !strings.Contains(normName, "/textures/") && !strings.Contains(normName, "/assets/") {
+					prio := 1
+					// If it's in a known content category folder, bump priority
+					if strings.Contains(normName, "saves/scene") {
+						prio = 2
+					} else if strings.Contains(normName, "saves/person") {
+						prio = 2
+					} else if strings.Contains(normName, "custom/clothing") {
+						prio = 2
+					} else if strings.Contains(normName, "custom/hair") {
+						prio = 2
+					}
+
+					if prio > fallbackPriority {
+						fallbackCandidate = f
+						fallbackPriority = prio
+					} else if prio == fallbackPriority {
+						// Tie-breaker: Prefer larger files (likely higher quality preview)
+						if fallbackCandidate == nil || f.FileInfo().Size() > fallbackCandidate.FileInfo().Size() {
+							fallbackCandidate = f
+						}
+					}
+				}
+			}
+			// ---------------------------------------------------
+
+			if isContent {
+				base := normName[:len(normName)-len(ext)]
+
+				if img, ok := fileMap[base+".jpg"]; ok {
+					candidate = img
+					candidatePriority = 3
+				} else if img, ok := fileMap[base+".png"]; ok {
+					candidate = img
+					candidatePriority = 3
+				}
 			}
 		}
 	}
@@ -198,6 +233,11 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 			candidate = f
 			candidatePriority = 5
 		}
+	}
+
+	// Use Fallback if no specific candidate found
+	if candidate == nil && fallbackCandidate != nil {
+		candidate = fallbackCandidate
 	}
 
 	// Extract candidate if found
