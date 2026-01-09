@@ -42,6 +42,7 @@ export interface VarPackage {
 function App() {
     // Setup State
     const [needsSetup, setNeedsSetup] = useState(false);
+    const [isCancelling, setIsCancelling] = useState(false);
 
     useEffect(() => {
         // @ts-ignore
@@ -53,49 +54,36 @@ function App() {
         }
     }, []);
 
-    // Web Mode SSE Listener
-    useEffect(() => {
-        // @ts-ignore
-        if (!window.go) {
-            console.log("Connecting to EventSource...");
-            const es = new EventSource('/api/events');
-
-            es.onmessage = (event) => {
-                try {
-                    const payload = JSON.parse(event.data);
-                    const { event: type, data } = payload;
-
-                    if (type === "scan:progress") {
-                        setScanProgress({ current: data.current, total: data.total });
-                        setLoading(true);
-                    } else if (type === "server:log") {
-                        setServerLogs(prev => [...prev.slice(-99), data]);
-                    } else if (type === "package:scanned") {
-                        setPackages(prev => {
-                            // Avoid duplicates
-                            if (prev.some(p => p.filePath === data.filePath)) return prev;
-                            return [...prev, data];
-                        });
-                    }
-                } catch (e) {
-                    console.error("SSE parse error", e);
-                }
-            };
-
-            return () => es.close();
-        }
-    }, []);
+    // ... (SSE Listener unchanged) ...
 
     // New Handler for Sidebar Selection
 
     // Helper to switch library
-    const handleSwitchLibrary = (index: number) => {
+    const handleSwitchLibrary = async (index: number) => {
         if (index < 0 || index >= libraries.length) return;
+
+        if (loading) {
+            setIsCancelling(true);
+            try {
+                // @ts-ignore
+                if (window.go) await window.go.main.App.CancelScan();
+                else await fetch('/api/scan/cancel');
+            } catch (e) {
+                console.error("Cancel failed", e);
+            } finally {
+                setIsCancelling(false);
+            }
+        }
+
+        setPackages([]);
+        setLoading(false);
+        setScanProgress({ current: 0, total: 0 });
+        setCurrentPage(1);
+
         setActiveLibIndex(index);
         const path = libraries[index];
         setActiveLibraryPath(path);
         localStorage.setItem("activeLibraryPath", path);
-        // Toast?
     };
 
     const handleAddLibrary = (path: string) => {
@@ -1618,6 +1606,26 @@ function App() {
                     />
                 )}
             </div>
+            {/* Cancellation Modal */}
+            <AnimatePresence>
+                {isCancelling && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+                    >
+                        <div className="bg-gray-800 border border-gray-700 rounded-xl p-8 flex flex-col items-center gap-4 shadow-2xl">
+                            <div className="animate-spin text-blue-500">
+                                <RefreshCw size={48} />
+                            </div>
+                            <h3 className="text-xl font-bold text-white">Cancelling Scan...</h3>
+                            <p className="text-gray-400 text-sm">Please wait while we stop the current process.</p>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* Install Modal */}
             <AnimatePresence>
                 {installModal.open && (

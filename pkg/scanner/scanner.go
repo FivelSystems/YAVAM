@@ -56,3 +56,22 @@ func (s *Scanner) scanDirectory(root string) ([]models.VarPackage, error) {
 
 	return pkgs, err
 }
+
+// CountPackages returns the number of .var packages in the directory (recursive)
+func (s *Scanner) CountPackages(root string) (int, error) {
+	count := 0
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // Skip errors
+		}
+		if info.IsDir() {
+			return nil
+		}
+		name := strings.ToLower(info.Name())
+		if strings.HasSuffix(name, ".var") || strings.HasSuffix(name, ".var.disabled") {
+			count++
+		}
+		return nil
+	})
+	return count, err
+}

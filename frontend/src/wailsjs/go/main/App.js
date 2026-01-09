@@ -6,6 +6,10 @@ export function AddConfiguredLibrary(arg1) {
   return window['go']['main']['App']['AddConfiguredLibrary'](arg1);
 }
 
+export function CancelScan() {
+  return window['go']['main']['App']['CancelScan']();
+}
+
 export function ClearAppData() {
   return window['go']['main']['App']['ClearAppData']();
 }
@@ -48,6 +52,10 @@ export function GetConfiguredLibraries() {
 
 export function GetFilters(arg1) {
   return window['go']['main']['App']['GetFilters'](arg1);
+}
+
+export function GetLibraryCounts(arg1) {
+  return window['go']['main']['App']['GetLibraryCounts'](arg1);
 }
 
 export function GetLocalIP() {

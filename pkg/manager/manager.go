@@ -860,3 +860,23 @@ func (m *Manager) IsConfigured() bool {
 	_, err := os.Stat(marker)
 	return err == nil
 }
+
+func (m *Manager) GetLibraryCounts(libraries []string) map[string]int {
+	results := make(map[string]int)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	for _, lib := range libraries {
+		wg.Add(1)
+		go func(path string) {
+			defer wg.Done()
+			count, _ := m.scanner.CountPackages(path)
+			mu.Lock()
+			results[path] = count
+			mu.Unlock()
+		}(lib)
+	}
+
+	wg.Wait()
+	return results
+}

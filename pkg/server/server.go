@@ -33,6 +33,11 @@ type Server struct {
 	// SSE Clients
 	clients   map[chan string]bool
 	clientsMu sync.Mutex
+
+	// Scan Management
+	scanMu     sync.Mutex
+	scanCancel context.CancelFunc
+	scanWg     sync.WaitGroup
 }
 
 func NewServer(ctx context.Context, m *manager.Manager, assets fs.FS, onRestore func()) *Server {
@@ -182,6 +187,21 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		}
 	})
 
+	// Scan Cancel Endpoint
+	mux.HandleFunc("/api/scan/cancel", func(w http.ResponseWriter, r *http.Request) {
+		s.scanMu.Lock()
+		if s.scanCancel != nil {
+			s.scanCancel()
+		}
+		s.scanMu.Unlock()
+
+		// Wait for completion
+		s.scanWg.Wait()
+
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]bool{"success": true})
+	})
+
 	// API Endpoint
 	mux.HandleFunc("/api/packages", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -217,8 +237,25 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 			return
 		}
 
+		// Cancel previous scan if running (wait for it)
+		s.scanMu.Lock()
+		if s.scanCancel != nil {
+			s.scanCancel()
+		}
+		s.scanMu.Unlock()
+		s.scanWg.Wait()
+
+		s.scanMu.Lock()
+		// Wrap request context but allow manual cancellation
+		ctx, cancel := context.WithCancel(r.Context())
+		s.scanCancel = cancel
+		s.scanMu.Unlock()
+
+		s.scanWg.Add(1)
+		defer s.scanWg.Done()
+
 		var pkgs []models.VarPackage
-		err := s.manager.ScanAndAnalyze(r.Context(), targetPath, func(p models.VarPackage) {
+		err := s.manager.ScanAndAnalyze(ctx, targetPath, func(p models.VarPackage) {
 			pkgs = append(pkgs, p)
 			// Broadcast package to web clients (incremental update)
 			s.Broadcast("package:scanned", p)
@@ -689,14 +726,14 @@ func (s *Server) Stop() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := s.httpSrv.Shutdown(ctx); err != nil {
+	err := s.httpSrv.Shutdown(ctx)
+	if err != nil {
 		s.log(fmt.Sprintf("Error during shutdown: %v", err))
-		return err
 	}
 
 	s.running = false
 	s.log("Server stopped.")
-	return nil
+	return err
 }
 
 func (s *Server) GetOutboundIP() string {
