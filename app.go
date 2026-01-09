@@ -42,6 +42,7 @@ type App struct {
 	// Scan Cancellation
 	scanMu     sync.Mutex
 	scanCancel context.CancelFunc
+	scanWg     sync.WaitGroup
 }
 
 // NewApp creates a new App application struct
@@ -50,6 +51,10 @@ func NewApp(assets fs.FS, m *manager.Manager) *App {
 		manager: m,
 		assets:  assets,
 	}
+}
+
+func (a *App) GetLibraryCounts(libraries []string) map[string]int {
+	return a.manager.GetLibraryCounts(libraries)
 }
 
 // startup is called when the app starts. The context is saved
@@ -149,7 +154,16 @@ func (a *App) GetAppVersion() string {
 	return cfg.Info.ProductVersion
 }
 
-// ScanPackages triggers the scan process
+// CancelScan cancels the current scan and waits for it to finish
+func (a *App) CancelScan() {
+	a.scanMu.Lock()
+	if a.scanCancel != nil {
+		a.scanCancel()
+	}
+	a.scanMu.Unlock()
+	a.scanWg.Wait()
+}
+
 // ScanPackages triggers the scan process
 func (a *App) ScanPackages(vamPath string) error {
 	// Robustness: If user selected "AddonPackages" directly, move up to root
@@ -157,17 +171,18 @@ func (a *App) ScanPackages(vamPath string) error {
 		vamPath = filepath.Dir(vamPath)
 	}
 
-	// Cancel previous scan if running
+	// Cancel previous scan and wait
+	a.CancelScan()
+
 	a.scanMu.Lock()
-	if a.scanCancel != nil {
-		a.scanCancel()
-	}
 	// Create new context wrapped around app context
 	ctx, cancel := context.WithCancel(a.ctx)
 	a.scanCancel = cancel
 	a.scanMu.Unlock()
 
+	a.scanWg.Add(1)
 	go func() {
+		defer a.scanWg.Done()
 		defer cancel()
 
 		err := a.manager.ScanAndAnalyze(ctx, vamPath, func(pkg models.VarPackage) {

@@ -5,6 +5,8 @@ import {manager} from '../models';
 
 export function AddConfiguredLibrary(arg1:string):Promise<void>;
 
+export function CancelScan():Promise<void>;
+
 export function ClearAppData():Promise<void>;
 
 export function CopyFileToClipboard(arg1:string):Promise<void>;
@@ -26,6 +28,8 @@ export function GetAppVersion():Promise<string>;
 export function GetConfiguredLibraries():Promise<Array<string>>;
 
 export function GetFilters(arg1:string):Promise<Array<string>>;
+
+export function GetLibraryCounts(arg1:Array<string>):Promise<Record<string, number>>;
 
 export function GetLocalIP():Promise<string>;
 

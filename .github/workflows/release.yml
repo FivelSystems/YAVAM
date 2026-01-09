@@ -70,6 +70,7 @@ jobs:
           name: YAVAM ${{ env.VERSION }}
           draft: false
           prerelease: false
+          generate_release_notes: true
           files: |
             build/bin/YAVAM.exe
         env:

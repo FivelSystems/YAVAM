@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, LayoutGrid, Network, Terminal, AlertTriangle, ExternalLink, HardDrive } from "lucide-react";
+import { X, LayoutGrid, Network, Terminal, AlertTriangle, ExternalLink, HardDrive, Palette, AppWindow, Info, Github, Save, Check, FolderOpen, Trash2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from 'clsx';
 
@@ -21,7 +21,6 @@ interface SettingsModalProps {
     logs: string[];
     setLogs: React.Dispatch<React.SetStateAction<string[]>>;
     isWeb: boolean;
-
 }
 
 const SettingsModal = ({
@@ -39,12 +38,45 @@ const SettingsModal = ({
     logs,
     setLogs,
     isWeb,
-
 }: SettingsModalProps) => {
 
-    const [activeTab, setActiveTab] = useState<'general' | 'network' | 'storage'>('general');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'general' | 'appearance' | 'network' | 'storage' | 'about'>('general');
+
+    // Capture initial state for Revert logic
+    const [initialValues, setInitialValues] = useState<{
+        gridSize: number;
+        itemsPerPage: number;
+        minimizeOnClose: boolean;
+    } | null>(null);
+
     const [minimizeOnClose, setMinimizeOnClose] = useState(() => localStorage.getItem('minimizeOnClose') === 'true');
     const [appVersion, setAppVersion] = useState("");
+    const [hasChanges, setHasChanges] = useState(false);
+
+    // On Open: Snapshot headers
+    useEffect(() => {
+        if (isOpen) {
+            const currentMinimize = localStorage.getItem('minimizeOnClose') === 'true';
+            setInitialValues({
+                gridSize,
+                itemsPerPage,
+                minimizeOnClose: currentMinimize
+            });
+            setMinimizeOnClose(currentMinimize);
+            setHasChanges(false);
+        }
+    }, [isOpen]);
+
+    // Check for dirty state
+    useEffect(() => {
+        if (!initialValues) return;
+        const isDirty =
+            gridSize !== initialValues.gridSize ||
+            itemsPerPage !== initialValues.itemsPerPage ||
+            minimizeOnClose !== initialValues.minimizeOnClose;
+        setHasChanges(isDirty);
+    }, [gridSize, itemsPerPage, minimizeOnClose, initialValues]);
+
 
     useEffect(() => {
         // @ts-ignore
@@ -52,7 +84,7 @@ const SettingsModal = ({
             // @ts-ignore
             window.go.main.App.GetAppVersion().then(v => setAppVersion("v" + v));
         } else {
-            setAppVersion("v1.1.3-e (Web)");
+            setAppVersion("v1.1.4-e (Web)");
         }
     }, []);
 
@@ -63,21 +95,20 @@ const SettingsModal = ({
     }, [logs]);
 
     const tabs = [
-        { id: 'general', label: 'General', icon: LayoutGrid },
-        // Conditional Tabs
+        { id: 'general', label: 'General', icon: AppWindow },
+        { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
+        { id: 'appearance', label: 'Appearance', icon: Palette },
         ...(!isWeb ? [
-            { id: 'network', label: 'Network', icon: Network },
             { id: 'storage', label: 'Storage', icon: HardDrive },
-        ] : [])
+            { id: 'network', label: 'Network', icon: Network },
+        ] : []),
+        { id: 'about', label: 'About', icon: Info },
     ] as const;
 
     const handleClearData = async () => {
         if (!confirm("Are you sure you want to clear ALL data? This will reset all settings, thumbnails, and application state.\n\nThe application will close immediately.")) return;
 
-        // Clear LocalStorage
         localStorage.clear();
-
-        // Clear Backend Data
         try {
             // @ts-ignore
             if (window.go) await window.go.main.App.ClearAppData();
@@ -85,10 +116,48 @@ const SettingsModal = ({
             console.error("Failed to clear app data", e);
         }
 
-        // Quit
         // @ts-ignore
         if (window.runtime) window.runtime.Quit();
         else window.location.reload();
+    };
+
+    const handleSetMinimize = (val: boolean) => {
+        setMinimizeOnClose(val);
+        localStorage.setItem('minimizeOnClose', val.toString());
+        // @ts-ignore
+        if (window.go) window.go.main.App.SetMinimizeOnClose(val);
+    };
+
+    const handleApply = () => {
+        // Commit changes (Persist what might not be persisted)
+        localStorage.setItem('gridSize', gridSize.toString());
+        // itemsPerPage and minimizeOnClose are likely persisted on change, but ensure it.
+        localStorage.setItem('itemsPerPage', itemsPerPage.toString());
+
+        // Update snapshot to current, so Cancel now reverts to THIS state.
+        setInitialValues({
+            gridSize,
+            itemsPerPage,
+            minimizeOnClose
+        });
+        setHasChanges(false); // Disable Apply button until new changes
+    };
+
+    const handleSaveAndClose = () => {
+        handleApply();
+        onClose();
+    };
+
+    const handleCancel = () => {
+        if (initialValues) {
+            // Revert all to initial
+            setGridSize(initialValues.gridSize);
+            setItemsPerPage(initialValues.itemsPerPage);
+
+            // Revert Minimize
+            handleSetMinimize(initialValues.minimizeOnClose);
+        }
+        onClose();
     };
 
     return (
@@ -104,7 +173,7 @@ const SettingsModal = ({
                         {/* Header */}
                         <div className="flex items-center justify-between p-4 border-b border-gray-700 shrink-0">
                             <h3 className="text-lg font-semibold text-white">Settings</h3>
-                            <button onClick={onClose} className="p-1 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors">
+                            <button onClick={handleCancel} className="p-1 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors">
                                 <X size={20} />
                             </button>
                         </div>
@@ -132,13 +201,16 @@ const SettingsModal = ({
 
                             {/* Main Panel */}
                             <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
-                                {activeTab === 'general' && (
+
+                                {/* DASHBOARD TAB */}
+                                {activeTab === 'dashboard' && (
                                     <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
                                         <div>
-                                            <h4 className="text-lg font-medium text-white mb-1">Appearance & preferences</h4>
-                                            <p className="text-sm text-gray-500 mb-4">Customize how YAVAM looks and feels.</p>
+                                            <h4 className="text-lg font-medium text-white mb-1">Dashboard</h4>
+                                            <p className="text-sm text-gray-500 mb-4">Customize your viewing experience.</p>
 
-                                            <div className="space-y-4">
+                                            <div className="space-y-6">
+                                                {/* Grid Size */}
                                                 <div>
                                                     <div className="flex justify-between items-center mb-2">
                                                         <label className="text-sm text-gray-300 font-medium">Card Grid Size</label>
@@ -159,6 +231,7 @@ const SettingsModal = ({
                                                     </div>
                                                 </div>
 
+                                                {/* Items Per Page */}
                                                 <div className="pt-4 border-t border-gray-700">
                                                     <div className="flex justify-between items-start mb-1">
                                                         <div className="space-y-1">
@@ -173,16 +246,72 @@ const SettingsModal = ({
                                                             className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none w-24 text-center"
                                                         />
                                                     </div>
-                                                    {itemsPerPage > 50 && (
-                                                        <div className="mt-2 flex items-center gap-2 text-yellow-500 text-xs bg-yellow-500/10 p-2 rounded">
-                                                            <AlertTriangle size={14} />
-                                                            <span>High count may impact performance. Recommended max: 50.</span>
-                                                        </div>
-                                                    )}
                                                 </div>
-
-
                                             </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* APPEARANCE TAB */}
+                                {activeTab === 'appearance' && (
+                                    <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                                        <div>
+                                            <h4 className="text-lg font-medium text-white mb-1">Appearance</h4>
+                                            <p className="text-sm text-gray-500 mb-4">Personalize the application theme.</p>
+
+                                            <div className="bg-black/30 rounded-xl p-6 border border-gray-700/50 flex flex-col items-center justify-center text-center space-y-4">
+                                                <Palette size={48} className="text-gray-600" />
+                                                <div>
+                                                    <h5 className="text-gray-300 font-medium">Coming Soon</h5>
+                                                    <p className="text-sm text-gray-500 max-w-xs mx-auto mt-1">
+                                                        Theme switching and accent color customization will be available in a future update.
+                                                    </p>
+                                                </div>
+                                                {/* Placeholder for future theme switcher */}
+                                                <div className="flex gap-2 mt-2 opacity-50 grayscale pointer-events-none">
+                                                    <div className="w-8 h-8 rounded-full bg-blue-600 border-2 border-white/50"></div>
+                                                    <div className="w-8 h-8 rounded-full bg-green-600"></div>
+                                                    <div className="w-8 h-8 rounded-full bg-purple-600"></div>
+                                                    <div className="w-8 h-8 rounded-full bg-red-600"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* GENERAL TAB */}
+                                {activeTab === 'general' && (
+                                    <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                                        <div>
+                                            <h4 className="text-lg font-medium text-white mb-1">General Application Settings</h4>
+                                            <p className="text-sm text-gray-500 mb-4">Configure system behavior.</p>
+
+                                            {!isWeb ? (
+                                                <div className="bg-gray-700/30 rounded-xl p-4 border border-gray-700/50">
+                                                    <div className="flex items-center justify-between">
+                                                        <div>
+                                                            <h4 className="text-sm font-medium text-white">Run in Background</h4>
+                                                            <p className="text-xs text-gray-500">Hide window on close but keep server running. Restore via System Tray.</p>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => handleSetMinimize(!minimizeOnClose)}
+                                                            className={clsx(
+                                                                "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+                                                                minimizeOnClose ? "bg-blue-600" : "bg-gray-700"
+                                                            )}
+                                                        >
+                                                            <span className={clsx(
+                                                                "inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200",
+                                                                minimizeOnClose ? "translate-x-6" : "translate-x-1"
+                                                            )} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="text-sm text-gray-500 italic">
+                                                    No general settings available for Web Client.
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 )}
@@ -227,18 +356,6 @@ const SettingsModal = ({
                                                                     <ExternalLink size={14} />
                                                                 </button>
                                                             )}
-                                                            {isWeb && (
-                                                                <button
-                                                                    onClick={() => {
-                                                                        fetch('/api/restore', { method: 'POST' })
-                                                                            .then(() => alert("Host window restored!"))
-                                                                            .catch(err => alert("Failed to restore: " + err));
-                                                                    }}
-                                                                    className="px-2 py-0.5 bg-blue-600/20 text-blue-400 text-xs rounded border border-blue-600/30 hover:bg-blue-600/30 transition-colors"
-                                                                >
-                                                                    Show Host Window
-                                                                </button>
-                                                            )}
                                                         </div>
                                                     </div>
                                                     <div className="w-px h-8 bg-gray-700"></div>
@@ -273,34 +390,6 @@ const SettingsModal = ({
                                                     <div ref={logEndRef} />
                                                 </div>
                                             </div>
-
-                                            {!isWeb && (
-                                                <div className="flex items-center justify-between pt-4 border-t border-gray-700">
-                                                    <div>
-                                                        <h4 className="text-sm font-medium text-white">Run in Background</h4>
-                                                        <p className="text-xs text-gray-500">Hide window on close but keep server running. Restore via Web UI.</p>
-                                                    </div>
-                                                    {/* Minimize Logic here or separate? Keep local state for minimize pref */}
-                                                    <button
-                                                        onClick={() => {
-                                                            const newVal = !minimizeOnClose;
-                                                            setMinimizeOnClose(newVal);
-                                                            localStorage.setItem('minimizeOnClose', newVal.toString());
-                                                            // @ts-ignore
-                                                            if (window.go) window.go.main.App.SetMinimizeOnClose(newVal);
-                                                        }}
-                                                        className={clsx(
-                                                            "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
-                                                            minimizeOnClose ? "bg-blue-600" : "bg-gray-700"
-                                                        )}
-                                                    >
-                                                        <span className={clsx(
-                                                            "inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200",
-                                                            minimizeOnClose ? "translate-x-6" : "translate-x-1"
-                                                        )} />
-                                                    </button>
-                                                </div>
-                                            )}
                                         </div>
                                     </div>
                                 )}
@@ -311,39 +400,86 @@ const SettingsModal = ({
                                             <h4 className="text-lg font-medium text-white mb-1">Storage Management</h4>
                                             <p className="text-sm text-gray-500 mb-4">Manage local data, caches, and configuration.</p>
 
-                                            <div className="space-y-4">
-                                                <div className="bg-black/30 rounded-xl p-4 border border-gray-700/50 flex items-center justify-between">
-                                                    <div>
-                                                        <h5 className="text-sm font-medium text-gray-200">Local App Folder</h5>
-                                                        <p className="text-xs text-gray-500">Contains logs, thumbnails, and temporary files in your user profile.</p>
+                                            <div className="flex flex-col gap-3">
+                                                <button
+                                                    onClick={() => {
+                                                        // @ts-ignore
+                                                        if (window.go) window.go.main.App.OpenAppDataFolder();
+                                                    }}
+                                                    className="flex items-center justify-between p-4 bg-gray-700/30 hover:bg-gray-700/50 border border-gray-700 rounded-xl transition-all group"
+                                                >
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="p-2 bg-blue-500/10 text-blue-400 rounded-lg group-hover:bg-blue-500/20 transition-colors">
+                                                            <FolderOpen size={20} />
+                                                        </div>
+                                                        <div className="text-left">
+                                                            <h5 className="text-sm font-medium text-gray-200">Open App Data Folder</h5>
+                                                            <p className="text-xs text-gray-500">Access logs and config files.</p>
+                                                        </div>
                                                     </div>
-                                                    <div className="flex gap-2">
+                                                    <ExternalLink size={16} className="text-gray-500 group-hover:text-white transition-colors" />
+                                                </button>
+
+                                                <button
+                                                    onClick={handleClearData}
+                                                    className="flex items-center justify-between p-4 bg-red-500/5 hover:bg-red-500/10 border border-red-500/20 rounded-xl transition-all group"
+                                                >
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="p-2 bg-red-500/10 text-red-400 rounded-lg group-hover:bg-red-500/20 transition-colors">
+                                                            <Trash2 size={20} />
+                                                        </div>
+                                                        <div className="text-left">
+                                                            <h5 className="text-sm font-medium text-gray-200">Reset Application</h5>
+                                                            <p className="text-xs text-gray-500">Clear all data and restart YAVAM.</p>
+                                                        </div>
+                                                    </div>
+                                                    <AlertTriangle size={16} className="text-red-500/50 group-hover:text-red-400 transition-colors" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {activeTab === 'about' && (
+                                    <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                                        <div className="flex flex-col items-center justify-center pt-8 h-full">
+                                            {/* Horizontal Card */}
+                                            <div className="bg-gray-800/50 border border-gray-700/50 rounded-2xl p-8 flex items-center gap-8 shadow-2xl max-w-xl w-full">
+                                                {/* Logo */}
+                                                <div className="w-32 h-32 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center shrink-0 shadow-lg shadow-blue-900/30">
+                                                    <span className="text-6xl font-bold text-white select-none">Y</span>
+                                                </div>
+
+                                                {/* Info */}
+                                                <div className="flex-1 text-left space-y-4">
+                                                    <div>
+                                                        <h2 className="text-4xl font-bold text-white tracking-tight">YAVAM</h2>
+                                                        <p className="text-gray-400 text-sm mt-1">Yet Another VaM Addon Manager</p>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-3 pt-2">
+                                                        <span className="px-2.5 py-1 bg-gray-700/50 rounded-md text-xs font-mono text-gray-300 border border-gray-600/50">
+                                                            {appVersion}
+                                                        </span>
+                                                        <div className="h-4 w-px bg-gray-700"></div>
                                                         <button
                                                             onClick={() => {
                                                                 // @ts-ignore
-                                                                if (window.go) window.go.main.App.OpenAppDataFolder();
+                                                                if (window.runtime) window.runtime.BrowserOpenURL("https://github.com/fivelsystems/yavam");
+                                                                else window.open("https://github.com/fivelsystems/yavam", "_blank");
                                                             }}
-                                                            className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded-lg transition-colors border border-gray-600"
+                                                            className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-xs font-medium uppercase tracking-wide group"
                                                         >
-                                                            Open Location
+                                                            <Github size={14} className="group-hover:text-blue-400 transition-colors" />
+                                                            <span>Repository</span>
                                                         </button>
                                                     </div>
                                                 </div>
+                                            </div>
 
-                                                <div className="bg-red-500/10 rounded-xl p-4 border border-red-500/20">
-                                                    <h5 className="text-sm font-medium text-red-400 mb-2">Danger Zone</h5>
-                                                    <div className="flex items-center justify-between">
-                                                        <p className="text-xs text-red-300/70 max-w-[70%] leading-relaxed">
-                                                            Clearing data will reset all settings, cached thumbnails, and application state. A restart is required immediately after cleaning.
-                                                        </p>
-                                                        <button
-                                                            onClick={handleClearData}
-                                                            className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs rounded-lg transition-colors shadow-lg shadow-red-900/20"
-                                                        >
-                                                            Clear All Data & Restart
-                                                        </button>
-                                                    </div>
-                                                </div>
+                                            <div className="mt-12 text-center space-y-1">
+                                                <p className="text-gray-500 text-sm">Designed & Developed by <span className="text-gray-300 font-medium">FivelSystems</span></p>
+                                                <p className="text-[10px] text-gray-600 uppercase tracking-widest">Copyright © 2026</p>
                                             </div>
                                         </div>
                                     </div>
@@ -352,13 +488,40 @@ const SettingsModal = ({
                         </div>
 
                         {/* Footer */}
-                        <div className="p-4 bg-gray-900/50 border-t border-gray-700 flex justify-between items-center shrink-0">
-                            <span className="text-xs text-gray-500 font-mono">{appVersion}</span>
+                        <div className="p-4 bg-gray-900/50 border-t border-gray-700 flex justify-end items-center shrink-0 gap-3">
                             <button
-                                onClick={onClose}
-                                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors"
+                                onClick={handleCancel}
+                                className="px-4 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg font-medium transition-colors text-sm"
                             >
-                                Done
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleApply}
+                                disabled={!hasChanges}
+                                className={clsx(
+                                    "px-4 py-2 rounded-lg font-medium transition-colors text-sm flex items-center gap-2",
+                                    hasChanges
+                                        ? "bg-gray-700 hover:bg-gray-600 text-white"
+                                        : "bg-gray-800 text-gray-500 cursor-not-allowed"
+                                )}
+                            >
+                                <Check size={16} />
+                                Apply
+                            </button>
+                            <button
+                                onClick={handleSaveAndClose}
+                                className={clsx(
+                                    "px-4 py-2 rounded-lg font-medium transition-colors text-sm flex items-center gap-2",
+                                    hasChanges
+                                        ? "bg-blue-600 hover:bg-blue-500 text-white"
+                                        : "bg-blue-600/50 hover:bg-blue-600/60 text-white/50" // Still allow saving (essentially just Close) but subtle? Or always active?
+                                    // Standard behavior: Save & Close is always active (acts as OK), or disabled if invalid.
+                                    // The user said "Save and close just closes the modal after saving". This implies it saves current buffer.
+                                    // If no changes, it just closes. 
+                                )}
+                            >
+                                <Save size={16} />
+                                Save & Close
                             </button>
                         </div>
                     </motion.div>

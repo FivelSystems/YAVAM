@@ -26,7 +26,7 @@ interface SidebarProps {
     onSidebarAction: (action: 'enable-all' | 'disable-all' | 'resolve-all', groupType: 'creator' | 'type' | 'status', key: string) => void;
 }
 
-const SidebarLibraryItem = ({ lib, idx, isActive, onSelect, onRemove }: { lib: string, idx: number, isActive: boolean, onSelect: () => void, onRemove?: (idx: number) => void }) => {
+const SidebarLibraryItem = ({ lib, idx, isActive, count, onSelect, onRemove }: { lib: string, idx: number, isActive: boolean, count?: number, onSelect: () => void, onRemove?: (idx: number) => void }) => {
     const controls = useDragControls();
     return (
         <Reorder.Item value={lib} dragListener={false} dragControls={controls} className="relative" layout>
@@ -39,8 +39,9 @@ const SidebarLibraryItem = ({ lib, idx, isActive, onSelect, onRemove }: { lib: s
                 </div>
 
                 <div className="flex-1 min-w-0" onClick={onSelect}>
-                    <div className={clsx("text-sm font-medium truncate", isActive ? "text-blue-400" : "text-gray-300")}>
-                        {lib.split(/[/\\]/).pop()}
+                    <div className={clsx("text-sm font-medium truncate flex justify-between items-center", isActive ? "text-blue-400" : "text-gray-300")}>
+                        <span className="truncate">{lib.split(/[/\\]/).pop()}</span>
+                        {count !== undefined && <span className="text-[10px] bg-gray-900/50 text-gray-400 px-1.5 rounded-full ml-1">{count}</span>}
                     </div>
                     <div className="text-[10px] text-gray-600 truncate" title={lib}>{lib}</div>
                 </div>
@@ -72,6 +73,17 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
     const [collapsed, setCollapsed] = useState({ status: false, creators: true, types: false });
     const [isLibDropdownOpen, setIsLibDropdownOpen] = useState(false);
     const [contextMenu, setContextMenu] = useState<{ open: boolean, x: number, y: number, groupType: 'creator' | 'type' | 'status', key: string } | null>(null);
+    const [libraryCounts, setLibraryCounts] = useState<Record<string, number>>({});
+
+    useEffect(() => {
+        // @ts-ignore
+        if (window.go && window.go.main && window.go.main.App && libraries.length > 0) {
+            // @ts-ignore
+            window.go.main.App.GetLibraryCounts(libraries).then(counts => {
+                setLibraryCounts(counts);
+            });
+        }
+    }, [libraries]);
 
     const currentLibPath = libraries && libraries[currentLibIndex] ? libraries[currentLibIndex] : "No Library Selected";
     const currentLibName = currentLibPath.split(/[/\\]/).pop() || "Library";
@@ -176,6 +188,7 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
                                                 lib={lib}
                                                 idx={idx}
                                                 isActive={idx === currentLibIndex}
+                                                count={libraryCounts[lib]}
                                                 onSelect={() => { onSelectLibrary(idx); setIsLibDropdownOpen(false); }}
                                                 onRemove={onRemoveLibrary}
                                             />
