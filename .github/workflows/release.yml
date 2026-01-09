@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read Version from wails.json
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(jq -r .info.productVersion wails.json)
+          echo "VERSION=v$VERSION" >> $GITHUB_ENV
+          echo "Detected version: v$VERSION"
+
+      - name: Check if Release Exists
+        id: check_release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view ${{ env.VERSION }} >/dev/null 2>&1; then
+            echo "Release ${{ env.VERSION }} already exists. Skipping."
+            echo "EXISTS=true" >> $GITHUB_ENV
+          else
+            echo "Release ${{ env.VERSION }} does not exist. Proceeding with build."
+            echo "EXISTS=false" >> $GITHUB_ENV
+          fi
+
+      - name: Setup Go
+        if: env.EXISTS == 'false'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          check-latest: true
+
+      - name: Setup Node
+        if: env.EXISTS == 'false'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Wails
+        if: env.EXISTS == 'false'
+        shell: bash
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Build Windows App
+        if: env.EXISTS == 'false'
+        shell: bash
+        run: |
+          export PATH=$PATH:$(go env GOPATH)/bin
+          wails build -platform windows/amd64
+
+      - name: Create Release
+        if: env.EXISTS == 'false'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.VERSION }}
+          name: YAVAM ${{ env.VERSION }}
+          draft: false
+          prerelease: false
+          files: |
+            build/bin/YAVAM.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
