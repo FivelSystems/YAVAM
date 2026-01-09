@@ -101,51 +101,71 @@ function App() {
     const handleAddLibrary = (path: string) => {
         if (!path) return;
 
-        setLibraries(prev => {
-            if (prev.includes(path)) {
-                // Already exists, just switch to it
-                const idx = prev.indexOf(path);
-                setActiveLibIndex(idx);
-                setActiveLibraryPath(path);
-                localStorage.setItem("activeLibraryPath", path);
-                return prev;
-            }
-            const newLibs = [...prev, path];
-            localStorage.setItem("savedLibraries", JSON.stringify(newLibs));
-
-            // Switch to new
-            setActiveLibIndex(newLibs.length - 1);
+        if (libraries.includes(path)) {
             setActiveLibraryPath(path);
             localStorage.setItem("activeLibraryPath", path);
-            return newLibs;
-        });
+            return;
+        }
+
+        const newLibs = [...libraries, path];
+        setLibraries(newLibs);
+        localStorage.setItem("savedLibraries", JSON.stringify(newLibs));
+
+        setActiveLibraryPath(path);
+        localStorage.setItem("activeLibraryPath", path);
+
+        // Sync Backend
+        // @ts-ignore
+        if (window.go && window.go.main && window.go.main.App) {
+            // @ts-ignore
+            window.go.main.App.AddConfiguredLibrary(path);
+        }
     };
 
-    const handleRemoveLibrary = (index: number) => {
+    const handleRemoveLibrary = (path: string) => {
         setLibraries(prev => {
+            const index = prev.indexOf(path);
+            if (index === -1) return prev;
+
             const newLibs = [...prev];
             newLibs.splice(index, 1);
             localStorage.setItem("savedLibraries", JSON.stringify(newLibs));
 
-            // Adjust active index if needed
             if (activeLibIndex >= newLibs.length) {
-                setActiveLibIndex(newLibs.length - 1);
-                const path = newLibs[newLibs.length - 1] || "";
-                setActiveLibraryPath(path);
-                localStorage.setItem("activeLibraryPath", path);
+                const newIdx = Math.max(0, newLibs.length - 1);
+                setActiveLibIndex(newIdx);
+                const newPath = newLibs[newIdx] || "";
+                setActiveLibraryPath(newPath);
+                localStorage.setItem("activeLibraryPath", newPath);
             } else if (index === activeLibIndex) {
-                // Removed current, switching to same index (which is now next item) or prev?
-                // Actually if I remove index 0, the new index 0 is valid.
-                const path = newLibs[activeLibIndex] || "";
-                setActiveLibraryPath(path);
-                localStorage.setItem("activeLibraryPath", path);
+                const newPath = newLibs[activeLibIndex] || "";
+                setActiveLibraryPath(newPath);
+                localStorage.setItem("activeLibraryPath", newPath);
             } else if (index < activeLibIndex) {
-                // Removed item before current, shift index down
                 setActiveLibIndex(prevIdx => prevIdx - 1);
+            }
+
+            // @ts-ignore
+            if (window.go && window.go.main && window.go.main.App) {
+                // @ts-ignore
+                window.go.main.App.RemoveConfiguredLibrary(path);
             }
 
             return newLibs;
         });
+    };
+
+    const handleReorderLibraries = (newOrder: string[]) => {
+        setLibraries(newOrder);
+        // @ts-ignore
+        if (window.go && window.go.main && window.go.main.App) {
+            // @ts-ignore
+            window.go.main.App.ReorderConfiguredLibraries(newOrder);
+        }
+        const newIdx = newOrder.indexOf(activeLibraryPath);
+        if (newIdx !== -1) {
+            setActiveLibIndex(newIdx);
+        }
     };
 
     const handleBrowseAndAdd = async () => {
@@ -165,15 +185,32 @@ function App() {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
     // Library Management
-    const [libraries, setLibraries] = useState<string[]>(() => {
-        const saved = localStorage.getItem("savedLibraries");
-        const initial = saved ? JSON.parse(saved) : [];
-        const current = localStorage.getItem("activeLibraryPath");
-        if (current && !initial.includes(current)) {
-            return [current, ...initial];
+    const [libraries, setLibraries] = useState<string[]>([]);
+
+    // Fetch and Migrate Libraries
+    useEffect(() => {
+        // @ts-ignore
+        if (window.go) {
+            // @ts-ignore
+            window.go.main.App.GetConfiguredLibraries().then(async (serverLibs: string[]) => {
+                const saved = localStorage.getItem("savedLibraries");
+                const localLibs = saved ? JSON.parse(saved) : [];
+
+                if (serverLibs.length === 0 && localLibs.length > 0) {
+                    console.log("Migrating libraries to backend storage...");
+                    for (const lib of localLibs) {
+                        // @ts-ignore
+                        await window.go.main.App.AddConfiguredLibrary(lib);
+                    }
+                    // @ts-ignore
+                    const migrated = await window.go.main.App.GetConfiguredLibraries();
+                    setLibraries(migrated);
+                } else {
+                    setLibraries(serverLibs);
+                }
+            });
         }
-        return initial.length > 0 ? initial : [];
-    });
+    }, []);
 
     // Determine active index based on current vamPath or default to 0
     const [activeLibIndex, setActiveLibIndex] = useState(() => {
@@ -532,20 +569,22 @@ function App() {
         }
     }, []);
 
+    // Scan packages only when the active library PATH changes
     useEffect(() => {
         if (activeLibraryPath) {
             scanPackages();
         }
-        // Sync activeLibIndex with activeLibraryPath
+    }, [activeLibraryPath]);
+
+    // Sync Active Index when libraries list changes (e.g. reorder)
+    useEffect(() => {
         if (activeLibraryPath && libraries.length > 0) {
-            // Case-insensitive match to find index
             const idx = libraries.findIndex(l => l.toLowerCase() === activeLibraryPath.toLowerCase());
-            // Only update if different to avoid potential loops (though setter handles identity check usually)
             if (idx !== -1 && idx !== activeLibIndex) {
                 setActiveLibIndex(idx);
             }
         }
-    }, [activeLibraryPath, libraries]);
+    }, [libraries]); // activeLibraryPath is stable usually, but we can include it. Split logic is key.
 
     // Sync libraries to server if running
     useEffect(() => {
@@ -1211,7 +1250,10 @@ function App() {
                     localIP={localIP}
                     logs={serverLogs}
                     setLogs={setServerLogs}
+                    // @ts-ignore
                     isWeb={!window.go}
+
+
                 />
                 <ConfirmationModal
                     isOpen={deleteConfirm.open}
@@ -1286,7 +1328,8 @@ function App() {
                             // @ts-ignore
                             onAddLibrary={window.go ? handleBrowseAndAdd : undefined}
                             // @ts-ignore
-                            onRemoveLibrary={window.go ? handleRemoveLibrary : undefined}
+                            onRemoveLibrary={window.go ? (index) => handleRemoveLibrary(libraries[index]) : undefined}
+                            onReorderLibraries={handleReorderLibraries}
                         />
                     </div>
                 </div>

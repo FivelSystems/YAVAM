@@ -23,6 +23,7 @@ type Manager struct {
 	scanner  *scanner.Scanner
 	mu       sync.Mutex
 	DataPath string
+	config   *Config
 }
 
 func NewManager() *Manager {
@@ -35,6 +36,7 @@ func NewManager() *Manager {
 		scanner:  scanner.NewScanner(),
 		DataPath: dataPath,
 	}
+	m.LoadConfig()
 	return m
 }
 
@@ -75,8 +77,21 @@ func (m *Manager) ScanAndAnalyze(ctx context.Context, rootPath string, onPackage
 		wg.Add(1)
 		go func(p models.VarPackage) {
 			defer wg.Done()
+
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
 			sem <- struct{}{}        // Acquire
 			defer func() { <-sem }() // Release
+
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 
 			meta, thumbBytes, categories, err := parser.ParseVarMetadata(p.FilePath)
 			if err == nil {
@@ -190,6 +205,12 @@ func (m *Manager) ScanAndAnalyze(ctx context.Context, rootPath string, onPackage
 			p.Tags = normalizedTags
 
 			// Thread-safe callbacks
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
 			cbMu.Lock()
 			current := processed + 1
 			processed = current

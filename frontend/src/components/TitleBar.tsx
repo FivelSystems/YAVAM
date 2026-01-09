@@ -25,7 +25,7 @@ const TitleBar = () => {
             <div className="flex-1 h-full wails-drag flex items-center px-4 gap-2">
                 {/* App Icon/Title can go here if desired */}
                 <div className="w-4 h-4 rounded bg-blue-600 shadow-[0_0_10px_rgba(37,99,235,0.5)]"></div>
-                <span className="text-xs font-bold text-gray-400 tracking-wider">VAR MANAGER</span>
+                <span className="text-xs font-bold text-gray-400 tracking-wider">YAVAM</span>
             </div>
 
             {/* Window Controls - Desktop Only */}
