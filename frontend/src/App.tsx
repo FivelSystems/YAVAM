@@ -406,6 +406,12 @@ function App() {
         if (window.go && window.runtime) {
             // @ts-ignore
             window.go.main.App.GetLocalIP().then(ip => setLocalIP(ip));
+
+            // Sync MinimizeOnClose - Start/Stop Tray
+            const storedMinimize = localStorage.getItem('minimizeOnClose') === 'true';
+            // @ts-ignore
+            window.go.main.App.SetMinimizeOnClose(storedMinimize);
+
             // @ts-ignore
             window.runtime.EventsOn("server:log", (msg: string) => {
                 setServerLogs(prev => [...prev, msg].slice(-100));
@@ -491,6 +497,16 @@ function App() {
 
 
     // Filters
+
+    // Update Title
+    useEffect(() => {
+        if (activeLibraryPath) {
+            const libName = activeLibraryPath.split(/[/\\]/).pop() || activeLibraryPath;
+            document.title = `Library - ${libName}`;
+        } else {
+            document.title = "YAVAM";
+        }
+    }, [activeLibraryPath]);
 
     // Web Mode Detection
     useEffect(() => {
