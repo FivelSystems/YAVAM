@@ -33,9 +33,9 @@ type App struct {
 }
 
 // NewApp creates a new App application struct
-func NewApp(assets fs.FS) *App {
+func NewApp(assets fs.FS, m *manager.Manager) *App {
 	return &App{
-		manager: manager.NewManager(),
+		manager: m,
 		assets:  assets,
 	}
 }
@@ -321,4 +321,34 @@ func (a *App) ResolveConflicts(keepPath string, others []string, libraryPath str
 
 func (a *App) onTrayExit() {
 	// Cleanup
+}
+
+// OpenAppDataFolder opens the application data directory
+func (a *App) OpenAppDataFolder() {
+	a.manager.OpenFolder(a.manager.DataPath)
+}
+
+// ClearAppData deletes the application data directory and resets configuration
+func (a *App) ClearAppData() error {
+	// 1. Delete the active data path
+	if err := os.RemoveAll(a.manager.DataPath); err != nil {
+		return err
+	}
+
+	// 2. Delete the pointer file (reset configuration)
+	configDir, _ := os.UserConfigDir()
+	pointerFile := filepath.Join(configDir, "YAVAM", "root.json")
+	os.Remove(pointerFile) // Ignore error if file doesn't exist
+
+	return nil
+}
+
+// IsConfigured returns true if the app has been set up
+func (a *App) IsConfigured() bool {
+	return a.manager.IsConfigured()
+}
+
+// FinishSetup completes the setup wizard
+func (a *App) FinishSetup() error {
+	return a.manager.FinishSetup()
 }

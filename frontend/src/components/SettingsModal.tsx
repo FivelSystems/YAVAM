@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, LayoutGrid, Network, Terminal, AlertTriangle, ExternalLink } from "lucide-react";
+import { X, LayoutGrid, Network, Terminal, AlertTriangle, ExternalLink, HardDrive } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from 'clsx';
 
@@ -39,7 +39,7 @@ const SettingsModal = ({
     isWeb
 }: SettingsModalProps) => {
 
-    const [activeTab, setActiveTab] = useState<'general' | 'network'>('general');
+    const [activeTab, setActiveTab] = useState<'general' | 'network' | 'storage'>('general');
     const [minimizeOnClose, setMinimizeOnClose] = useState(() => localStorage.getItem('minimizeOnClose') === 'true');
 
     const logEndRef = useRef<HTMLDivElement>(null);
@@ -53,8 +53,29 @@ const SettingsModal = ({
         // Conditional Tabs
         ...(!isWeb ? [
             { id: 'network', label: 'Network', icon: Network },
+            { id: 'storage', label: 'Storage', icon: HardDrive },
         ] : [])
     ] as const;
+
+    const handleClearData = async () => {
+        if (!confirm("Are you sure you want to clear ALL data? This will reset all settings, thumbnails, and application state.\n\nThe application will close immediately.")) return;
+
+        // Clear LocalStorage
+        localStorage.clear();
+
+        // Clear Backend Data
+        try {
+            // @ts-ignore
+            if (window.go) await window.go.main.App.ClearAppData();
+        } catch (e) {
+            console.error("Failed to clear app data", e);
+        }
+
+        // Quit
+        // @ts-ignore
+        if (window.runtime) window.runtime.Quit();
+        else window.location.reload();
+    };
 
     return (
         <AnimatePresence>
@@ -267,12 +288,56 @@ const SettingsModal = ({
                                         </div>
                                     </div>
                                 )}
+
+                                {activeTab === 'storage' && (
+                                    <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                                        <div>
+                                            <h4 className="text-lg font-medium text-white mb-1">Storage Management</h4>
+                                            <p className="text-sm text-gray-500 mb-4">Manage local data, caches, and configuration.</p>
+
+                                            <div className="space-y-4">
+                                                <div className="bg-black/30 rounded-xl p-4 border border-gray-700/50 flex items-center justify-between">
+                                                    <div>
+                                                        <h5 className="text-sm font-medium text-gray-200">Local App Folder</h5>
+                                                        <p className="text-xs text-gray-500">Contains logs, thumbnails, and temporary files in your user profile.</p>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={() => {
+                                                                // @ts-ignore
+                                                                if (window.go) window.go.main.App.OpenAppDataFolder();
+                                                            }}
+                                                            className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded-lg transition-colors border border-gray-600"
+                                                        >
+                                                            Open Location
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <div className="bg-red-500/10 rounded-xl p-4 border border-red-500/20">
+                                                    <h5 className="text-sm font-medium text-red-400 mb-2">Danger Zone</h5>
+                                                    <div className="flex items-center justify-between">
+                                                        <p className="text-xs text-red-300/70 max-w-[70%] leading-relaxed">
+                                                            Clearing data will reset all settings, cached thumbnails, and application state. A restart is required immediately after cleaning.
+                                                        </p>
+                                                        <button
+                                                            onClick={handleClearData}
+                                                            className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs rounded-lg transition-colors shadow-lg shadow-red-900/20"
+                                                        >
+                                                            Clear All Data & Restart
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
                         {/* Footer */}
                         <div className="p-4 bg-gray-900/50 border-t border-gray-700 flex justify-between items-center shrink-0">
-                            <span className="text-xs text-gray-500 font-mono">v1.1.1-e</span>
+                            <span className="text-xs text-gray-500 font-mono">v1.1.2-beta</span>
                             <button
                                 onClick={onClose}
                                 className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors"

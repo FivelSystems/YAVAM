@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"varmanager/pkg/manager"
 
 	"github.com/energye/systray"
 	"github.com/wailsapp/wails/v2"
@@ -13,8 +14,11 @@ import (
 var assets embed.FS
 
 func main() {
+	// Create manager
+	mgr := manager.NewManager()
+
 	// Create an instance of the app structure
-	app := NewApp(assets)
+	app := NewApp(assets, mgr)
 
 	// Start System Tray in a goroutine (so Wails can run on main thread)
 	go func() {
@@ -36,6 +40,7 @@ func main() {
 		Bind: []interface{}{
 			app,
 		},
+		// Removed Custom Windows Webview Options (Using Default)
 		DragAndDrop: &options.DragAndDrop{
 			EnableFileDrop:     true,
 			DisableWebViewDrop: false,

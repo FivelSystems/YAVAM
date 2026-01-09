@@ -29,6 +29,10 @@ type Server struct {
 	libraries []string // List of allowed library paths
 	assets    fs.FS    // Embedded frontend assets
 	onRestore func()
+
+	// SSE Clients
+	clients   map[chan string]bool
+	clientsMu sync.Mutex
 }
 
 func NewServer(ctx context.Context, m *manager.Manager, assets fs.FS, onRestore func()) *Server {
@@ -38,6 +42,7 @@ func NewServer(ctx context.Context, m *manager.Manager, assets fs.FS, onRestore 
 		onRestore: onRestore,
 		libraries: []string{},
 		assets:    assets,
+		clients:   make(map[chan string]bool),
 	}
 }
 
@@ -102,6 +107,31 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// Broadcast sends a message to all connected SSE clients
+func (s *Server) Broadcast(eventType string, data interface{}) {
+	s.clientsMu.Lock()
+	defer s.clientsMu.Unlock()
+
+	payload := map[string]interface{}{
+		"event": eventType,
+		"data":  data,
+	}
+	jsonBytes, err := json.Marshal(payload)
+	if err != nil {
+		fmt.Printf("Error marshalling broadcast: %v\n", err)
+		return
+	}
+	msg := fmt.Sprintf("data: %s\n\n", string(jsonBytes))
+
+	for clientChan := range s.clients {
+		select {
+		case clientChan <- msg:
+		default:
+			// Drop message if channel is full to prevent blocking
+		}
+	}
+}
+
 func (s *Server) Start(port string, activePath string, libraries []string) error {
 	s.mu.Lock()
 	if s.running {
@@ -118,6 +148,39 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 	s.libraries = libraries
 
 	mux := http.NewServeMux()
+
+	// SSE Endpoint
+	mux.HandleFunc("/api/events", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		clientChan := make(chan string, 1000) // Increase buffer
+		s.clientsMu.Lock()
+		s.clients[clientChan] = true
+		s.clientsMu.Unlock()
+
+		defer func() {
+			s.clientsMu.Lock()
+			delete(s.clients, clientChan)
+			s.clientsMu.Unlock()
+			close(clientChan)
+		}()
+
+		notify := r.Context().Done()
+		for {
+			select {
+			case <-notify:
+				return
+			case msg := <-clientChan:
+				fmt.Fprint(w, msg)
+				if flusher, ok := w.(http.Flusher); ok {
+					flusher.Flush()
+				}
+			}
+		}
+	})
 
 	// API Endpoint
 	mux.HandleFunc("/api/packages", func(w http.ResponseWriter, r *http.Request) {
@@ -157,7 +220,15 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		var pkgs []models.VarPackage
 		err := s.manager.ScanAndAnalyze(r.Context(), targetPath, func(p models.VarPackage) {
 			pkgs = append(pkgs, p)
-		}, nil)
+			// Broadcast package to web clients (incremental update)
+			s.Broadcast("package:scanned", p)
+		}, func(current, total int) {
+			// Broadcast progress to web clients
+			s.Broadcast("scan:progress", map[string]interface{}{
+				"current": current,
+				"total":   total,
+			})
+		})
 		if err != nil {
 			s.writeError(w, err.Error(), 500)
 			return
