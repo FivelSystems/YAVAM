@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -24,6 +25,9 @@ import (
 
 //go:embed build/windows/icon.ico
 var iconData []byte
+
+//go:embed wails.json
+var wailsConfig []byte
 
 // App struct
 type App struct {
@@ -130,6 +134,19 @@ func (a *App) GetUserDownloadsDir() string {
 // Greet returns a greeting for the given name
 func (a *App) Greet(name string) string {
 	return fmt.Sprintf("Hello %s, It's show time!", name)
+}
+
+// GetAppVersion returns the current application version
+func (a *App) GetAppVersion() string {
+	var cfg struct {
+		Info struct {
+			ProductVersion string `json:"productVersion"`
+		} `json:"info"`
+	}
+	if err := json.Unmarshal(wailsConfig, &cfg); err != nil {
+		return "Error"
+	}
+	return cfg.Info.ProductVersion
 }
 
 // ScanPackages triggers the scan process

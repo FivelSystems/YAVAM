@@ -21,6 +21,8 @@ export function DownloadPackage(arg1:string,arg2:string):Promise<void>;
 
 export function FinishSetup():Promise<void>;
 
+export function GetAppVersion():Promise<string>;
+
 export function GetConfiguredLibraries():Promise<Array<string>>;
 
 export function GetFilters(arg1:string):Promise<Array<string>>;
