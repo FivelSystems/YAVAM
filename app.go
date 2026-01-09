@@ -14,6 +14,8 @@ import (
 
 	_ "embed"
 
+	stdruntime "runtime"
+
 	"github.com/energye/systray"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -242,26 +244,20 @@ func (a *App) GetLocalIP() string {
 
 func (a *App) SetMinimizeOnClose(val bool) {
 	a.minimizeOnClose = val
-	if val {
-		if !a.trayRunning {
-			a.trayRunning = true
-			// Start systray
-			go func() {
-				systray.Run(a.onTrayReady, a.onTrayExit)
-			}()
-		}
-	} else {
-		if a.trayRunning {
-			systray.Quit()
-			a.trayRunning = false
-		}
-	}
 }
 
 func (a *App) onBeforeClose(ctx context.Context) (prevent bool) {
-	// Only minimize to tray if Server is Running AND user enabled the option
-	if a.minimizeOnClose && a.server != nil && a.server.IsRunning() && !a.isQuitting {
+	// Minimize to tray if option enabled
+	if a.minimizeOnClose && !a.isQuitting {
 		runtime.WindowHide(ctx)
+		if !a.trayRunning {
+			a.trayRunning = true
+			// Start systray loop in a goroutine with thread lock
+			go func() {
+				stdruntime.LockOSThread()
+				systray.Run(a.onTrayReady, a.onTrayExit)
+			}()
+		}
 		return true
 	}
 
@@ -303,12 +299,22 @@ func (a *App) onTrayReady() {
 	systray.SetTitle("YAVAM")
 	systray.SetTooltip("YAVAM")
 
+	// Handle Left Click on Icon to Restore
+	systray.SetOnClick(func(menu systray.IMenu) {
+		runtime.WindowShow(a.ctx)
+		if runtime.WindowIsMinimised(a.ctx) {
+			runtime.WindowUnminimise(a.ctx)
+		}
+		systray.Quit()
+	})
+
 	mShow := systray.AddMenuItem("Show Window", "Restore the window")
 	mShow.Click(func() {
 		runtime.WindowShow(a.ctx)
 		if runtime.WindowIsMinimised(a.ctx) {
 			runtime.WindowUnminimise(a.ctx)
 		}
+		systray.Quit() // Stop the tray loop and remove icon
 	})
 
 	mQuit := systray.AddMenuItem("Quit", "Quit the application")
@@ -341,7 +347,7 @@ func (a *App) ResolveConflicts(keepPath string, others []string, libraryPath str
 }
 
 func (a *App) onTrayExit() {
-	// Cleanup
+	a.trayRunning = false
 }
 
 // OpenAppDataFolder opens the application data directory
