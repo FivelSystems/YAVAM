@@ -44,3 +44,24 @@ export namespace models {
 
 }
 
+export namespace updater {
+	
+	export class UpdateInfo {
+	    version: string;
+	    changelog: string;
+	    downloadUrl: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = source["version"];
+	        this.changelog = source["changelog"];
+	        this.downloadUrl = source["downloadUrl"];
+	    }
+	}
+
+}
+

@@ -15,6 +15,7 @@ import ConfirmationModal from './components/ConfirmationModal';
 import RightSidebar from './components/RightSidebar';
 import TitleBar from './components/TitleBar';
 import SetupWizard from './components/SetupWizard';
+import { UpgradeModal } from "./components/UpgradeModal";
 
 // Define types based on our Go models
 export interface VarPackage {
@@ -44,6 +45,11 @@ function App() {
     const [needsSetup, setNeedsSetup] = useState(false);
     const [isCancelling, setIsCancelling] = useState(false);
 
+    // Update State
+    const [updateInfo, setUpdateInfo] = useState<any>(null);
+    const [showUpdateModal, setShowUpdateModal] = useState(false);
+    const [isUpdating, setIsUpdating] = useState(false);
+
     useEffect(() => {
         // @ts-ignore
         if (window.go && window.go.main && window.go.main.App) {
@@ -51,8 +57,54 @@ function App() {
             window.go.main.App.IsConfigured().then((configured: boolean) => {
                 if (!configured) setNeedsSetup(true);
             });
+
+            // Auto Update Check
+            setTimeout(async () => {
+                try {
+                    // @ts-ignore
+                    const info = await window.go.main.App.CheckForUpdates();
+                    if (info) {
+                        setUpdateInfo(info);
+                        setShowUpdateModal(true);
+                    }
+                } catch (e) {
+                    console.error("Failed to check updates:", e);
+                }
+            }, 3000);
+        } else {
+            // Web Mode Update Check
+            setTimeout(async () => {
+                try {
+                    const res = await fetch("/api/version/check");
+                    if (res.ok) {
+                        const info = await res.json();
+                        if (info) {
+                            addToast(`New Version ${info.version} Available!`, 'info');
+                        }
+                    }
+                } catch (e) {
+                    console.error("Web update check failed:", e);
+                }
+            }, 3000);
         }
     }, []);
+
+    const handleUpdate = async () => {
+        if (!updateInfo) return;
+        setIsUpdating(true);
+        try {
+            // @ts-ignore
+            await window.go.main.App.ApplyUpdate(updateInfo.downloadUrl);
+            // Restart
+            // @ts-ignore
+            await window.go.main.App.RestartApp();
+        } catch (e: any) {
+            console.error("Update failed:", e);
+            setIsUpdating(false);
+            addToast("Update failed: " + e, 'error');
+            setShowUpdateModal(false);
+        }
+    };
 
     // ... (SSE Listener unchanged) ...
 
@@ -1768,6 +1820,14 @@ function App() {
                     </div>
                 )}
             </AnimatePresence>
+
+            <UpgradeModal
+                open={showUpdateModal}
+                version={updateInfo ? updateInfo.version : ''}
+                onUpdate={handleUpdate}
+                onCancel={() => setShowUpdateModal(false)}
+                downloading={isUpdating}
+            />
 
             {/* Toasts Container */}
             <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end pointer-events-none">
