@@ -44,6 +44,17 @@ const SettingsModal = ({
 
     const [activeTab, setActiveTab] = useState<'general' | 'network' | 'storage'>('general');
     const [minimizeOnClose, setMinimizeOnClose] = useState(() => localStorage.getItem('minimizeOnClose') === 'true');
+    const [appVersion, setAppVersion] = useState("");
+
+    useEffect(() => {
+        // @ts-ignore
+        if (window.go && window.go.main && window.go.main.App) {
+            // @ts-ignore
+            window.go.main.App.GetAppVersion().then(v => setAppVersion("v" + v));
+        } else {
+            setAppVersion("v1.1.3-e (Web)");
+        }
+    }, []);
 
     const logEndRef = useRef<HTMLDivElement>(null);
 
@@ -342,7 +353,7 @@ const SettingsModal = ({
 
                         {/* Footer */}
                         <div className="p-4 bg-gray-900/50 border-t border-gray-700 flex justify-between items-center shrink-0">
-                            <span className="text-xs text-gray-500 font-mono">v1.1.2-beta</span>
+                            <span className="text-xs text-gray-500 font-mono">{appVersion}</span>
                             <button
                                 onClick={onClose}
                                 className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors"

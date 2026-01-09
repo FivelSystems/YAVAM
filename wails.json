@@ -1,5 +1,5 @@
 {
-    "name": "varmanager",
+    "name": "yavam",
     "outputfilename": "YAVAM",
     "frontend:install": "npm install",
     "frontend:build": "npm run build",
@@ -13,7 +13,7 @@
         "companyName": "FivelSystems",
         "productName": "YAVAM",
         "productVersion": "1.1.3-e",
-        "copyright": "Copyright \u00a9 2024",
+        "copyright": "Copyright \u00a9 2026",
         "comments": "Manage your Virt-A-Mate addon packages"
     },
     "wailsjsdir": "./frontend/src",

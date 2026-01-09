@@ -38,6 +38,10 @@ export function FinishSetup() {
   return window['go']['main']['App']['FinishSetup']();
 }
 
+export function GetAppVersion() {
+  return window['go']['main']['App']['GetAppVersion']();
+}
+
 export function GetConfiguredLibraries() {
   return window['go']['main']['App']['GetConfiguredLibraries']();
 }
