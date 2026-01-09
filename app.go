@@ -30,6 +30,7 @@ type App struct {
 	minimizeOnClose bool
 	assets          fs.FS
 	isQuitting      bool
+	trayRunning     bool
 }
 
 // NewApp creates a new App application struct
@@ -242,15 +243,18 @@ func (a *App) GetLocalIP() string {
 func (a *App) SetMinimizeOnClose(val bool) {
 	a.minimizeOnClose = val
 	if val {
-		systray.SetIcon(iconData)
-		systray.SetTitle("YAVAM")
-		systray.SetTooltip("YAVAM")
+		if !a.trayRunning {
+			a.trayRunning = true
+			// Start systray
+			go func() {
+				systray.Run(a.onTrayReady, a.onTrayExit)
+			}()
+		}
 	} else {
-		// Attempts to hide the tray icon by setting an empty icon or stopping it?
-		// Hiding is platform specific and tricky.
-		// For now, we only ensure it APPEARS when enabled.
-		// If disabled, we might leave it or try to hide it if possible.
-		// Assuming user just wants it off by default.
+		if a.trayRunning {
+			systray.Quit()
+			a.trayRunning = false
+		}
 	}
 }
 
@@ -295,8 +299,9 @@ func (a *App) onSecondInstanceLaunch(secondInstanceData options.SecondInstanceDa
 }
 
 func (a *App) onTrayReady() {
-	// We do NOT set the icon here to keep it hidden by default.
-	// It will be set when SetMinimizeOnClose(true) is called.
+	systray.SetIcon(iconData)
+	systray.SetTitle("YAVAM")
+	systray.SetTooltip("YAVAM")
 
 	mShow := systray.AddMenuItem("Show Window", "Restore the window")
 	mShow.Click(func() {
@@ -308,6 +313,22 @@ func (a *App) onTrayReady() {
 
 	mQuit := systray.AddMenuItem("Quit", "Quit the application")
 	mQuit.Click(func() {
+		// Check if server is running
+		if a.server != nil && a.server.IsRunning() {
+			res, err := runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
+				Type:          runtime.QuestionDialog,
+				Title:         "Server Running",
+				Message:       "The web server is currently running. Do you want to stop the server and quit?",
+				Buttons:       []string{"Yes", "No"},
+				DefaultButton: "No",
+				CancelButton:  "No",
+			})
+			if err != nil || res == "No" {
+				return
+			}
+			a.server.Stop()
+		}
+
 		a.isQuitting = true
 		systray.Quit()
 		runtime.Quit(a.ctx)
