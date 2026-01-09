@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"varmanager/pkg/manager"
 	"varmanager/pkg/models"
 	"varmanager/pkg/updater"
@@ -470,8 +471,10 @@ func (a *App) RestartApp() {
 	if err != nil {
 		return
 	}
-	// Start new instance detached
-	cmd := exec.Command(executable)
+	// Use cmd /C start to detach completely and avoid child termination
+	// syscall.HideWindow prevents the cmd window from flashing
+	cmd := exec.Command("cmd", "/C", "start", "", executable)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	cmd.Start()
 
 	// Quit current
