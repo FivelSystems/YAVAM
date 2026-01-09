@@ -66,6 +66,8 @@ function App() {
                     if (info) {
                         setUpdateInfo(info);
                         setShowUpdateModal(true);
+                    } else {
+                        addToast("You are using the latest version", "success");
                     }
                 } catch (e) {
                     console.error("Failed to check updates:", e);
@@ -77,9 +79,19 @@ function App() {
                 try {
                     const res = await fetch("/api/version/check");
                     if (res.ok) {
-                        const info = await res.json();
-                        if (info) {
-                            addToast(`New Version ${info.version} Available!`, 'info');
+                        // Check content length or if empty?
+                        const text = await res.text();
+                        if (text) {
+                            const info = JSON.parse(text);
+                            if (info) {
+                                addToast(`New Version ${info.version} Available!`, 'info');
+                            } else {
+                                addToast("You are using the latest version", "success");
+                            }
+                        } else {
+                            // Empty response means no update (based on my server implementation returning null?)
+                            // My server returns object or null. JSON encoder of nil is "null".
+                            addToast("You are using the latest version", "success");
                         }
                     }
                 } catch (e) {
