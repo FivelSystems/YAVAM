@@ -20,17 +20,20 @@ import (
 )
 
 type Manager struct {
-	scanner *scanner.Scanner
-	mu      sync.Mutex
+	scanner  *scanner.Scanner
+	mu       sync.Mutex
+	DataPath string
 }
 
 func NewManager() *Manager {
 	configDir, _ := os.UserConfigDir()
-	appDir := filepath.Join(configDir, "VarManager")
-	os.MkdirAll(appDir, 0755)
+	// Standard Location: %AppData%\YAVAM
+	dataPath := filepath.Join(configDir, "YAVAM")
+	os.MkdirAll(dataPath, 0755)
 
 	m := &Manager{
-		scanner: scanner.NewScanner(),
+		scanner:  scanner.NewScanner(),
+		DataPath: dataPath,
 	}
 	return m
 }
@@ -822,4 +825,17 @@ func (m *Manager) CopyPackagesToLibrary(filePaths []string, destLibPath string, 
 		fmt.Printf("[Manager] Copied %s to %s\n", baseName, dest)
 	}
 	return nil, nil // Success, no collisions/errors
+}
+
+// FinishSetup marks the application as configured
+func (m *Manager) FinishSetup() error {
+	marker := filepath.Join(m.DataPath, ".setup_complete")
+	return os.WriteFile(marker, []byte("done"), 0644)
+}
+
+// IsConfigured checks if the application setup is complete
+func (m *Manager) IsConfigured() bool {
+	marker := filepath.Join(m.DataPath, ".setup_complete")
+	_, err := os.Stat(marker)
+	return err == nil
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useLayoutEffect } from 'react';
 import { VarPackage } from '../App';
 import { Power, FolderOpen, Copy, Trash2, FileCode, Scissors, Download } from 'lucide-react';
 
@@ -19,8 +19,35 @@ interface ContextMenuProps {
 
 const ContextMenu = ({ x, y, pkg, selectedCount = 0, onClose, onToggle, onOpenFolder, onDownload, onCopyPath, onCopyFile, onCutFile, onDelete }: ContextMenuProps) => {
     const ref = useRef<HTMLDivElement>(null);
+    const [position, setPosition] = useState({ top: y, left: x });
     // @ts-ignore
     const isWeb = !window.go;
+
+    useLayoutEffect(() => {
+        if (ref.current) {
+            const rect = ref.current.getBoundingClientRect();
+            const winWidth = window.innerWidth;
+            const winHeight = window.innerHeight;
+
+            let newLeft = x;
+            let newTop = y;
+
+            // Check Right edge
+            if (x + rect.width > winWidth) {
+                newLeft = winWidth - rect.width - 10; // 10px padding
+            }
+            // Check Bottom edge
+            if (y + rect.height > winHeight) {
+                newTop = winHeight - rect.height - 10;
+            }
+
+            // Ensure not off-screen top/left
+            if (newLeft < 0) newLeft = 10;
+            if (newTop < 0) newTop = 10;
+
+            setPosition({ top: newTop, left: newLeft });
+        }
+    }, [x, y]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -28,6 +55,7 @@ const ContextMenu = ({ x, y, pkg, selectedCount = 0, onClose, onToggle, onOpenFo
                 onClose();
             }
         };
+        // Use mousedown to capture earlier
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [onClose]);
@@ -38,7 +66,7 @@ const ContextMenu = ({ x, y, pkg, selectedCount = 0, onClose, onToggle, onOpenFo
         <div
             ref={ref}
             className="fixed bg-gray-800 border border-gray-700 rounded-lg shadow-xl py-1 z-50 w-56 text-sm"
-            style={{ top: y, left: x }}
+            style={{ top: position.top, left: position.left }}
         >
             <div className="px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-700 mb-1 truncate">
                 {selectedCount > 1 ? `${selectedCount} items selected` : pkg.fileName}

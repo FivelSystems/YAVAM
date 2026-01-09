@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { RefreshCw, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Package, PanelLeft, LayoutGrid, List, Filter, WifiOff, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, PanelLeft, LayoutGrid, List, Filter, WifiOff, AlertTriangle } from 'lucide-react';
 import clsx from 'clsx';
 import { Toast, ToastItem, ToastType } from './components/Toast';
 import DragDropOverlay from './components/DragDropOverlay';
@@ -12,9 +12,9 @@ import Sidebar from './components/Sidebar';
 import VersionResolutionModal from './components/VersionResolutionModal';
 import SettingsModal from './components/SettingsModal';
 import ConfirmationModal from './components/ConfirmationModal';
-import { ProgressModal } from './components/ProgressModal';
 import RightSidebar from './components/RightSidebar';
 import TitleBar from './components/TitleBar';
+import SetupWizard from './components/SetupWizard';
 
 // Define types based on our Go models
 export interface VarPackage {
@@ -40,6 +40,52 @@ export interface VarPackage {
 }
 
 function App() {
+    // Setup State
+    const [needsSetup, setNeedsSetup] = useState(false);
+
+    useEffect(() => {
+        // @ts-ignore
+        if (window.go && window.go.main && window.go.main.App) {
+            // @ts-ignore
+            window.go.main.App.IsConfigured().then((configured: boolean) => {
+                if (!configured) setNeedsSetup(true);
+            });
+        }
+    }, []);
+
+    // Web Mode SSE Listener
+    useEffect(() => {
+        // @ts-ignore
+        if (!window.go) {
+            console.log("Connecting to EventSource...");
+            const es = new EventSource('/api/events');
+
+            es.onmessage = (event) => {
+                try {
+                    const payload = JSON.parse(event.data);
+                    const { event: type, data } = payload;
+
+                    if (type === "scan:progress") {
+                        setScanProgress({ current: data.current, total: data.total });
+                        setLoading(true);
+                    } else if (type === "server:log") {
+                        setServerLogs(prev => [...prev.slice(-99), data]);
+                    } else if (type === "package:scanned") {
+                        setPackages(prev => {
+                            // Avoid duplicates
+                            if (prev.some(p => p.filePath === data.filePath)) return prev;
+                            return [...prev, data];
+                        });
+                    }
+                } catch (e) {
+                    console.error("SSE parse error", e);
+                }
+            };
+
+            return () => es.close();
+        }
+    }, []);
+
     // New Handler for Sidebar Selection
 
     // Helper to switch library
@@ -234,7 +280,7 @@ function App() {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768);
     const [viewMode, setViewMode] = useState<'grid' | 'list'>(window.innerWidth < 768 ? 'list' : 'grid');
-    const [gridSize, setGridSize] = useState(parseInt(localStorage.getItem("gridSize") || "150"));
+    const [gridSize, setGridSize] = useState(parseInt(localStorage.getItem("gridSize") || "160"));
 
     useEffect(() => {
         const handleResize = () => {
@@ -373,10 +419,10 @@ function App() {
                     if (data.libraries && Array.isArray(data.libraries)) {
                         setLibraries(data.libraries);
                     }
-                    if (data.path && !activeLibraryPath) {
-                        // Only set if we don't have one selected? 
-                        // actually we should trust server config on initial load if local state is empty
+                    if (data.path) {
+                        // Trust server config
                         setActiveLibraryPath(data.path);
+                        localStorage.setItem('activeLibraryPath', data.path);
                     }
                 })
                 .catch(err => console.error("Failed to fetch server config", err));
@@ -389,6 +435,39 @@ function App() {
                 window.runtime.EventsOff("server:log");
             }
         };
+    }, []);
+
+    // Web Mode SSE Listener
+    useEffect(() => {
+        // @ts-ignore
+        if (!window.go) {
+            console.log("Connecting to EventSource...");
+            const es = new EventSource('/api/events');
+
+            es.onmessage = (event) => {
+                try {
+                    const payload = JSON.parse(event.data);
+                    const { event: type, data } = payload;
+
+                    if (type === "scan:progress") {
+                        setScanProgress({ current: data.current, total: data.total });
+                        setLoading(true);
+                    } else if (type === "server:log") {
+                        setServerLogs(prev => [...prev.slice(-99), data]);
+                    } else if (type === "package:scanned") {
+                        setPackages(prev => {
+                            // Avoid duplicates
+                            if (prev.some(p => p.filePath === data.filePath)) return prev;
+                            return [...prev, data];
+                        });
+                    }
+                } catch (e) {
+                    console.error("SSE parse error", e);
+                }
+            };
+
+            return () => es.close();
+        }
     }, []);
 
     const handleToggleServer = async () => {
@@ -463,8 +542,12 @@ function App() {
 
     useEffect(() => {
         filterPackages();
-        setCurrentPage(1);
     }, [packages, searchQuery, currentFilter, selectedCreator, selectedType, selectedTags]);
+
+    // Reset pagination when FILTERS change, but NOT when data updates (scanning)
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery, currentFilter, selectedCreator, selectedType, selectedTags]);
 
     const scanPackages = async () => {
         if (!activeLibraryPath) return;
@@ -527,14 +610,25 @@ function App() {
             }
         } else {
             // Web Mode
+            setPackages([]); // Clear existing to show progress
             try {
-                const pkgs = await fetch(`/api/packages?path=${encodeURIComponent(activeLibraryPath)}`).then(r => r.json());
-                setPackages(analyzePackages(pkgs || []));
-                const tags = new Set<string>();
-                pkgs?.forEach((p: any) => p.tags?.forEach((t: string) => tags.add(t)));
-                setAvailableTags(Array.from(tags));
-            } catch (e) {
+                const res = await fetch(`/api/packages?path=${encodeURIComponent(activeLibraryPath)}`);
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.message || `HTTP ${res.status}`);
+                }
+                const pkgs = await res.json();
+                if (Array.isArray(pkgs)) {
+                    setPackages(analyzePackages(pkgs));
+                    const tags = new Set<string>();
+                    pkgs.forEach((p: any) => p.tags?.forEach((t: string) => tags.add(t)));
+                    setAvailableTags(Array.from(tags));
+                } else {
+                    if (pkgs.success === false) throw new Error(pkgs.message);
+                }
+            } catch (e: any) {
                 console.error(e);
+                alert("Scan Error: " + e.message);
             } finally {
                 setLoading(false);
             }
@@ -1051,72 +1145,23 @@ function App() {
             );
         }
 
+
+    }
+
+    // Render Setup Wizard if needed
+    if (needsSetup) {
         return (
-            <div className="flex h-screen items-center justify-center bg-gray-900 text-white">
-                <ProgressModal
-                    isOpen={loading && !!(window as any).go}
-                    current={scanProgress.current}
-                    total={scanProgress.total}
-                />
-                <SettingsModal
-                    isOpen={isSettingsOpen}
-                    onClose={() => setIsSettingsOpen(false)}
-                    gridSize={gridSize}
-                    setGridSize={(size) => {
-                        setGridSize(size);
-                        localStorage.setItem("gridSize", size.toString());
-                    }}
-                    itemsPerPage={itemsPerPage}
-                    setItemsPerPage={handleSetItemsPerPage}
-                    // Server Props
-                    serverEnabled={serverEnabled}
-                    onToggleServer={handleToggleServer}
-                    serverPort={serverPort}
-                    setServerPort={setServerPort}
-                    localIP={localIP}
-                    logs={serverLogs}
-                    setLogs={setServerLogs}
-                    isWeb={!window.go}
-                />
-                <div className="text-center space-y-6 max-w-md w-full p-8 bg-gray-800 rounded-xl shadow-2xl border border-gray-700">
-                    {/* ... (Welcome content same as before) ... */}
-                    <div className="bg-blue-600 w-16 h-16 rounded-xl flex items-center justify-center mx-auto shadow-lg shadow-blue-900/20">
-                        <Package size={32} className="text-white" />
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-bold text-white mb-2">Welcome to VAR Manager</h1>
-                        <p className="text-gray-400">Please select your Addon Packages repository folder (where .var files are stored/organized).</p>
-                    </div>
-                    <div className="flex gap-2 justify-center">
-                        <input
-                            type="text"
-                            value={activeLibraryPath}
-                            readOnly
-                            placeholder="Select repository root folder..."
-                            className="bg-gray-800 p-2 rounded w-96 border border-gray-700 text-gray-400 cursor-not-allowed"
-                        />
-                        <button
-                            onClick={async () => {
-                                try {
-                                    // @ts-ignore
-                                    const p = await window.go.main.App.SelectDirectory();
-                                    if (p) {
-                                        handleAddLibrary(p);
-                                    }
-                                } catch (err) {
-                                    console.error(err);
-                                }
-                            }}
-                            className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded transition-colors flex items-center gap-2 font-medium"
-                            title="Browse Folder"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" /></svg>
-                            <span>Browse</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        )
+            <>
+                <TitleBar />
+                {/* @ts-ignore */}
+                <SetupWizard onComplete={(libPath?: string) => {
+                    setNeedsSetup(false);
+                    if (libPath) {
+                        handleAddLibrary(libPath);
+                    }
+                }} />
+            </>
+        );
     }
 
     return (
@@ -1124,7 +1169,7 @@ function App() {
             <TitleBar />
             <div className="flex-1 flex overflow-hidden relative">
                 <DragDropOverlay onDrop={handleDrop} onWebUpload={handleWebUpload} />
-                <LoadingToast visible={loading} />
+                <LoadingToast visible={loading} progress={scanProgress} />
 
                 <VersionResolutionModal
                     isOpen={resolveData.open}

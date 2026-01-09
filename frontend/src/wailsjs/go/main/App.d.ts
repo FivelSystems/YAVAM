@@ -3,6 +3,8 @@
 import {models} from '../models';
 import {manager} from '../models';
 
+export function ClearAppData():Promise<void>;
+
 export function CopyFileToClipboard(arg1:string):Promise<void>;
 
 export function CopyPackagesToLibrary(arg1:Array<string>,arg2:string,arg3:boolean):Promise<Array<string>>;
@@ -14,6 +16,8 @@ export function DeleteFileToRecycleBin(arg1:string):Promise<void>;
 export function DisableOldVersions(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function DownloadPackage(arg1:string,arg2:string):Promise<void>;
+
+export function FinishSetup():Promise<void>;
 
 export function GetFilters(arg1:string):Promise<Array<string>>;
 
@@ -28,6 +32,10 @@ export function GetUserDownloadsDir():Promise<string>;
 export function Greet(arg1:string):Promise<string>;
 
 export function InstallFiles(arg1:Array<string>,arg2:string):Promise<Array<string>>;
+
+export function IsConfigured():Promise<boolean>;
+
+export function OpenAppDataFolder():Promise<void>;
 
 export function OpenFolderInExplorer(arg1:string):Promise<void>;
 

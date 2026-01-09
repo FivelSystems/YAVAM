@@ -2,13 +2,42 @@ package parser
 
 import (
 	"archive/zip"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 	"varmanager/pkg/models"
+
+	"golang.org/x/text/encoding/japanese"
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/transform"
 )
+
+// Helper to decode bytes to UTF-8
+func decodeBytes(data []byte) []byte {
+	if utf8.Valid(data) {
+		return data
+	}
+
+	// Try ShiftJIS (Common for Japanese)
+	r := transform.NewReader(bytes.NewReader(data), japanese.ShiftJIS.NewDecoder())
+	if decoded, err := io.ReadAll(r); err == nil {
+		return decoded
+	}
+
+	// Try GBK (Common for Chinese)
+	r = transform.NewReader(bytes.NewReader(data), simplifiedchinese.GBK.NewDecoder())
+	if decoded, err := io.ReadAll(r); err == nil {
+		return decoded
+	}
+
+	// Fallback to sanitizing invalid UTF-8
+	return []byte(strings.ToValidUTF8(string(data), "?"))
+}
 
 // ParseVarMetadata reads the meta.json file from a .var package (zip archive) and detects categories
 func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error) {
@@ -18,7 +47,13 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 
 	r, err := zip.OpenReader(filePath)
 	if err != nil {
-		fmt.Printf("Error opening zip %s: %v\n", filePath, err)
+		// Enhanced debugging for user feedback
+		info, sErr := os.Stat(filePath)
+		if sErr != nil {
+			fmt.Printf("Error accessing file %s: %v\n", filePath, sErr)
+		} else {
+			fmt.Printf("Error opening zip %s (Size: %d): %v\n", filePath, info.Size(), err)
+		}
 		return meta, nil, nil, err
 	}
 	defer r.Close()
@@ -57,9 +92,6 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 			isContent = true
 		} else if strings.HasPrefix(normName, "custom/clothing/") {
 			categorySet["Clothing"] = true
-			// Clothing items often don't have a single file representing the item (folder based),
-			// but if there is a .vam or .json, we might check for image.
-			// Check suffixes commonly associated with definitions
 			if strings.HasSuffix(normName, ".vam") || strings.HasSuffix(normName, ".json") {
 				isContent = true
 			}
@@ -75,9 +107,6 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 			}
 		} else if strings.HasPrefix(normName, "custom/atom/person/textures/") {
 			categorySet["Skin"] = true
-			// Textures themselves are content, but usually don't have "thumbnails" separate from themselves?
-			// Actually User wants to AVOID textures.
-			// So we set isContent=false here strictly for thumbnail purposes
 			isContent = false
 		} else if strings.HasPrefix(normName, "custom/scripts/") {
 			categorySet["Script"] = true
@@ -90,12 +119,9 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 				isContent = true
 			}
 		} else if strings.HasPrefix(normName, "custom/") {
-			// Generic dynamic category detection (Custom/CategoryName/...)
 			parts := strings.Split(normName, "/")
 			if len(parts) > 2 {
-				// parts[0] is "custom", parts[1] is the category
 				cat := parts[1]
-				// Capitalize first letter
 				if len(cat) > 0 {
 					cat = strings.ToUpper(cat[:1]) + cat[1:]
 					categorySet[cat] = true
@@ -110,7 +136,9 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 				bytes, err := io.ReadAll(rc)
 				rc.Close()
 				if err == nil {
-					_ = json.Unmarshal(bytes, &meta)
+					// Decode encoding if necessary
+					decoded := decodeBytes(bytes)
+					_ = json.Unmarshal(decoded, &meta)
 				}
 			}
 		}
@@ -122,8 +150,9 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 				bytes, err := io.ReadAll(rc)
 				rc.Close()
 				if err == nil {
+					decoded := decodeBytes(bytes)
 					var item VamItem
-					if err := json.Unmarshal(bytes, &item); err == nil {
+					if err := json.Unmarshal(decoded, &item); err == nil {
 						if item.Tags != "" {
 							parts := strings.Split(item.Tags, ",")
 							for _, p := range parts {
@@ -138,11 +167,8 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 			}
 		}
 
-		// Thumbnail Candidate Logic: Content Sibling (Priority 3)
-		// If we haven't found a higher priority candidate yet...
+		// Thumbnail Candidate Logic
 		if candidatePriority < 3 && isContent {
-			// Look for sibling jpg/png
-			// Remove extension
 			ext := filepath.Ext(normName)
 			base := normName[:len(normName)-len(ext)]
 
@@ -205,32 +231,6 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 	for c := range categorySet {
 		categories = append(categories, c)
 	}
-
-	// Sort by priority (Scene/Look/Clothing/Hair) then alphabetical
-	// This helps with "Primary Type" determination (first element)
-	// We handle this via custom sort
-	/* 	sort.Slice(categories, func(i, j int) bool {
-		// Define priority
-		prio := func(s string) int {
-			switch s {
-			case "Scene": return 0
-			case "Look": return 1
-			case "Clothing": return 2
-			case "Hair": return 3
-			case "Morph": return 4
-			case "Skin": return 5
-			default: return 10
-			}
-		}
-		pi, pj := prio(categories[i]), prio(categories[j])
-		if pi != pj {
-			return pi < pj
-		}
-		return categories[i] < categories[j]
-	}) */
-	// Simple sort for now, Manager/UI can handle display priority
-	// But good to have deterministic order
-	// sort.Strings(categories) --> done in manager if needed, but parser should return stable
 
 	return meta, thumbBytes, categories, nil
 }
