@@ -15,6 +15,7 @@ import (
 	"time"
 	"varmanager/pkg/manager"
 	"varmanager/pkg/models"
+	"varmanager/pkg/updater"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -28,6 +29,7 @@ type Server struct {
 	manager   *manager.Manager
 	libraries []string // List of allowed library paths
 	assets    fs.FS    // Embedded frontend assets
+	version   string   // App Version
 	onRestore func()
 
 	// SSE Clients
@@ -40,13 +42,14 @@ type Server struct {
 	scanWg     sync.WaitGroup
 }
 
-func NewServer(ctx context.Context, m *manager.Manager, assets fs.FS, onRestore func()) *Server {
+func NewServer(ctx context.Context, m *manager.Manager, assets fs.FS, version string, onRestore func()) *Server {
 	return &Server{
 		ctx:       ctx,
 		manager:   m,
 		onRestore: onRestore,
 		libraries: []string{},
 		assets:    assets,
+		version:   version,
 		clients:   make(map[chan string]bool),
 	}
 }
@@ -370,7 +373,19 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 			"webMode":   true,
 			"path":      activePath,
 			"libraries": s.libraries,
+			"version":   s.version,
 		})
+	})
+
+	// Version Check Endpoint
+	mux.HandleFunc("/api/version/check", func(w http.ResponseWriter, r *http.Request) {
+		info, err := updater.GetLatestVersion(s.version)
+		if err != nil {
+			s.writeError(w, err.Error(), 500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(info)
 	})
 
 	// Upload Endpoint

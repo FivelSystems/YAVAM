@@ -6,8 +6,16 @@ export function AddConfiguredLibrary(arg1) {
   return window['go']['main']['App']['AddConfiguredLibrary'](arg1);
 }
 
+export function ApplyUpdate(arg1) {
+  return window['go']['main']['App']['ApplyUpdate'](arg1);
+}
+
 export function CancelScan() {
   return window['go']['main']['App']['CancelScan']();
+}
+
+export function CheckForUpdates() {
+  return window['go']['main']['App']['CheckForUpdates']();
 }
 
 export function ClearAppData() {
@@ -104,6 +112,10 @@ export function ReorderConfiguredLibraries(arg1) {
 
 export function ResolveConflicts(arg1, arg2, arg3) {
   return window['go']['main']['App']['ResolveConflicts'](arg1, arg2, arg3);
+}
+
+export function RestartApp() {
+  return window['go']['main']['App']['RestartApp']();
 }
 
 export function ScanPackages(arg1) {

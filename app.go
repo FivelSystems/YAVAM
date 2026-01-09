@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
 	"varmanager/pkg/manager"
 	"varmanager/pkg/models"
+	"varmanager/pkg/updater"
 
 	"varmanager/pkg/server"
 
@@ -61,6 +63,7 @@ func (a *App) GetLibraryCounts(libraries []string) map[string]int {
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	updater.CleanupOld()
 
 	// Sub into frontend/dist
 	subAssets, err := fs.Sub(a.assets, "frontend/dist")
@@ -71,7 +74,7 @@ func (a *App) startup(ctx context.Context) {
 		subAssets = a.assets
 	}
 
-	a.server = server.NewServer(ctx, a.manager, subAssets, func() {
+	a.server = server.NewServer(ctx, a.manager, subAssets, a.GetAppVersion(), func() {
 		runtime.WindowShow(ctx)
 	})
 }
@@ -449,4 +452,28 @@ func (a *App) IsConfigured() bool {
 // FinishSetup completes the setup wizard
 func (a *App) FinishSetup() error {
 	return a.manager.FinishSetup()
+}
+
+// CheckForUpdates checks if a new version is available
+func (a *App) CheckForUpdates() (*updater.UpdateInfo, error) {
+	return updater.GetLatestVersion(a.GetAppVersion())
+}
+
+// ApplyUpdate performs the update process
+func (a *App) ApplyUpdate(url string) error {
+	return updater.ApplyUpdate(url)
+}
+
+// RestartApp restarts the application
+func (a *App) RestartApp() {
+	executable, err := os.Executable()
+	if err != nil {
+		return
+	}
+	// Start new instance detached
+	cmd := exec.Command(executable)
+	cmd.Start()
+
+	// Quit current
+	runtime.Quit(a.ctx)
 }
