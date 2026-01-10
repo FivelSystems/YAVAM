@@ -45,10 +45,11 @@ func (s *Scanner) scanDirectory(root string) ([]models.VarPackage, error) {
 		}
 
 		pkg := models.VarPackage{
-			FilePath:  path,
-			FileName:  info.Name(),
-			Size:      info.Size(),
-			IsEnabled: isEnabled,
+			FilePath:     path,
+			FileName:     info.Name(),
+			Size:         info.Size(),
+			IsEnabled:    isEnabled,
+			CreationDate: info.ModTime().Format("2006-01-02T15:04:05Z07:00"),
 		}
 		pkgs = append(pkgs, pkg)
 		return nil
