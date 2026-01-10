@@ -131,6 +131,8 @@ function App() {
     // New Handler for Sidebar Selection
 
     // Helper to switch library
+    const scanAbortController = useRef<AbortController | null>(null);
+
     const handleSwitchLibrary = async (index: number) => {
         if (index < 0 || index >= libraries.length) return;
         if (index === activeLibIndexRef.current) return; // Prevent reload if already active (checks live value)
@@ -603,9 +605,12 @@ function App() {
                 const batch = [...pkgBuffer];
                 pkgBuffer = [];
                 setPackages(prev => {
-                    // Check duplicates? For web mode, maybe expensive.
-                    // Just append for speed, filter later if needed or rely on Set
-                    return [...prev, ...batch];
+                    // Deduplicate logic: Create Set of existing paths
+                    const existingPaths = new Set(prev.map(p => p.filePath));
+                    const uniqueBatch = batch.filter(p => !existingPaths.has(p.filePath));
+
+                    if (uniqueBatch.length === 0) return prev;
+                    return [...prev, ...uniqueBatch];
                 });
             };
 
@@ -618,6 +623,7 @@ function App() {
                         setScanProgress({ current: data.current, total: data.total });
                         setLoading(true);
                     } else if (type === "server:log") {
+                        // Keep only last 100 logs
                         setServerLogs(prev => [...prev.slice(-99), data]);
                     } else if (type === "package:scanned") {
                         pkgBuffer.push(data);
@@ -642,7 +648,11 @@ function App() {
                 }
             };
 
-            return () => es.close();
+            return () => {
+                console.log("Closing SSE connection");
+                if (flushTimer) clearTimeout(flushTimer);
+                es.close();
+            };
         }
     }, []);
 
@@ -835,8 +845,19 @@ function App() {
         } else {
             // Web Mode
             setPackages([]); // Clear existing to show progress
+
+            // Cancel previous scan if running
+            if (scanAbortController.current) {
+                scanAbortController.current.abort();
+            }
+            const controller = new AbortController();
+            scanAbortController.current = controller;
+
             try {
-                const res = await fetch(`/api/packages?path=${encodeURIComponent(activeLibraryPath)}`);
+                const res = await fetch(`/api/packages?path=${encodeURIComponent(activeLibraryPath)}`, {
+                    signal: controller.signal
+                });
+
                 if (!res.ok) {
                     const err = await res.json().catch(() => ({}));
                     throw new Error(err.message || `HTTP ${res.status}`);
@@ -851,10 +872,17 @@ function App() {
                     if (pkgs.success === false) throw new Error(pkgs.message);
                 }
             } catch (e: any) {
+                if (e.name === 'AbortError') return; // Ignore intentional aborts
+                if (e.message === 'context canceled') return; // Ignore backend cancellation
+
                 console.error(e);
-                alert("Scan Error: " + e.message);
+                addToast("Scan Error: " + e.message, 'error');
             } finally {
-                setLoading(false);
+                // Only unset loading if THIS is the active request
+                if (scanAbortController.current === controller) {
+                    setLoading(false);
+                    scanAbortController.current = null;
+                }
             }
         }
     };
