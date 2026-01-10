@@ -1479,7 +1479,8 @@ function App() {
     if (needsSetup) {
         return (
             <>
-                <TitleBar />
+                {/* @ts-ignore */}
+                {window.go && <TitleBar />}
                 {/* @ts-ignore */}
                 <SetupWizard onComplete={(libPath?: string) => {
                     setNeedsSetup(false);
@@ -1492,8 +1493,9 @@ function App() {
     }
 
     return (
-        <div className="flex flex-col h-screen bg-gray-900 text-white overflow-hidden">
-            <TitleBar />
+        <div className="flex flex-col h-[100dvh] bg-gray-900 text-white overflow-hidden">
+            {/* @ts-ignore */}
+            {window.go && <TitleBar />}
             <div className="flex-1 flex overflow-hidden relative">
                 <DragDropOverlay onDrop={handleDrop} onWebUpload={handleWebUpload} />
 
@@ -1577,7 +1579,9 @@ function App() {
                 <div className={clsx(
                     "z-40 transition-all duration-300 ease-in-out bg-gray-800 shrink-0 border-t border-gray-700",
                     "md:relative md:h-full",
-                    "fixed left-0 top-8 bottom-0 shadow-2xl md:shadow-none md:top-0 md:bottom-auto",
+                    // @ts-ignore
+                    window.go ? "fixed left-0 top-8 bottom-0" : "fixed left-0 top-0 bottom-0",
+                    "shadow-2xl md:shadow-none md:top-0 md:bottom-auto",
                     isSidebarOpen ? "w-64 translate-x-0" : "w-0 -translate-x-full md:translate-x-0 md:w-0 overflow-hidden"
                 )}>
                     <div className="w-64 h-full"> {/* Inner container to maintain width while parent animates */}
@@ -1610,17 +1614,27 @@ function App() {
 
                 <main className="flex-1 flex flex-col overflow-hidden w-full">
                     <header className="flex flex-col bg-gray-800 border-b border-gray-700 shadow-md z-30 shrink-0">
-                        <div className="flex justify-between items-center p-4">
-                            <div className="flex items-center gap-3 flex-1 min-w-0 mr-8">
+                        <div className="flex flex-col md:flex-row md:justify-between items-center p-4 gap-4 md:gap-0">
+
+                            {/* Left Group: Toggle + Search */}
+                            <div className="flex items-center gap-3 w-full md:flex-1 md:min-w-0 md:mr-8">
                                 <button
                                     onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                                    className="p-2 -ml-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors shrink-0"
+                                    className="p-2 -ml-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors shrink-0 md:hidden"
+                                    title="Toggle Sidebar"
+                                >
+                                    <PanelLeft size={20} />
+                                </button>
+                                {/* Desktop Toggle */}
+                                <button
+                                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                                    className="hidden md:block p-2 -ml-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors shrink-0"
                                     title="Toggle Sidebar"
                                 >
                                     <PanelLeft size={20} />
                                 </button>
 
-                                <div className="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-lg max-w-md w-full">
+                                <div className="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-lg w-full md:max-w-md">
                                     <Search size={18} className="text-gray-400 shrink-0" />
                                     <input
                                         className="bg-transparent outline-none w-full text-sm"
@@ -1629,8 +1643,8 @@ function App() {
                                         onChange={(e) => setSearchQuery(e.target.value)}
                                     />
 
-                                    {/* Sorting Dropdown Trigger */}
-                                    <div className="relative shrink-0">
+                                    {/* Desktop: Sorting Dropdown inside Search Bar (Hidden on Mobile) */}
+                                    <div className="hidden md:block relative shrink-0">
                                         <button
                                             onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
                                             className={clsx(
@@ -1641,8 +1655,6 @@ function App() {
                                         >
                                             <ArrowUpDown size={16} />
                                         </button>
-
-                                        {/* Dropdown Menu */}
                                         <AnimatePresence>
                                             {isSortDropdownOpen && (
                                                 <motion.div
@@ -1679,8 +1691,7 @@ function App() {
                                                 </motion.div>
                                             )}
                                         </AnimatePresence>
-
-                                        {/* Backdrop to close */}
+                                        {/* Backdrop */}
                                         {isSortDropdownOpen && (
                                             <div
                                                 className="fixed inset-0 z-40 bg-transparent"
@@ -1691,43 +1702,130 @@ function App() {
                                 </div>
                             </div>
 
-                            {/* Right Group: View Mode & Status */}
-                            <div className="flex items-center gap-4 shrink-0">
-                                <button
-                                    onClick={() => setIsTagsVisible(!isTagsVisible)}
-                                    className={clsx(
-                                        "p-2 rounded-lg transition-colors",
-                                        isTagsVisible ? "text-blue-400 bg-blue-400/10" : "text-gray-400 hover:text-white hover:bg-gray-700"
-                                    )}
-                                    title="Toggle Tags"
-                                >
-                                    <Filter size={20} />
-                                </button>
+                            {/* Right Group: Actions (Mobile: Row below search, Desktop: Right aligned) */}
+                            <div className="flex items-center justify-between w-full md:w-auto md:justify-end gap-4 shrink-0">
 
-                                <div className="w-px h-6 bg-gray-700"></div>
+                                {/* Mobile-Only Group for Sorting/Tags/View */}
+                                <div className="flex items-center gap-2 md:hidden">
+                                    {/* Sorting */}
+                                    <div className="relative shrink-0">
+                                        <button
+                                            onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
+                                            className={clsx(
+                                                "p-2 rounded-lg bg-gray-700 text-gray-400 hover:text-white transition-colors",
+                                                isSortDropdownOpen && "bg-gray-600 text-white"
+                                            )}
+                                            title="Sort Options"
+                                        >
+                                            <ArrowUpDown size={18} />
+                                        </button>
+                                        <AnimatePresence>
+                                            {isSortDropdownOpen && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                    className="absolute left-0 top-full mt-2 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden"
+                                                    style={{ left: 0 }} // Align left on mobile
+                                                >
+                                                    <div className="flex flex-col py-1">
+                                                        {[
+                                                            { id: 'name-asc', label: 'Name (A-Z)', icon: <ArrowUpAZ size={14} /> },
+                                                            { id: 'name-desc', label: 'Name (Z-A)', icon: <ArrowDownZA size={14} /> },
+                                                            { id: 'size-desc', label: 'Size (Largest)', icon: <ArrowDownWideNarrow size={14} /> },
+                                                            { id: 'size-asc', label: 'Size (Smallest)', icon: <ArrowUpNarrowWide size={14} /> },
+                                                            { id: 'date-newest', label: 'Date (Newest)', icon: <Calendar size={14} /> },
+                                                            { id: 'date-oldest', label: 'Date (Oldest)', icon: <Calendar size={14} /> },
+                                                        ].map(opt => (
+                                                            <button
+                                                                key={opt.id}
+                                                                onClick={() => {
+                                                                    setSortMode(opt.id);
+                                                                    setIsSortDropdownOpen(false);
+                                                                }}
+                                                                className={clsx(
+                                                                    "flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-700 transition-colors",
+                                                                    sortMode === opt.id ? "text-blue-400 bg-blue-400/10" : "text-gray-300"
+                                                                )}
+                                                            >
+                                                                {opt.icon}
+                                                                <span>{opt.label}</span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+                                        {isSortDropdownOpen && (
+                                            <div
+                                                className="fixed inset-0 z-40 bg-transparent"
+                                                onClick={() => setIsSortDropdownOpen(false)}
+                                            />
+                                        )}
+                                    </div>
 
-                                <div className="flex items-center gap-1 bg-gray-700 p-1 rounded-lg">
                                     <button
-                                        onClick={() => setViewMode('grid')}
-                                        className={clsx("p-1.5 rounded transition-all", viewMode === 'grid' ? "bg-gray-600 text-white shadow" : "text-gray-400 hover:text-gray-200")}
-                                        title="Grid View"
+                                        onClick={() => setIsTagsVisible(!isTagsVisible)}
+                                        className={clsx(
+                                            "p-2 rounded-lg bg-gray-700 transition-colors",
+                                            isTagsVisible ? "text-blue-400 bg-blue-400/10" : "text-gray-400 hover:text-white"
+                                        )}
                                     >
-                                        <LayoutGrid size={18} />
+                                        <Filter size={18} />
                                     </button>
-                                    <button
-                                        onClick={() => setViewMode('list')}
-                                        className={clsx("p-1.5 rounded transition-all", viewMode === 'list' ? "bg-gray-600 text-white shadow" : "text-gray-400 hover:text-gray-200")}
-                                        title="List View"
-                                    >
-                                        <List size={18} />
-                                    </button>
+
+                                    <div className="flex items-center gap-1 bg-gray-700 p-1 rounded-lg">
+                                        <button onClick={() => setViewMode('grid')} className={clsx("p-1.5 rounded", viewMode === 'grid' ? "bg-gray-600 text-white" : "text-gray-400")}><LayoutGrid size={18} /></button>
+                                        <button onClick={() => setViewMode('list')} className={clsx("p-1.5 rounded", viewMode === 'list' ? "bg-gray-600 text-white" : "text-gray-400")}><List size={18} /></button>
+                                    </div>
                                 </div>
 
-                                <div className="w-px h-6 bg-gray-700"></div>
+                                {/* Desktop Only Controls */}
+                                <div className="hidden md:flex items-center gap-4">
+                                    <button
+                                        onClick={() => setIsTagsVisible(!isTagsVisible)}
+                                        className={clsx(
+                                            "p-2 rounded-lg transition-colors",
+                                            isTagsVisible ? "text-blue-400 bg-blue-400/10" : "text-gray-400 hover:text-white hover:bg-gray-700"
+                                        )}
+                                        title="Toggle Tags"
+                                    >
+                                        <Filter size={20} />
+                                    </button>
 
-                                <div className="flex items-center gap-4 text-sm text-gray-400">
+                                    <div className="w-px h-6 bg-gray-700"></div>
+
+                                    <div className="flex items-center gap-1 bg-gray-700 p-1 rounded-lg">
+                                        <button
+                                            onClick={() => setViewMode('grid')}
+                                            className={clsx("p-1.5 rounded transition-all", viewMode === 'grid' ? "bg-gray-600 text-white shadow" : "text-gray-400 hover:text-gray-200")}
+                                            title="Grid View"
+                                        >
+                                            <LayoutGrid size={18} />
+                                        </button>
+                                        <button
+                                            onClick={() => setViewMode('list')}
+                                            className={clsx("p-1.5 rounded transition-all", viewMode === 'list' ? "bg-gray-600 text-white shadow" : "text-gray-400 hover:text-gray-200")}
+                                            title="List View"
+                                        >
+                                            <List size={18} />
+                                        </button>
+                                    </div>
+
+                                    <div className="w-px h-6 bg-gray-700"></div>
+                                </div>
+
+                                {/* Progress & Refresh (Visible on both, but style differs) */}
+                                <div className="flex items-center gap-4 text-sm text-gray-400 ml-auto md:ml-0">
                                     {loading ? (
-                                        <ScanProgressBar current={scanProgress.current} total={scanProgress.total} />
+                                        <>
+                                            <div className="md:hidden">
+                                                <ScanProgressBar current={scanProgress.current} total={scanProgress.total} variant="circular" />
+                                            </div>
+                                            <div className="hidden md:block">
+                                                <ScanProgressBar current={scanProgress.current} total={scanProgress.total} variant="linear" />
+                                            </div>
+                                        </>
                                     ) : (
                                         <span className="hidden sm:inline">{filteredPkgs.length} packages found</span>
                                     )}
@@ -1741,6 +1839,11 @@ function App() {
                                 </div>
                             </div>
                         </div>
+
+                        {/* Force Restore Desktop Sorting inside Search Bar logic? 
+                            I'll modify the Search Bar block above in a 2nd pass or do it all here. 
+                            I'll inject the Desktop Sorting Button back into the search bar container, visible only on md.
+                        */}
 
                         {/* Tags Filter Bar */}
                         <AnimatePresence>
@@ -1814,7 +1917,8 @@ function App() {
 
                     <div className="flex-1 flex overflow-hidden">
                         <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
-                            <div className="flex-1 overflow-auto p-4 custom-scrollbar">
+                            {/* CardGrid Container - Added padding bottom for absolute footer */}
+                            <div className="flex-1 overflow-auto p-4 pb-24 custom-scrollbar">
                                 <CardGrid
                                     packages={filteredPkgs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)}
                                     currentPath={activeLibraryPath}
@@ -1829,14 +1933,16 @@ function App() {
                                 />
                             </div>
 
-                            {/* Pagination Footer */}
+                            {/* Pagination Footer - Premium Glassmorphism Floating Bar */}
                             {filteredPkgs.length > itemsPerPage && (
-                                <Pagination
-                                    currentPage={currentPage}
-                                    totalItems={filteredPkgs.length}
-                                    itemsPerPage={itemsPerPage}
-                                    onChange={setCurrentPage}
-                                />
+                                <div className="absolute bottom-0 left-0 right-0 p-3 bg-gray-900/80 backdrop-blur-md border-t border-white/10 z-20 shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
+                                    <Pagination
+                                        currentPage={currentPage}
+                                        totalItems={filteredPkgs.length}
+                                        itemsPerPage={itemsPerPage}
+                                        onChange={setCurrentPage}
+                                    />
+                                </div>
                             )}
                         </div>
 

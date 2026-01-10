@@ -40,7 +40,7 @@ export const Pagination: React.FC<PaginationProps> = ({ currentPage, totalItems,
     );
 
     return (
-        <div className="p-3 border-t border-gray-700 bg-gray-800 shadow-xl z-20 flex justify-between items-center shrink-0 w-full overflow-hidden select-none">
+        <div className="flex justify-between items-center w-full select-none">
 
             {/* Left Controls */}
             <div className="flex items-center gap-1">
