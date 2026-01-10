@@ -1609,7 +1609,7 @@ function App() {
                 </div>
 
                 <main className="flex-1 flex flex-col overflow-hidden w-full">
-                    <header className="flex flex-col bg-gray-800 border-b border-gray-700 shadow-md z-10 shrink-0">
+                    <header className="flex flex-col bg-gray-800 border-b border-gray-700 shadow-md z-30 shrink-0">
                         <div className="flex justify-between items-center p-4">
                             <div className="flex items-center gap-3 flex-1 min-w-0 mr-8">
                                 <button
