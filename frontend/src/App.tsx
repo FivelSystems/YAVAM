@@ -400,11 +400,19 @@ function App() {
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(() => parseInt(localStorage.getItem('itemsPerPage') || '25'));
+    const [maxToasts, setMaxToasts] = useState(() => parseInt(localStorage.getItem('maxToasts') || '5'));
+
     const [toasts, setToasts] = useState<ToastItem[]>([]);
 
     const addToast = (message: string, type: ToastType = 'info', action?: () => void) => {
         const id = Date.now().toString(36) + Math.random().toString(36).substr(2);
-        setToasts(prev => [...prev, { id, message, type, action }]);
+        setToasts(prev => {
+            const newToasts = [...prev, { id, message, type, action }];
+            if (newToasts.length > maxToasts) {
+                return newToasts.slice(newToasts.length - maxToasts);
+            }
+            return newToasts;
+        });
     };
 
     const removeToast = (id: string) => {
@@ -1140,6 +1148,26 @@ function App() {
         }
     };
 
+    const handleBulkToggle = async (pkg: VarPackage) => {
+        // If multiple items selected and target is in selection, toggle all
+        if (selectedIds.has(pkg.filePath) && selectedIds.size > 1) {
+            const targets = Array.from(selectedIds).map(id => packages.find(pk => pk.filePath === id)).filter(Boolean) as VarPackage[];
+            let successCount = 0;
+
+            // Determine target state based on the clicked item (if clicked is enabled, disable all, vice versa for consistency?)
+            // Or just invert each? Sidebar behavior usually inverts each. 
+            // Let's invert each for now as per original logic.
+
+            for (const p of targets) {
+                await togglePackage(p, false, true); // Silent
+                successCount++;
+            }
+            addToast(`Toggled ${successCount} packages`, 'success');
+        } else {
+            togglePackage(pkg);
+        }
+    };
+
     const handleConfirmCollision = () => {
         if (collisionData.pkg) {
             togglePackage(collisionData.pkg, true); // Retry with merge
@@ -1516,6 +1544,11 @@ function App() {
                     }}
                     itemsPerPage={itemsPerPage}
                     setItemsPerPage={handleSetItemsPerPage}
+                    maxToasts={maxToasts}
+                    setMaxToasts={(val) => {
+                        setMaxToasts(val);
+                        localStorage.setItem('maxToasts', val.toString());
+                    }}
                     // Server Props
                     serverEnabled={serverEnabled}
                     onToggleServer={handleToggleServer}
@@ -1968,7 +2001,7 @@ function App() {
                         pkg={contextMenu.pkg}
                         selectedCount={selectedIds.size}
                         onClose={() => setContextMenu({ ...contextMenu, open: false })}
-                        onToggle={(pkg) => selectedIds.has(pkg.filePath) && selectedIds.size > 1 ? Array.from(selectedIds).forEach(id => { const p = packages.find(pk => pk.filePath === id); if (p) togglePackage(p) }) : togglePackage(pkg)}
+                        onToggle={handleBulkToggle}
                         onOpenFolder={handleOpenFolder}
                         onDownload={(pkg) => {
                             // Install Logic
