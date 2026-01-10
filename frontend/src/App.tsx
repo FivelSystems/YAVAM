@@ -626,6 +626,27 @@ function App() {
                         // Keep only last 100 logs
                         setServerLogs(prev => [...prev.slice(-99), data]);
                     } else if (type === "package:scanned") {
+                        // Filter by active path (using ref to avoid stale closure if effect assumes [])
+                        // However, activeLibraryPath is state. We need a way to access current value.
+                        // We can use the localStorage backup or a specific Ref.
+                        // Let's rely on the assumption that if this listener is active, we care about the current view.
+                        // But wait, if we switch library, this effect DOES NOT rerun because dep array is [].
+                        // We must use a Ref.
+
+                        // Check against the Ref we created earlier: activeLibIndexRef? No that's index.
+                        // Let's check the path. 
+                        // NOTE: I will inject a Ref for `activeLibraryPath` in the next step or assume one exists.
+                        // Actually, I can just use `window.localStorage.getItem('activeLibraryPath')` as a crude but effective live check?
+                        // Or better, I should fix the effect dependency to restart on path change?
+                        // Restarting SSE on every path change is okay.
+
+                        const currentPath = localStorage.getItem('activeLibraryPath') || "";
+                        if (currentPath && data.filePath) {
+                            const normPkg = data.filePath.replace(/\\/g, '/').toLowerCase();
+                            const normLib = currentPath.replace(/\\/g, '/').toLowerCase();
+                            if (!normPkg.includes(normLib)) return;
+                        }
+
                         pkgBuffer.push(data);
                         const now = Date.now();
                         if (now - lastFlush > 200) {
