@@ -758,6 +758,7 @@ function App() {
         if (window.go) {
             // Remove old listeners to prevent duplicates
             // @ts-ignore
+            // @ts-ignore
             window.runtime.EventsOff("package:scanned");
             // @ts-ignore
             window.runtime.EventsOff("scan:progress");
@@ -766,8 +767,6 @@ function App() {
             // @ts-ignore
             window.runtime.EventsOff("scan:error");
 
-            // Setup Listeners
-            // Reset state
             setPackages([]);
             setFilteredPkgs([]);
             setLoading(true);
@@ -778,12 +777,14 @@ function App() {
             let lastUpdate = Date.now();
             let updateTimer: any = null;
 
+            // Capture the path associated with THIS scan invocation
+            const currentScanPath = activeLibraryPath;
+
             const flushBuffer = () => {
                 if (packageBuffer.length === 0) return;
                 const batch = [...packageBuffer];
                 packageBuffer = []; // Clear local buffer
                 setPackages(prev => {
-                    // Filter duplicates in batch?
                     return [...prev, ...batch];
                 });
             };
@@ -792,6 +793,18 @@ function App() {
             window.runtime.EventsOn("package:scanned", (data: VarPackage) => {
                 // Determine if enabled (legacy fix)
                 const pkg = { ...data, isEnabled: data.filePath.endsWith(".var") };
+
+                // CRITICAL FIX: Ignore packages that don't belong to this library
+                // Assuming filePath contains absolute path, check if it starts with activeLibraryPath
+                // Handle mixed slashes windows/linux
+                const normalizedPkgPath = pkg.filePath.replace(/\\/g, '/').toLowerCase();
+                const normalizedLibPath = currentScanPath.replace(/\\/g, '/').toLowerCase();
+
+                if (!normalizedPkgPath.includes(normalizedLibPath)) {
+                    // console.warn("Ignoring package from different library:", pkg.filePath);
+                    return;
+                }
+
                 packageBuffer.push(pkg);
 
                 // Throttle updates to every 200ms
@@ -831,6 +844,8 @@ function App() {
             });
             // @ts-ignore
             window.runtime.EventsOn("scan:error", (err: string) => {
+                // Ignore "context canceled" errors if we caused them
+                if (err.includes("canceled")) return;
                 console.error("Scan error:", err);
                 setLoading(false);
             });
