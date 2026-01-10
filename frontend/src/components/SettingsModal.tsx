@@ -1,8 +1,52 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, LayoutGrid, Network, Terminal, AlertTriangle, ExternalLink, HardDrive, Palette, AppWindow, Info, Github, Save, Check, FolderOpen, Trash2 } from "lucide-react";
+import { X, LayoutGrid, Network, Terminal, AlertTriangle, ExternalLink, HardDrive, Palette, AppWindow, Info, Github, Save, Check, FolderOpen, Trash2, Keyboard, EyeOff } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from 'clsx';
 
+
+// Helper for Key Recording
+const KeybindButton = ({ currentKey, onUpdate }: { currentKey: string, onUpdate: (k: string) => void }) => {
+    const [isListening, setIsListening] = useState(false);
+
+    useEffect(() => {
+        if (!isListening) return;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (e.key === 'Escape') {
+                setIsListening(false);
+                return;
+            }
+
+            // simplistic key capture
+            let key = e.key;
+            if (key === ' ') key = 'Space';
+            if (key.length === 1) key = key.toUpperCase();
+
+            onUpdate(key);
+            setIsListening(false);
+        };
+
+        window.addEventListener('keydown', handleKeyDown, true); // Capture phase to prevent bubbling
+        return () => window.removeEventListener('keydown', handleKeyDown, true);
+    }, [isListening, onUpdate]);
+
+    return (
+        <button
+            onClick={() => setIsListening(true)}
+            className={clsx(
+                "px-3 py-1.5 rounded-lg text-sm font-mono border shadow-sm min-w-[60px] text-center transition-all",
+                isListening
+                    ? "bg-red-600/20 border-red-500 text-red-400 animate-pulse"
+                    : "bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
+            )}
+        >
+            {isListening ? "Press Key..." : currentKey || "Unbound"}
+        </button>
+    );
+};
 
 interface SettingsModalProps {
     isOpen: boolean;
@@ -12,6 +56,10 @@ interface SettingsModalProps {
     setGridSize: (size: number) => void;
     itemsPerPage: number;
     setItemsPerPage: (val: number) => void;
+    censorThumbnails: boolean;
+    setCensorThumbnails: React.Dispatch<React.SetStateAction<boolean>>;
+    keybinds: { [key: string]: string };
+    onUpdateKeybind: (action: string, key: string) => void;
     // Server Tab
     serverEnabled: boolean;
     onToggleServer: () => void;
@@ -30,6 +78,10 @@ const SettingsModal = ({
     setGridSize,
     itemsPerPage,
     setItemsPerPage,
+    censorThumbnails,
+    setCensorThumbnails,
+    keybinds,
+    onUpdateKeybind,
     serverEnabled,
     onToggleServer,
     serverPort,
@@ -40,13 +92,14 @@ const SettingsModal = ({
     isWeb,
 }: SettingsModalProps) => {
 
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'general' | 'appearance' | 'network' | 'storage' | 'about'>('general');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'general' | 'appearance' | 'keybinds' | 'network' | 'storage' | 'about'>('general');
 
     // Capture initial state for Revert logic
     const [initialValues, setInitialValues] = useState<{
         gridSize: number;
         itemsPerPage: number;
         minimizeOnClose: boolean;
+        censorThumbnails: boolean;
     } | null>(null);
 
     const [minimizeOnClose, setMinimizeOnClose] = useState(() => localStorage.getItem('minimizeOnClose') === 'true');
@@ -60,7 +113,8 @@ const SettingsModal = ({
             setInitialValues({
                 gridSize,
                 itemsPerPage,
-                minimizeOnClose: currentMinimize
+                minimizeOnClose: currentMinimize,
+                censorThumbnails
             });
             setMinimizeOnClose(currentMinimize);
             setHasChanges(false);
@@ -73,9 +127,10 @@ const SettingsModal = ({
         const isDirty =
             gridSize !== initialValues.gridSize ||
             itemsPerPage !== initialValues.itemsPerPage ||
-            minimizeOnClose !== initialValues.minimizeOnClose;
+            minimizeOnClose !== initialValues.minimizeOnClose ||
+            censorThumbnails !== initialValues.censorThumbnails;
         setHasChanges(isDirty);
-    }, [gridSize, itemsPerPage, minimizeOnClose, initialValues]);
+    }, [gridSize, itemsPerPage, minimizeOnClose, censorThumbnails, initialValues]);
 
 
     useEffect(() => {
@@ -98,6 +153,7 @@ const SettingsModal = ({
         { id: 'general', label: 'General', icon: AppWindow },
         { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
         { id: 'appearance', label: 'Appearance', icon: Palette },
+        { id: 'keybinds', label: 'Keybinds', icon: Keyboard },
         ...(!isWeb ? [
             { id: 'storage', label: 'Storage', icon: HardDrive },
             { id: 'network', label: 'Network', icon: Network },
@@ -128,6 +184,11 @@ const SettingsModal = ({
         if (window.go) window.go.main.App.SetMinimizeOnClose(val);
     };
 
+    const handleSetCensor = (val: boolean) => {
+        setCensorThumbnails(val);
+        localStorage.setItem('censorThumbnails', val.toString());
+    };
+
     const handleApply = () => {
         // Commit changes (Persist what might not be persisted)
         localStorage.setItem('gridSize', gridSize.toString());
@@ -138,7 +199,8 @@ const SettingsModal = ({
         setInitialValues({
             gridSize,
             itemsPerPage,
-            minimizeOnClose
+            minimizeOnClose,
+            censorThumbnails
         });
         setHasChanges(false); // Disable Apply button until new changes
     };
@@ -156,6 +218,7 @@ const SettingsModal = ({
 
             // Revert Minimize
             handleSetMinimize(initialValues.minimizeOnClose);
+            setCensorThumbnails(initialValues.censorThumbnails);
         }
         onClose();
     };
@@ -287,31 +350,83 @@ const SettingsModal = ({
                                             <p className="text-sm text-gray-500 mb-4">Configure system behavior.</p>
 
                                             {!isWeb ? (
-                                                <div className="bg-gray-700/30 rounded-xl p-4 border border-gray-700/50">
-                                                    <div className="flex items-center justify-between">
-                                                        <div>
-                                                            <h4 className="text-sm font-medium text-white">Run in Background</h4>
-                                                            <p className="text-xs text-gray-500">Hide window on close but keep server running. Restore via System Tray.</p>
+                                                <div className="space-y-4">
+                                                    <div className="bg-gray-700/30 rounded-xl p-4 border border-gray-700/50">
+                                                        <div className="flex items-center justify-between">
+                                                            <div>
+                                                                <h4 className="text-sm font-medium text-white">Run in Background</h4>
+                                                                <p className="text-xs text-gray-500">Hide window on close but keep server running. Restore via System Tray.</p>
+                                                            </div>
+                                                            <button
+                                                                onClick={() => handleSetMinimize(!minimizeOnClose)}
+                                                                className={clsx(
+                                                                    "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+                                                                    minimizeOnClose ? "bg-blue-600" : "bg-gray-700"
+                                                                )}
+                                                            >
+                                                                <span className={clsx(
+                                                                    "inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200",
+                                                                    minimizeOnClose ? "translate-x-6" : "translate-x-1"
+                                                                )} />
+                                                            </button>
                                                         </div>
-                                                        <button
-                                                            onClick={() => handleSetMinimize(!minimizeOnClose)}
-                                                            className={clsx(
-                                                                "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
-                                                                minimizeOnClose ? "bg-blue-600" : "bg-gray-700"
-                                                            )}
-                                                        >
-                                                            <span className={clsx(
-                                                                "inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200",
-                                                                minimizeOnClose ? "translate-x-6" : "translate-x-1"
-                                                            )} />
-                                                        </button>
                                                     </div>
                                                 </div>
-                                            ) : (
-                                                <div className="text-sm text-gray-500 italic">
-                                                    No general settings available for Web Client.
+                                            ) : null}
+
+                                            {/* Censor Thumbnails (Available for Web & Desktop) */}
+                                            <div className="bg-gray-700/30 rounded-xl p-4 border border-gray-700/50 mt-4">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="p-2 bg-gray-700 rounded-lg text-gray-300">
+                                                            <EyeOff size={20} />
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="text-sm font-medium text-white">Censor Thumbnails (Privacy Mode)</h4>
+                                                            <p className="text-xs text-gray-500">Blur all images in the grid. Useful for privacy.</p>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleSetCensor(!censorThumbnails)}
+                                                        className={clsx(
+                                                            "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+                                                            censorThumbnails ? "bg-blue-600" : "bg-gray-700"
+                                                        )}
+                                                    >
+                                                        <span className={clsx(
+                                                            "inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200",
+                                                            censorThumbnails ? "translate-x-6" : "translate-x-1"
+                                                        )} />
+                                                    </button>
                                                 </div>
-                                            )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* KEYBINDS TAB */}
+                                {activeTab === 'keybinds' && (
+                                    <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+                                        <div>
+                                            <h4 className="text-lg font-medium text-white mb-1">Keyboard Shortcuts</h4>
+                                            <p className="text-sm text-gray-500 mb-4">Manage application hotkeys.</p>
+
+                                            <div className="space-y-2">
+                                                <div className="bg-gray-700/30 rounded-xl p-4 border border-gray-700/50 flex items-center justify-between">
+                                                    <div>
+                                                        <h5 className="text-sm font-medium text-white">Toggle Privacy Mode</h5>
+                                                        <p className="text-xs text-gray-500">Instantly blur/unblur thumbnails.</p>
+                                                    </div>
+                                                    <KeybindButton
+                                                        currentKey={keybinds['togglePrivacy'] || 'V'}
+                                                        onUpdate={(k) => onUpdateKeybind('togglePrivacy', k)}
+                                                    />
+                                                </div>
+                                                {/* Future bindings can go here */}
+                                                <div className="text-center p-4">
+                                                    <p className="text-xs text-gray-600 italic">More keybindings coming in future updates.</p>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 )}

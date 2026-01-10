@@ -352,6 +352,43 @@ function App() {
     const [selectedCreator, setSelectedCreator] = useState<string | null>(null);
     const [selectedType, setSelectedType] = useState<string | null>(null);
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
+    const [censorThumbnails, setCensorThumbnails] = useState(() => localStorage.getItem('censorThumbnails') === 'true');
+
+    // Keybinds State
+    const [keybinds, setKeybinds] = useState<{ [key: string]: string }>(() => {
+        const saved = localStorage.getItem('keybinds');
+        return saved ? JSON.parse(saved) : { togglePrivacy: 'v' };
+    });
+
+    const updateKeybind = (action: string, key: string) => {
+        setKeybinds(prev => {
+            const next = { ...prev, [action]: key };
+            localStorage.setItem('keybinds', JSON.stringify(next));
+            return next;
+        });
+    };
+
+    // Hotkey Listener
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Ignore if typing in input/textarea
+            const target = e.target as HTMLElement;
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+
+            // Toggle Censor
+            if (e.key.toLowerCase() === keybinds.togglePrivacy?.toLowerCase()) {
+                setCensorThumbnails(prev => {
+                    const newVal = !prev;
+                    localStorage.setItem('censorThumbnails', newVal.toString());
+                    addToast(newVal ? "Privacy Mode Enabled" : "Privacy Mode Disabled", 'info');
+                    return newVal;
+                });
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [keybinds]); // Depend on keybinds to update listener only when bindings change
 
     // Filter State
     const [searchQuery, setSearchQuery] = useState("");
@@ -1418,8 +1455,10 @@ function App() {
                     setLogs={setServerLogs}
                     // @ts-ignore
                     isWeb={!window.go}
-
-
+                    censorThumbnails={censorThumbnails}
+                    setCensorThumbnails={setCensorThumbnails}
+                    keybinds={keybinds}
+                    onUpdateKeybind={updateKeybind}
                 />
                 <ConfirmationModal
                     isOpen={deleteConfirm.open}
@@ -1717,6 +1756,7 @@ function App() {
                                     selectedIds={selectedIds}
                                     viewMode={viewMode}
                                     gridSize={gridSize}
+                                    censorThumbnails={censorThumbnails}
                                 />
                             </div>
 
