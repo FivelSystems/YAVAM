@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { RefreshCw, Search, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, PanelLeft, LayoutGrid, List, Filter, WifiOff, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Search, X, PanelLeft, LayoutGrid, List, Filter, WifiOff, AlertTriangle } from 'lucide-react';
 import clsx from 'clsx';
 import { Toast, ToastItem, ToastType } from './components/Toast';
 import DragDropOverlay from './components/DragDropOverlay';
 import ContextMenu from './components/ContextMenu';
-import LoadingToast from './components/LoadingToast';
+
 import CardGrid from './components/CardGrid';
 import Sidebar from './components/Sidebar';
 
@@ -16,6 +16,8 @@ import RightSidebar from './components/RightSidebar';
 import TitleBar from './components/TitleBar';
 import SetupWizard from './components/SetupWizard';
 import { UpgradeModal } from "./components/UpgradeModal";
+import { Pagination } from './components/Pagination';
+import { ScanProgressBar } from './components/ScanProgressBar';
 
 // Define types based on our Go models
 export interface VarPackage {
@@ -50,7 +52,13 @@ function App() {
     const [showUpdateModal, setShowUpdateModal] = useState(false);
     const [isUpdating, setIsUpdating] = useState(false);
 
+    const hasCheckedUpdates = useRef(false);
+
     useEffect(() => {
+        // Prevent double-check in Strict Mode
+        if (hasCheckedUpdates.current) return;
+        hasCheckedUpdates.current = true;
+
         // @ts-ignore
         if (window.go && window.go.main && window.go.main.App) {
             // @ts-ignore
@@ -125,6 +133,7 @@ function App() {
     // Helper to switch library
     const handleSwitchLibrary = async (index: number) => {
         if (index < 0 || index >= libraries.length) return;
+        if (index === activeLibIndexRef.current) return; // Prevent reload if already active (checks live value)
 
         if (loading) {
             setIsCancelling(true);
@@ -272,14 +281,16 @@ function App() {
         if (current) {
             const idx = libs.indexOf(current);
             if (idx !== -1) return idx;
-            // If current path isn't in list (e.g. freshly added/legacy), logic above adds it to front? 
-            // Logic above in libraries init uses logic to include it.
-            // But useState initializers run once. 
-            // Let's rely on effect to sync?
             return 0;
         }
         return 0;
     });
+
+    // Ref to track active index for stale closures (e.g. Toasts)
+    const activeLibIndexRef = useRef(activeLibIndex);
+    useEffect(() => {
+        activeLibIndexRef.current = activeLibIndex;
+    }, [activeLibIndex]);
 
     // Derived vamPath (source of truth is libraries[activeLibIndex])
     // But we also need to support the case where no libraries exist yet.
@@ -345,9 +356,9 @@ function App() {
     const [itemsPerPage, setItemsPerPage] = useState(() => parseInt(localStorage.getItem('itemsPerPage') || '25'));
     const [toasts, setToasts] = useState<ToastItem[]>([]);
 
-    const addToast = (message: string, type: ToastType = 'info') => {
+    const addToast = (message: string, type: ToastType = 'info', action?: () => void) => {
         const id = Date.now().toString(36) + Math.random().toString(36).substr(2);
-        setToasts(prev => [...prev, { id, message, type }]);
+        setToasts(prev => [...prev, { id, message, type, action }]);
     };
 
     const removeToast = (id: string) => {
@@ -1276,7 +1287,7 @@ function App() {
             <TitleBar />
             <div className="flex-1 flex overflow-hidden relative">
                 <DragDropOverlay onDrop={handleDrop} onWebUpload={handleWebUpload} />
-                <LoadingToast visible={loading} progress={scanProgress} />
+
 
                 <VersionResolutionModal
                     isOpen={resolveData.open}
@@ -1444,7 +1455,11 @@ function App() {
                                 <div className="w-px h-6 bg-gray-700"></div>
 
                                 <div className="flex items-center gap-4 text-sm text-gray-400">
-                                    <span className="hidden sm:inline">{filteredPkgs.length} packages found</span>
+                                    {loading ? (
+                                        <ScanProgressBar current={scanProgress.current} total={scanProgress.total} />
+                                    ) : (
+                                        <span className="hidden sm:inline">{filteredPkgs.length} packages found</span>
+                                    )}
                                     <button
                                         onClick={scanPackages}
                                         className="hover:text-white transition-colors"
@@ -1544,92 +1559,12 @@ function App() {
 
                             {/* Pagination Footer */}
                             {filteredPkgs.length > itemsPerPage && (
-                                <div className="p-3 border-t border-gray-700 bg-gray-800 shadow-xl z-20 flex justify-center items-center gap-2 shrink-0 overflow-x-auto">
-                                    {/* First Page */}
-                                    <button
-                                        onClick={() => setCurrentPage(1)}
-                                        disabled={currentPage === 1}
-                                        className="p-1.5 rounded-lg bg-gray-700 disabled:opacity-30 hover:bg-gray-600 disabled:hover:bg-gray-700 transition-colors text-gray-300"
-                                        title="First Page"
-                                    >
-                                        <ChevronsLeft size={18} />
-                                    </button>
-                                    {/* Previous Page */}
-                                    <button
-                                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                        disabled={currentPage === 1}
-                                        className="p-1.5 rounded-lg bg-gray-700 disabled:opacity-30 hover:bg-gray-600 disabled:hover:bg-gray-700 transition-colors text-gray-300"
-                                        title="Previous Page"
-                                    >
-                                        <ChevronLeft size={18} />
-                                    </button>
-
-                                    {/* Page Numbers */}
-                                    <div className="flex items-center gap-1 mx-2">
-                                        {(() => {
-                                            const totalPages = Math.ceil(filteredPkgs.length / itemsPerPage);
-                                            const maxVisible = 5;
-                                            let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
-                                            let endPage = Math.min(totalPages, startPage + maxVisible - 1);
-
-                                            if (endPage - startPage + 1 < maxVisible) {
-                                                startPage = Math.max(1, endPage - maxVisible + 1);
-                                            }
-
-                                            const pages = [];
-                                            if (startPage > 1) {
-                                                pages.push(
-                                                    <button key={1} onClick={() => setCurrentPage(1)} className="w-8 h-8 rounded-lg bg-gray-700 hover:bg-gray-600 text-xs font-medium text-gray-400">1</button>
-                                                );
-                                                if (startPage > 2) pages.push(<span key="dots1" className="text-gray-600">...</span>);
-                                            }
-
-                                            for (let i = startPage; i <= endPage; i++) {
-                                                pages.push(
-                                                    <button
-                                                        key={i}
-                                                        onClick={() => setCurrentPage(i)}
-                                                        className={clsx(
-                                                            "w-8 h-8 rounded-lg text-xs font-medium transition-colors",
-                                                            currentPage === i
-                                                                ? "bg-blue-600 text-white shadow-lg shadow-blue-900/50"
-                                                                : "bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white"
-                                                        )}
-                                                    >
-                                                        {i}
-                                                    </button>
-                                                );
-                                            }
-
-                                            if (endPage < totalPages) {
-                                                if (endPage < totalPages - 1) pages.push(<span key="dots2" className="text-gray-600">...</span>);
-                                                pages.push(
-                                                    <button key={totalPages} onClick={() => setCurrentPage(totalPages)} className="w-8 h-8 rounded-lg bg-gray-700 hover:bg-gray-600 text-xs font-medium text-gray-400">{totalPages}</button>
-                                                );
-                                            }
-                                            return pages;
-                                        })()}
-                                    </div>
-
-                                    {/* Next Page */}
-                                    <button
-                                        onClick={() => setCurrentPage(p => Math.min(Math.ceil(filteredPkgs.length / itemsPerPage), p + 1))}
-                                        disabled={currentPage === Math.ceil(filteredPkgs.length / itemsPerPage)}
-                                        className="p-1.5 rounded-lg bg-gray-700 disabled:opacity-30 hover:bg-gray-600 disabled:hover:bg-gray-700 transition-colors text-gray-300"
-                                        title="Next Page"
-                                    >
-                                        <ChevronRight size={18} />
-                                    </button>
-                                    {/* Last Page */}
-                                    <button
-                                        onClick={() => setCurrentPage(Math.ceil(filteredPkgs.length / itemsPerPage))}
-                                        disabled={currentPage === Math.ceil(filteredPkgs.length / itemsPerPage)}
-                                        className="p-1.5 rounded-lg bg-gray-700 disabled:opacity-30 hover:bg-gray-600 disabled:hover:bg-gray-700 transition-colors text-gray-300"
-                                        title="Last Page"
-                                    >
-                                        <ChevronsRight size={18} />
-                                    </button>
-                                </div>
+                                <Pagination
+                                    currentPage={currentPage}
+                                    totalItems={filteredPkgs.length}
+                                    itemsPerPage={itemsPerPage}
+                                    onChange={setCurrentPage}
+                                />
                             )}
                         </div>
 
@@ -1719,7 +1654,15 @@ function App() {
                                                         return;
                                                     }
 
-                                                    addToast(`Installed ${paths.length} packages to ${lib.split(/[/\\]/).pop()}`, 'success');
+                                                    // Desktop Install
+                                                    // @ts-ignore
+                                                    await window.go.main.App.InstallFiles(paths, lib);
+
+                                                    const destIndex = libraries.findIndex(l => l === lib);
+                                                    addToast(`Installed ${paths.length} packages`, 'success', () => {
+                                                        if (destIndex !== -1) handleSwitchLibrary(destIndex);
+                                                    });
+
                                                     setInstallModal({ open: false, pkgs: [] });
                                                 } catch (e) {
                                                     addToast("Install failed: " + e, 'error');
@@ -1748,7 +1691,11 @@ function App() {
                                                         return;
                                                     }
 
-                                                    addToast(`Installed ${paths.length} packages`, 'success');
+                                                    const destIndex = libraries.findIndex(l => l === lib);
+                                                    addToast(`Installed ${paths.length} packages`, 'success', () => {
+                                                        if (destIndex !== -1) handleSwitchLibrary(destIndex);
+                                                    });
+
                                                     setInstallModal({ open: false, pkgs: [] });
                                                 } catch (e: any) {
                                                     console.error("Install error:", e);
@@ -1841,8 +1788,9 @@ function App() {
                 downloading={isUpdating}
             />
 
-            {/* Toasts Container */}
-            <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end pointer-events-none">
+            {/* Toasts Container - Lifted to avoid Pagination (bottom-20) */}
+            <div className="fixed bottom-20 right-4 z-50 flex flex-col items-end pointer-events-none">
+
                 <AnimatePresence>
                     {toasts.map(toast => (
                         <Toast key={toast.id} toast={toast} onRemove={removeToast} />
