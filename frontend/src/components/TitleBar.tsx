@@ -19,6 +19,8 @@ const TitleBar = () => {
     // @ts-ignore
     const isWeb = !window.go;
 
+    if (isWeb) return null;
+
     return (
         <div className="h-8 bg-gray-900 flex justify-between items-center select-none w-full border-b border-gray-800 z-50">
             {/* Draggable Area */}
