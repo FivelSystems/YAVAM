@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, useLayoutEffect } from 'react';
+import { useRef, useEffect, useState, useLayoutEffect } from 'react';
 import { VarPackage } from '../App';
-import { Power, FolderOpen, Copy, Trash2, FileCode, Scissors, Download } from 'lucide-react';
+import { Power, FolderOpen, Copy, Trash2, FileCode, Scissors, Download, Layers, Sparkles } from 'lucide-react';
 
 interface ContextMenuProps {
     x: number;
@@ -15,9 +15,12 @@ interface ContextMenuProps {
     onCopyFile: (pkg: VarPackage) => void;
     onCutFile: (pkg: VarPackage) => void;
     onDelete: (pkg: VarPackage) => void;
+    onMerge: (pkg: VarPackage) => void;
+    onMergeInPlace: (pkg: VarPackage) => void;
+    onResolve: (pkg: VarPackage) => void;
 }
 
-const ContextMenu = ({ x, y, pkg, selectedCount = 0, onClose, onToggle, onOpenFolder, onDownload, onCopyPath, onCopyFile, onCutFile, onDelete }: ContextMenuProps) => {
+const ContextMenu = ({ x, y, pkg, selectedCount = 0, onClose, onToggle, onOpenFolder, onDownload, onCopyPath, onCopyFile, onCutFile, onDelete, onMerge, onMergeInPlace, onResolve }: ContextMenuProps) => {
     const ref = useRef<HTMLDivElement>(null);
     const [position, setPosition] = useState({ top: y, left: x });
     // @ts-ignore
@@ -80,7 +83,40 @@ const ContextMenu = ({ x, y, pkg, selectedCount = 0, onClose, onToggle, onOpenFo
                 {selectedCount > 1 ? "Toggle Selected" : (pkg.isEnabled ? "Disable" : "Enable")}
             </button>
 
+
+
             <div className="border-t border-gray-700 my-1"></div>
+
+            {/* Optimization Actions */}
+            {(pkg.isExactDuplicate) && (
+                <>
+                    <div className="h-px bg-gray-700 my-1 mx-2" />
+                    <button
+                        onClick={() => { onMerge(pkg); onClose(); }}
+                        className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
+                    >
+                        <Layers size={16} className="text-purple-400" />
+                        Merge to Root
+                    </button>
+                    <button
+                        onClick={() => { onMergeInPlace(pkg); onClose(); }}
+                        className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
+                    >
+                        <Layers size={16} className="text-purple-400" />
+                        Merge in Place
+                    </button>
+                </>
+            )}
+            {/* Obsolete Fix (Non-Duplicate) */}
+            {(!pkg.isExactDuplicate && pkg.isDuplicate) && (
+                <button
+                    onClick={() => { onResolve(pkg); onClose(); }}
+                    className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
+                >
+                    <Sparkles size={16} className="text-yellow-400" />
+                    Fix Obsolete
+                </button>
+            )}
 
             {!isWeb && (
                 <button

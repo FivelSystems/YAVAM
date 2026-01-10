@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { VarPackage } from '../App';
 import clsx from 'clsx';
-import { AlertCircle, Check, AlertTriangle, Power } from 'lucide-react';
+import { AlertCircle, Check, AlertTriangle, Power, Copy } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface PackageCardProps {
@@ -84,6 +84,9 @@ const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'gri
         if (pkg.missingDeps && pkg.missingDeps.length > 0) {
             statusClass = "border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]";
             statusIcon = <AlertCircle size={16} className="text-red-500" />;
+        } else if (pkg.isExactDuplicate) {
+            statusClass = "border-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.3)]";
+            statusIcon = <Copy size={16} className="text-purple-500" />;
         } else if (pkg.isDuplicate) {
             statusClass = "border-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.3)]";
             statusIcon = <AlertTriangle size={16} className="text-yellow-500" />;
@@ -204,7 +207,8 @@ const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'gri
                     <div className="text-[10px] text-gray-400 mt-2 border-t border-gray-700/50 pt-2 flex justify-between">
                         <span>{(pkg.size / 1024 / 1024).toFixed(1)} MB</span>
                         {pkg.isEnabled && pkg.missingDeps && pkg.missingDeps.length > 0 && <span className="text-red-400 font-bold">{pkg.missingDeps.length} Missing</span>}
-                        {pkg.isEnabled && pkg.isDuplicate && <span className="text-yellow-400 font-bold">Conflict</span>}
+                        {pkg.isEnabled && pkg.isExactDuplicate && <span className="text-purple-400 font-bold">Duplicate</span>}
+                        {pkg.isEnabled && !pkg.isExactDuplicate && pkg.isDuplicate && <span className="text-yellow-400 font-bold">Obsolete</span>}
                         {!pkg.isEnabled && <span>Disabled</span>}
                     </div>
                 </div>

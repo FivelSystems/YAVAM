@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, AlertTriangle, Copy, Layers, Package, Settings, CheckCircle2, CircleOff, Power, Hammer, Trash2, GripVertical } from 'lucide-react';
+import { ChevronDown, ChevronRight, AlertTriangle, Copy, Layers, Package, Settings, CheckCircle2, CircleOff, Power, Sparkles, Trash2, GripVertical } from 'lucide-react';
 import { VarPackage } from '../App';
 import clsx from 'clsx';
 import { useMemo, useState, useEffect } from 'react';
@@ -23,7 +23,7 @@ interface SidebarProps {
     // Status & Actions
     creatorStatus: Record<string, 'normal' | 'warning' | 'error'>;
     typeStatus: Record<string, 'normal' | 'warning' | 'error'>;
-    onSidebarAction: (action: 'enable-all' | 'disable-all' | 'resolve-all', groupType: 'creator' | 'type' | 'status', key: string) => void;
+    onSidebarAction: (action: 'enable-all' | 'disable-all' | 'resolve-all' | 'merge-dupes', groupType: 'creator' | 'type' | 'status', key: string) => void;
 }
 
 const SidebarLibraryItem = ({ lib, idx, isActive, count, onSelect, onRemove }: { lib: string, idx: number, isActive: boolean, count?: number, onSelect: () => void, onRemove?: (idx: number) => void }) => {
@@ -129,7 +129,8 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
             enabled: packages.filter(p => p.isEnabled).length,
             disabled: packages.filter(p => !p.isEnabled).length,
             missingDeps: packages.filter(p => p.missingDeps && p.missingDeps.length > 0).length,
-            duplicates: packages.filter(p => p.isDuplicate).length
+            versionConflicts: packages.filter(p => p.isDuplicate).length, // "Multiple Versions"
+            exactDuplicates: packages.filter(p => p.isExactDuplicate).length // "Duplicates"
         };
     }, [packages]);
 
@@ -277,15 +278,27 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
                                 </button>
                             )}
 
-                            {statusCounts.duplicates > 0 && (
+                            {statusCounts.versionConflicts > 0 && (
                                 <button
-                                    onClick={() => setFilter(currentFilter === 'duplicates' ? 'all' : 'duplicates')}
-                                    onContextMenu={(e) => handleContextMenu(e, 'status', 'duplicates')}
+                                    onClick={() => setFilter(currentFilter === 'version-conflicts' ? 'all' : 'version-conflicts')}
+                                    onContextMenu={(e) => handleContextMenu(e, 'status', 'version-conflicts')}
                                     className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
-                                        currentFilter === 'duplicates' ? "bg-yellow-500/10 text-yellow-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
+                                        currentFilter === 'version-conflicts' ? "bg-yellow-500/10 text-yellow-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
                                 >
-                                    <div className="flex items-center gap-3"><Copy size={18} /> Multiple Versions</div>
-                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-yellow-500/20 text-yellow-400 border border-yellow-500/10 group-hover:bg-yellow-500/30 transition-colors">{statusCounts.duplicates}</span>
+                                    <div className="flex items-center gap-3"><Layers size={18} /> Obsolete</div>
+                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-yellow-500/20 text-yellow-400 border border-yellow-500/10 group-hover:bg-yellow-500/30 transition-colors">{statusCounts.versionConflicts}</span>
+                                </button>
+                            )}
+
+                            {statusCounts.exactDuplicates > 0 && (
+                                <button
+                                    onClick={() => setFilter(currentFilter === 'exact-duplicates' ? 'all' : 'exact-duplicates')}
+                                    onContextMenu={(e) => handleContextMenu(e, 'status', 'exact-duplicates')}
+                                    className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
+                                        currentFilter === 'exact-duplicates' ? "bg-purple-500/10 text-purple-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
+                                >
+                                    <div className="flex items-center gap-3"><Copy size={18} /> Duplicates</div>
+                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-purple-500/20 text-purple-400 border border-purple-500/10 group-hover:bg-purple-500/30 transition-colors">{statusCounts.exactDuplicates}</span>
                                 </button>
                             )}
                         </div>
@@ -364,32 +377,72 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
                     <div className="px-3 py-1 text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-700/50 mb-1 truncate max-w-[200px]">
                         {contextMenu.key}
                     </div>
-                    <button onClick={() => { onSidebarAction('enable-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
-                        <CheckCircle2 size={14} className="text-green-500" /> Enable All
-                    </button>
-                    <button onClick={() => { onSidebarAction('disable-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
-                        <Power size={14} className="text-gray-400" /> Disable All
-                    </button>
-                    {/* Conditional Fix Conflicts Button */}
+                    {/* Enable All - Show if any disabled package exists in context */}
                     {packages.some(p => {
-                        if (contextMenu.groupType === 'creator') return (p.meta.creator || "Unknown") === contextMenu.key && p.isDuplicate;
-                        if (contextMenu.groupType === 'type') {
-                            const t = p.type || "Unknown";
-                            return t === contextMenu.key && p.isDuplicate;
-                        }
-                        if (contextMenu.groupType === 'status') {
-                            if (contextMenu.key === 'all') return p.isDuplicate;
-                            if (contextMenu.key === 'enabled') return p.isEnabled && p.isDuplicate;
-                            if (contextMenu.key === 'disabled') return !p.isEnabled && p.isDuplicate;
-                            if (contextMenu.key === 'missing-deps') return p.missingDeps && p.missingDeps.length > 0 && p.isDuplicate;
-                            if (contextMenu.key === 'duplicates') return true;
-                        }
-                        return false;
+                        const isInGroup = (
+                            (contextMenu.groupType === 'creator' && (p.meta.creator || "Unknown") === contextMenu.key) ||
+                            (contextMenu.groupType === 'type' && (p.type || "Unknown") === contextMenu.key) ||
+                            (contextMenu.groupType === 'status' && (
+                                contextMenu.key === 'all' ||
+                                (contextMenu.key === 'enabled' && p.isEnabled) ||
+                                (contextMenu.key === 'disabled' && !p.isEnabled) ||
+                                (contextMenu.key === 'missing-deps' && p.missingDeps && p.missingDeps.length > 0) ||
+                                (contextMenu.key === 'version-conflicts' && p.isDuplicate) ||
+                                (contextMenu.key === 'exact-duplicates' && p.isExactDuplicate)
+                            ))
+                        );
+                        return isInGroup && !p.isEnabled;
                     }) && (
-                            <button onClick={() => { onSidebarAction('resolve-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
-                                <Hammer size={14} className="text-yellow-500" /> Fix Conflicts
+                            <button onClick={() => { onSidebarAction('enable-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
+                                <CheckCircle2 size={14} className="text-green-500" /> Enable All
                             </button>
                         )}
+
+                    {/* Disable All - Show if any enabled package exists in context */}
+                    {packages.some(p => {
+                        const isInGroup = (
+                            (contextMenu.groupType === 'creator' && (p.meta.creator || "Unknown") === contextMenu.key) ||
+                            (contextMenu.groupType === 'type' && (p.type || "Unknown") === contextMenu.key) ||
+                            (contextMenu.groupType === 'status' && (
+                                contextMenu.key === 'all' ||
+                                (contextMenu.key === 'enabled' && p.isEnabled) ||
+                                (contextMenu.key === 'disabled' && !p.isEnabled) ||
+                                (contextMenu.key === 'missing-deps' && p.missingDeps && p.missingDeps.length > 0) ||
+                                (contextMenu.key === 'version-conflicts' && p.isDuplicate) ||
+                                (contextMenu.key === 'exact-duplicates' && p.isExactDuplicate)
+                            ))
+                        );
+                        return isInGroup && p.isEnabled;
+                    }) && (
+                            <button onClick={() => { onSidebarAction('disable-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
+                                <Power size={14} className="text-gray-400" /> Disable All
+                            </button>
+                        )}
+
+                    <div className="border-b border-gray-700/50 my-1"></div>
+
+                    {/* Resolve Conflicts - Show if any version conflict exists in context */}
+                    {packages.some(p => {
+                        const isInGroup = (
+                            (contextMenu.groupType === 'creator' && (p.meta.creator || "Unknown") === contextMenu.key) ||
+                            (contextMenu.groupType === 'type' && (p.type || "Unknown") === contextMenu.key) ||
+                            (contextMenu.groupType === 'status' && (
+                                contextMenu.key === 'all' ||
+                                (contextMenu.key === 'enabled' && p.isEnabled) ||
+                                (contextMenu.key === 'disabled' && !p.isEnabled) ||
+                                (contextMenu.key === 'missing-deps' && p.missingDeps && p.missingDeps.length > 0) ||
+                                (contextMenu.key === 'version-conflicts' && p.isDuplicate) ||
+                                (contextMenu.key === 'exact-duplicates' && p.isExactDuplicate)
+                            ))
+                        );
+                        return isInGroup && p.isDuplicate; // isDuplicate = Version Conflict
+                    }) && (
+                            <button onClick={() => { onSidebarAction('resolve-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
+                                <Sparkles size={14} className="text-purple-400" /> Package Cleanup
+                            </button>
+                        )}
+
+
                 </div>
             )}
         </aside>

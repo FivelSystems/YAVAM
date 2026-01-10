@@ -6,16 +6,79 @@ interface VersionResolutionModalProps {
     onClose: () => void;
     duplicates: VarPackage[];
     onResolve: (keepPkg: VarPackage) => void;
+    onMerge: (duplicates: VarPackage[]) => void;
 }
 
-const VersionResolutionModal = ({ isOpen, onClose, duplicates, onResolve }: VersionResolutionModalProps) => {
+const VersionResolutionModal = ({ isOpen, onClose, duplicates, onResolve, onMerge }: VersionResolutionModalProps) => {
     if (!isOpen) return null;
 
-    // Sort duplicates by version (descending) if possible, or name
-    const sorted = [...duplicates].sort((a, b) => {
-        // Try to verify if version is comparable
-        return b.fileName.localeCompare(a.fileName);
+    // 1. Check for Exact Duplicates (Same Version + Size + Hash if avail)
+    // Group by unique key
+    const exactGroups: Record<string, VarPackage[]> = {};
+    duplicates.forEach(p => {
+        const key = `${p.meta.version}-${p.size}`;
+        if (!exactGroups[key]) exactGroups[key] = [];
+        exactGroups[key].push(p);
     });
+
+    const hasExactDuplicates = Object.values(exactGroups).some(g => g.length > 1);
+
+    // Sort duplicates by version (descending)
+    const sorted = [...duplicates].sort((a, b) => {
+        // Parse versions as integers for VAM standard (1, 2, ..., 15)
+        const vA = parseInt(a.meta.version);
+        const vB = parseInt(b.meta.version);
+
+        if (!isNaN(vA) && !isNaN(vB)) {
+            return vB - vA; // Descending (15 before 3)
+        }
+
+        // Fallback for non-numeric versions
+        return b.fileName.localeCompare(a.fileName, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    // Heuristic for Latest Version (Keep)
+    // Attempt to identify the "Best" candidate (highest version)
+    // Here we just pick the top of sorted list?
+    // User asked for "Only Latest" button.
+
+    const handleOnlyLatest = () => {
+        // Assume sorted[0] is latest?
+        // Need robust sort.
+        // Let's rely on simple string sort for now or better heuristic later.
+        if (sorted.length > 0) {
+            onResolve(sorted[0]);
+        }
+    };
+
+    if (hasExactDuplicates) {
+        return (
+            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+                <div className="bg-gray-800 border border-purple-500/50 rounded-xl shadow-2xl max-w-md w-full flex flex-col p-6 text-center">
+                    <div className="mx-auto bg-purple-500/20 p-4 rounded-full mb-4">
+                        <CheckCircle size={48} className="text-purple-500" />
+                    </div>
+                    <h2 className="text-xl font-bold text-white mb-2">Duplicate Copies Detected</h2>
+                    <p className="text-gray-400 mb-6 text-sm">
+                        Before resolving version conflicts, we found <strong>exact duplicate files</strong>.
+                        We recommend merging them first to clean up your library. This will keep one copy in the root and delete the rest.
+                    </p>
+
+                    <button
+                        onClick={() => onMerge(duplicates)}
+                        className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 px-4 rounded-lg transition-all transform hover:scale-[1.02] shadow-lg shadow-purple-900/20 mb-3"
+                    >
+                        Merge Duplicates First
+                    </button>
+
+                    <button onClick={onClose} className="text-gray-500 text-sm hover:text-gray-300 underline">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
 
     return (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
@@ -31,10 +94,17 @@ const VersionResolutionModal = ({ isOpen, onClose, duplicates, onResolve }: Vers
                 </div>
 
                 <div className="p-4 overflow-y-auto flex-1 custom-scrollbar">
-                    <p className="text-gray-300 mb-6 text-sm">
-                        Multiple enabled versions detected. Select the one to <strong>Keep Enabled</strong>:<br />
-                        <span className="text-gray-500 text-xs">(Identical copies will be automatically merged/deleted)</span>
-                    </p>
+                    <div className="flex justify-between items-end mb-4">
+                        <p className="text-gray-300 text-sm">
+                            Select the version to <strong>Keep Active</strong> (others will be disabled):
+                        </p>
+                        <button
+                            onClick={handleOnlyLatest}
+                            className="bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-xs px-3 py-1.5 rounded border border-blue-500/30 transition-colors uppercase font-bold tracking-wider"
+                        >
+                            Keep Latest Only
+                        </button>
+                    </div>
 
                     <div className="space-y-3">
                         {sorted.map((pkg) => {
