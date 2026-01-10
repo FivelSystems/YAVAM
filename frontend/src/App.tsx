@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { RefreshCw, Search, X, PanelLeft, LayoutGrid, List, Filter, WifiOff, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Search, X, PanelLeft, LayoutGrid, List, Filter, WifiOff, AlertTriangle, ArrowUpDown, Calendar, ArrowUpAZ, ArrowDownZA, ArrowDownWideNarrow, ArrowUpNarrowWide } from 'lucide-react';
 import clsx from 'clsx';
 import { Toast, ToastItem, ToastType } from './components/Toast';
 import DragDropOverlay from './components/DragDropOverlay';
@@ -341,15 +341,22 @@ function App() {
         return { creatorStatus: cStatus, typeStatus: tStatus };
     }, [packages]);
 
-    // Filter State
-    const [searchQuery, setSearchQuery] = useState("");
-    const [tagSearchQuery, setTagSearchQuery] = useState("");
-    const [isTagSearchOpen, setIsTagSearchOpen] = useState(false);
-    const [isTagsVisible, setIsTagsVisible] = useState(true);
+    // UI State
+    const [viewMode, setViewMode] = useState<'grid' | 'list'>(window.innerWidth < 768 ? 'list' : 'grid');
+    const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isTagsVisible, setIsTagsVisible] = useState(false);
+    const [sortMode, setSortMode] = useState<string>(localStorage.getItem("sortMode") || 'name-asc');
+    const [isSortDropdownOpen, setIsSortDropdownOpen] = useState(false);
     const [currentFilter, setCurrentFilter] = useState("all");
     const [selectedCreator, setSelectedCreator] = useState<string | null>(null);
     const [selectedType, setSelectedType] = useState<string | null>(null);
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
+    // Filter State
+    const [searchQuery, setSearchQuery] = useState("");
+    const [tagSearchQuery, setTagSearchQuery] = useState("");
+    const [isTagSearchOpen, setIsTagSearchOpen] = useState(false);
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
@@ -377,9 +384,8 @@ function App() {
     };
 
     // Settings
-    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768);
-    const [viewMode, setViewMode] = useState<'grid' | 'list'>(window.innerWidth < 768 ? 'list' : 'grid');
+    // Settings
+    // (State moved to top)
     const [gridSize, setGridSize] = useState(parseInt(localStorage.getItem("gridSize") || "160"));
 
     useEffect(() => {
@@ -550,6 +556,22 @@ function App() {
             console.log("Connecting to EventSource...");
             const es = new EventSource('/api/events');
 
+            // Batching for Web Mode
+            let pkgBuffer: any[] = [];
+            let lastFlush = Date.now();
+            let flushTimer: any = null;
+
+            const flush = () => {
+                if (pkgBuffer.length === 0) return;
+                const batch = [...pkgBuffer];
+                pkgBuffer = [];
+                setPackages(prev => {
+                    // Check duplicates? For web mode, maybe expensive.
+                    // Just append for speed, filter later if needed or rely on Set
+                    return [...prev, ...batch];
+                });
+            };
+
             es.onmessage = (event) => {
                 try {
                     const payload = JSON.parse(event.data);
@@ -561,11 +583,22 @@ function App() {
                     } else if (type === "server:log") {
                         setServerLogs(prev => [...prev.slice(-99), data]);
                     } else if (type === "package:scanned") {
-                        setPackages(prev => {
-                            // Avoid duplicates
-                            if (prev.some(p => p.filePath === data.filePath)) return prev;
-                            return [...prev, data];
-                        });
+                        pkgBuffer.push(data);
+                        const now = Date.now();
+                        if (now - lastFlush > 200) {
+                            flush();
+                            lastFlush = now;
+                        } else if (!flushTimer) {
+                            flushTimer = setTimeout(() => {
+                                flush();
+                                lastFlush = Date.now();
+                                flushTimer = null;
+                            }, 200);
+                        }
+                    } else if (type === "scan:complete") {
+                        if (flushTimer) clearTimeout(flushTimer);
+                        flush();
+                        setLoading(false);
                     }
                 } catch (e) {
                     console.error("SSE parse error", e);
@@ -687,23 +720,59 @@ function App() {
             window.runtime.EventsOff("scan:error");
 
             // Setup Listeners
-            // @ts-ignore
-            window.runtime.EventsOn("package:scanned", (pkg: VarPackage) => {
+            // Reset state
+            setPackages([]);
+            setFilteredPkgs([]);
+            setLoading(true);
+            setScanProgress({ current: 0, total: 0 });
+
+            // Batching Buffer
+            let packageBuffer: VarPackage[] = [];
+            let lastUpdate = Date.now();
+            let updateTimer: any = null;
+
+            const flushBuffer = () => {
+                if (packageBuffer.length === 0) return;
+                const batch = [...packageBuffer];
+                packageBuffer = []; // Clear local buffer
                 setPackages(prev => {
-                    // Prevent duplicates based on filePath
-                    if (prev.some(p => p.filePath === pkg.filePath)) return prev;
-                    return [...prev, pkg];
+                    // Filter duplicates in batch?
+                    return [...prev, ...batch];
                 });
+            };
+
+            // @ts-ignore
+            window.runtime.EventsOn("package:scanned", (data: VarPackage) => {
+                // Determine if enabled (legacy fix)
+                const pkg = { ...data, isEnabled: data.filePath.endsWith(".var") };
+                packageBuffer.push(pkg);
+
+                // Throttle updates to every 200ms
+                const now = Date.now();
+                if (now - lastUpdate > 200) {
+                    flushBuffer();
+                    lastUpdate = now;
+                } else if (!updateTimer) {
+                    updateTimer = setTimeout(() => {
+                        flushBuffer();
+                        lastUpdate = Date.now();
+                        updateTimer = null;
+                    }, 200);
+                }
             });
+
             // @ts-ignore
             window.runtime.EventsOn("scan:progress", (data: any) => {
                 setScanProgress({ current: data.current, total: data.total });
             });
             // @ts-ignore
             window.runtime.EventsOn("scan:complete", () => {
+                if (updateTimer) clearTimeout(updateTimer);
+                flushBuffer(); // Final flush
+
                 setPackages(prev => {
                     const analyzed = analyzePackages(prev);
-                    // Extract tags asynchronously to avoid state update conflict
+                    // Extract tags
                     setTimeout(() => {
                         const tags = new Set<string>();
                         analyzed.forEach(p => p.tags?.forEach(t => tags.add(t)));
@@ -754,7 +823,7 @@ function App() {
     };
 
     const filterPackages = () => {
-        let res = packages;
+        let res = [...packages];
 
         // Status Filter
         if (currentFilter === "enabled") res = res.filter(p => p.isEnabled);
@@ -786,15 +855,49 @@ function App() {
         // Search
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
-            res = res.filter(p =>
-                p.fileName.toLowerCase().includes(q) ||
-                p.meta?.creator?.toLowerCase().includes(q) ||
-                p.meta?.packageName?.toLowerCase().includes(q)
-            );
+            res = res.filter(p => {
+                const matchesName = p.fileName.toLowerCase().includes(q);
+                const matchesCreator = p.meta?.creator?.toLowerCase().includes(q);
+                // Also search package name specifically?
+                const matchesPkg = p.meta?.packageName?.toLowerCase().includes(q);
+                return matchesName || matchesCreator || matchesPkg;
+            });
         }
+
+        // Sorting
+        res.sort((a, b) => {
+            switch (sortMode) {
+                case 'name-asc':
+                    return a.fileName.localeCompare(b.fileName);
+                case 'name-desc':
+                    return b.fileName.localeCompare(a.fileName);
+                case 'size-asc':
+                    return a.size - b.size;
+                case 'size-desc':
+                    return b.size - a.size;
+                case 'date-newest':
+                    // @ts-ignore
+                    return new Date(b.creationDate || 0).getTime() - new Date(a.creationDate || 0).getTime();
+                case 'date-oldest':
+                    // @ts-ignore
+                    return new Date(a.creationDate || 0).getTime() - new Date(b.creationDate || 0).getTime();
+                default:
+                    return 0;
+            }
+        });
 
         setFilteredPkgs(res);
     };
+
+    // Trigger filtering when state changes
+    useEffect(() => {
+        filterPackages();
+    }, [packages.length, currentFilter, selectedCreator, selectedType, selectedTags, searchQuery, sortMode]);
+
+    // Persist Sort Mode
+    useEffect(() => {
+        localStorage.setItem("sortMode", sortMode);
+    }, [sortMode]);
 
     const handleDrop = useCallback(async (files: string[]) => {
         console.log("Dropped files:", files);
@@ -1417,6 +1520,66 @@ function App() {
                                         value={searchQuery}
                                         onChange={(e) => setSearchQuery(e.target.value)}
                                     />
+
+                                    {/* Sorting Dropdown Trigger */}
+                                    <div className="relative shrink-0">
+                                        <button
+                                            onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
+                                            className={clsx(
+                                                "p-1 rounded hover:bg-gray-600 text-gray-400 hover:text-white transition-colors",
+                                                isSortDropdownOpen && "bg-gray-600 text-white"
+                                            )}
+                                            title="Sort Options"
+                                        >
+                                            <ArrowUpDown size={16} />
+                                        </button>
+
+                                        {/* Dropdown Menu */}
+                                        <AnimatePresence>
+                                            {isSortDropdownOpen && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                    className="absolute right-0 top-full mt-2 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden"
+                                                >
+                                                    <div className="flex flex-col py-1">
+                                                        {[
+                                                            { id: 'name-asc', label: 'Name (A-Z)', icon: <ArrowUpAZ size={14} /> },
+                                                            { id: 'name-desc', label: 'Name (Z-A)', icon: <ArrowDownZA size={14} /> },
+                                                            { id: 'size-desc', label: 'Size (Largest)', icon: <ArrowDownWideNarrow size={14} /> },
+                                                            { id: 'size-asc', label: 'Size (Smallest)', icon: <ArrowUpNarrowWide size={14} /> },
+                                                            { id: 'date-newest', label: 'Date (Newest)', icon: <Calendar size={14} /> },
+                                                            { id: 'date-oldest', label: 'Date (Oldest)', icon: <Calendar size={14} /> },
+                                                        ].map(opt => (
+                                                            <button
+                                                                key={opt.id}
+                                                                onClick={() => {
+                                                                    setSortMode(opt.id);
+                                                                    setIsSortDropdownOpen(false);
+                                                                }}
+                                                                className={clsx(
+                                                                    "flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-700 transition-colors",
+                                                                    sortMode === opt.id ? "text-blue-400 bg-blue-400/10" : "text-gray-300"
+                                                                )}
+                                                            >
+                                                                {opt.icon}
+                                                                <span>{opt.label}</span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+
+                                        {/* Backdrop to close */}
+                                        {isSortDropdownOpen && (
+                                            <div
+                                                className="fixed inset-0 z-40 bg-transparent"
+                                                onClick={() => setIsSortDropdownOpen(false)}
+                                            />
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 

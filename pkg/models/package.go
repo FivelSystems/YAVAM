@@ -26,6 +26,7 @@ type VarPackage struct {
 	Type            string   `json:"type"`
 	Categories      []string `json:"categories"`
 	Tags            []string `json:"tags,omitempty"`
+	CreationDate    string   `json:"creationDate"` // ISO 8601
 }
 
 type PackageContent struct {
