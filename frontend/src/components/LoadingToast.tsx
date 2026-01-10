@@ -14,7 +14,7 @@ const LoadingToast = ({ visible, message = "Scanning packages...", progress }: L
         : 0;
 
     return (
-        <div className="fixed bottom-4 right-4 bg-gray-900 border border-gray-700 shadow-2xl rounded-lg p-4 flex gap-3 animate-in fade-in slide-in-from-bottom-4 z-50 min-w-[300px]">
+        <div className="bg-gray-900 border border-gray-700 shadow-2xl rounded-lg p-4 flex gap-3 animate-in fade-in slide-in-from-bottom-4 z-50 min-w-[300px] pointer-events-auto mb-2">
             <div className="flex items-center h-full pt-1">
                 <Loader2 className="animate-spin text-blue-500" size={24} />
             </div>

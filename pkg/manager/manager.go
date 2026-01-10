@@ -398,22 +398,29 @@ func (m *Manager) InstallPackage(files []string, vamPath string) ([]string, erro
 		fileName := filepath.Base(f)
 		destPath := filepath.Join(destDir, fileName)
 
-		// If file is on same drive, Rename (move). If different, Copy might be needed?
-		// os.Rename fails across volumes on some OSs.
-		// Let's try Rename, if fails, manual Copy+Delete.
-		err := os.Rename(f, destPath)
+		// COPY OPERATION (Do not Move/Delete Source)
+		srcFile, err := os.Open(f)
 		if err != nil {
-			// Fallback: Read/Write
-			input, err := os.ReadFile(f)
-			if err != nil {
-				continue
-			}
-			err = os.WriteFile(destPath, input, 0644)
-			if err != nil {
-				continue
-			}
-			os.Remove(f) // Delete source after copy
+			ignored = append(ignored, fmt.Sprintf("%s (read error)", fileName))
+			continue
 		}
+
+		dstFile, err := os.Create(destPath)
+		if err != nil {
+			srcFile.Close()
+			ignored = append(ignored, fmt.Sprintf("%s (create error)", fileName))
+			continue
+		}
+
+		_, err = io.Copy(dstFile, srcFile)
+		srcFile.Close()
+		dstFile.Close()
+
+		if err != nil {
+			ignored = append(ignored, fmt.Sprintf("%s (copy error)", fileName))
+			continue
+		}
+
 		installed = append(installed, destPath)
 	}
 
