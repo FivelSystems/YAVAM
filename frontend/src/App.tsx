@@ -9,7 +9,7 @@ import ContextMenu from './components/ContextMenu';
 import CardGrid from './components/CardGrid';
 import Sidebar from './components/Sidebar';
 
-import VersionResolutionModal from './components/VersionResolutionModal';
+
 import SettingsModal from './components/SettingsModal';
 import ConfirmationModal from './components/ConfirmationModal';
 import RightSidebar from './components/RightSidebar';
@@ -18,6 +18,7 @@ import SetupWizard from './components/SetupWizard';
 import { UpgradeModal } from "./components/UpgradeModal";
 import { Pagination } from './components/Pagination';
 import { ScanProgressBar } from './components/ScanProgressBar';
+import { OptimizationModal, ManualPlan } from './components/OptimizationModal';
 
 // Define types based on our Go models
 export interface VarPackage {
@@ -37,12 +38,13 @@ export interface VarPackage {
     hasThumbnail: boolean;
     missingDeps: string[];
     isDuplicate: boolean;
+    isExactDuplicate: boolean;
     type?: string;
     categories: string[];
     tags?: string[];
 }
 
-function App() {
+function App(): JSX.Element {
     // Setup State
     const [needsSetup, setNeedsSetup] = useState(false);
     const [isCancelling, setIsCancelling] = useState(false);
@@ -459,9 +461,16 @@ function App() {
 
 
     // Version Resolution State
-    const [resolveData, setResolveData] = useState<{ open: boolean, duplicates: VarPackage[] }>({ open: false, duplicates: [] });
+
     // Bulk Resolve State
-    const [bulkResolveData, setBulkResolveData] = useState<{ open: boolean, count: number, plan: { keep: VarPackage, others: string[] }[] }>({ open: false, count: 0, plan: [] });
+    // Bulk Optimization State
+    const [optimizationData, setOptimizationData] = useState<{
+        open: boolean;
+        mergePlan: { keep: VarPackage; delete: VarPackage[] }[];
+        resolveGroups: { id: string; packages: VarPackage[] }[];
+    }>({ open: false, mergePlan: [], resolveGroups: [] });
+    // Bulk Merge State
+
 
     // Context Menu State
     const [contextMenu, setContextMenu] = useState<{ open: boolean, x: number, y: number, pkg: VarPackage | null }>({ open: false, x: 0, y: 0, pkg: null });
@@ -943,7 +952,9 @@ function App() {
         if (currentFilter === "enabled") res = res.filter(p => p.isEnabled);
         if (currentFilter === "disabled") res = res.filter(p => !p.isEnabled);
         if (currentFilter === "missing-deps") res = res.filter(p => p.missingDeps && p.missingDeps.length > 0);
-        if (currentFilter === "duplicates") res = res.filter(p => p.isDuplicate);
+        if (currentFilter === "version-conflicts") res = res.filter(p => p.isDuplicate);
+        if (currentFilter === "duplicates") res = res.filter(p => p.isDuplicate); // Backwards compat or if used
+        if (currentFilter === "exact-duplicates") res = res.filter(p => p.isExactDuplicate);
 
         // Creator Filter
         if (selectedCreator) res = res.filter(p => p.meta?.creator === selectedCreator);
@@ -1006,7 +1017,7 @@ function App() {
     // Trigger filtering when state changes
     useEffect(() => {
         filterPackages();
-    }, [packages.length, currentFilter, selectedCreator, selectedType, selectedTags, searchQuery, sortMode]);
+    }, [packages, currentFilter, selectedCreator, selectedType, selectedTags, searchQuery, sortMode]);
 
     // Persist Sort Mode
     useEffect(() => {
@@ -1052,54 +1063,104 @@ function App() {
     };
 
     const analyzePackages = (pkgs: VarPackage[]): VarPackage[] => {
-        // 1. Build Index (Available Packages)
+        // 1. Build Index and Group by "Creator.Package"
         const pkgIds = new Set<string>();
+        const groups = new Map<string, VarPackage[]>();
 
         pkgs.forEach(p => {
-            // We count disabled packages as "available" for resolution? 
-            // Usually only enabled packages provide dependencies in VaM.
-            if (p.isEnabled) {
+            if (p.meta && p.meta.creator && p.meta.packageName) {
                 const id = `${p.meta.creator}.${p.meta.packageName}.${p.meta.version}`;
                 pkgIds.add(id);
+
+                const groupKey = `${p.meta.creator}.${p.meta.packageName}`;
+                if (!groups.has(groupKey)) groups.set(groupKey, []);
+                groups.get(groupKey)?.push(p);
             }
         });
 
-        // 2. Duplicate Counts
-        const counts: Record<string, number> = {};
+        // 2. Identify Obsolete Packages (Old Versions)
+        // We reuse 'isDuplicate' to mean 'isObsolete' for compatibility with existing filters
+        const obsoletePaths = new Set<string>();
+
+        groups.forEach((groupPkgs) => {
+            if (groupPkgs.length > 1) {
+                // Sort by version descending to find latest
+                groupPkgs.sort((a, b) => {
+                    // Simple integer parse might fail for complex semver, but assuming int based on user context "v1, v2"
+                    // If string, we might need better compare. For now, parseInt is standard for this codebase.
+                    const vA = parseInt(a.meta.version) || 0;
+                    const vB = parseInt(b.meta.version) || 0;
+                    return vB - vA;
+                });
+
+                // Index 0 is Latest -> Keep Clean
+                // Index 1+ are Obsolete -> Mark
+                for (let i = 1; i < groupPkgs.length; i++) {
+                    obsoletePaths.add(groupPkgs[i].filePath);
+                }
+            }
+        });
+
+        // 3. Exact Duplicate Detection
+        // Strategy: 
+        // - Runtime Conflict: Multiple ENABLED copies. (Flag Enabled ones)
+        // - Storage Redundancy: Any copies exist. (Flag Disabled ones so they show in list)
+        const exactDupesMap = new Map<string, number>();
+        const enabledDupesMap = new Map<string, number>();
+
         pkgs.forEach(p => {
+            if (!p.meta || !p.meta.creator || !p.meta.packageName) return;
+            const key = `${p.meta.creator}.${p.meta.packageName}.${p.meta.version}.${p.size}`;
+
+            // Count All (Storage)
+            exactDupesMap.set(key, (exactDupesMap.get(key) || 0) + 1);
+
+            // Count Enabled (Runtime)
             if (p.isEnabled) {
-                const key = `${p.meta.creator}.${p.meta.packageName}`;
-                counts[key] = (counts[key] || 0) + 1;
+                enabledDupesMap.set(key, (enabledDupesMap.get(key) || 0) + 1);
             }
         });
 
-        // 3. Process each package
+        // 4. Process each package
         return pkgs.map(p => {
-            let isDuplicate = false;
+            let isDuplicate = false; // Now means "Obsolete"
+            let isExactDuplicate = false;
             let missingDeps: string[] = [];
 
-            if (p.isEnabled) {
-                const key = `${p.meta.creator}.${p.meta.packageName}`;
-                if ((counts[key] || 0) > 1) isDuplicate = true;
+            // Mark Obsolete
+            if (obsoletePaths.has(p.filePath)) {
+                isDuplicate = true;
+            }
 
-                // Dependencies
-                if (p.meta.dependencies) {
-                    Object.keys(p.meta.dependencies).forEach(depId => {
-                        // depId format: Creator.Package.Version
-                        // VaM dependencies are strict on version.
-                        if (!pkgIds.has(depId)) {
-                            // Try to be smart? No, VaM is strict.
-                            if (depId !== "VaM.Core.latest" && !depId.startsWith("system.")) { // Ignore core/system?
-                                missingDeps.push(depId);
-                            }
-                        }
-                    });
+            // Mark Exact Duplicate
+            if (p.meta && p.meta.creator && p.meta.packageName) {
+                const exactKey = `${p.meta.creator}.${p.meta.packageName}.${p.meta.version}.${p.size}`;
+
+                if (p.isEnabled) {
+                    // Active Package: Only warn if runtime conflict exists
+                    if ((enabledDupesMap.get(exactKey) || 0) > 1) {
+                        isExactDuplicate = true;
+                    }
+                } else {
+                    // Disabled Package: Warn if it's redundant (storage duplicate)
+                    if ((exactDupesMap.get(exactKey) || 0) > 1) {
+                        isExactDuplicate = true;
+                    }
                 }
             }
 
-            // Only update if changed to avoid unnecessary re-renders? 
-            // map always returns new object, react will re-render. That's fine for "complete" event.
-            return { ...p, isDuplicate, missingDeps };
+            // Dependencies
+            if (p.isEnabled && p.meta && p.meta.dependencies) {
+                Object.keys(p.meta.dependencies).forEach(depId => {
+                    if (!pkgIds.has(depId)) {
+                        if (depId !== "VaM.Core.latest" && !depId.startsWith("system.")) {
+                            missingDeps.push(depId);
+                        }
+                    }
+                });
+            }
+
+            return { ...p, isDuplicate, isExactDuplicate, missingDeps };
         });
     };
 
@@ -1248,110 +1309,225 @@ function App() {
 
 
 
-    const handleOpenResolve = (pkg: VarPackage) => {
-        // Find enabled packages with same Creator & PackageName
-        const dups = packages.filter(p =>
-            p.isEnabled &&
+
+
+
+    // Instant Merge Handlers
+    const handleInstantMerge = async (pkg: VarPackage, inPlace: boolean) => {
+        const duplicates = packages.filter(p =>
+            p.meta.creator === pkg.meta.creator &&
+            p.meta.packageName === pkg.meta.packageName &&
+            p.meta.version === pkg.meta.version &&
+            p.size === pkg.size &&
+            p.filePath !== pkg.filePath
+        );
+
+        if (duplicates.length === 0) {
+            addToast("No exact duplicates found.", "info");
+            return;
+        }
+
+        const confirmCount = duplicates.length;
+        setLoading(true);
+        try {
+            // Delete duplicates
+            for (const d of duplicates) {
+                // @ts-ignore
+                await window.go.main.App.DeleteFileToRecycleBin(d.filePath);
+            }
+
+            if (!inPlace) {
+                // Move kept file to root check
+                const normalize = (p: string) => p.replace(/[\\/]/g, '/').replace(/\/$/, '').toLowerCase();
+                const libPathClean = normalize(activeLibraryPath);
+                const pkgPath = normalize(pkg.filePath);
+                const pkgParent = pkgPath.substring(0, Math.max(pkgPath.lastIndexOf('/'), pkgPath.lastIndexOf('\\')));
+
+                if (pkgParent !== libPathClean) {
+                    // Move to root: Copy then Delete original logic
+                    // @ts-ignore
+                    const newPath = await window.go.main.App.CopyPackagesToLibrary([pkg.filePath], activeLibraryPath, false); // assumes copy returns path or success?
+                    // Delete old file
+                    // @ts-ignore
+                    await window.go.main.App.DeleteFileToRecycleBin(pkg.filePath);
+                    addToast(`Merged ${confirmCount + 1} files to root.`, "success");
+                } else {
+                    addToast(`Merged ${confirmCount} duplicates.`, "success");
+                }
+            } else {
+                addToast(`Merged ${confirmCount} duplicates in place.`, "success");
+            }
+            scanPackages();
+        } catch (e) {
+            console.error(e);
+            addToast("Merge failed: " + e, "error");
+            setLoading(false);
+        }
+    };
+
+    const handleSingleResolve = (pkg: VarPackage) => {
+        // Prepare Optimization Data for a SINGLE package group (Conflicts & Merges)
+        const normalize = (p: string) => p.replace(/[\\/]/g, '/').replace(/\/$/, '').toLowerCase();
+        const libPathClean = normalize(activeLibraryPath);
+
+        // 1. Find all relevant packages (Same Creator & PackageName)
+        const conflictGroup = packages.filter(p =>
             p.meta.creator === pkg.meta.creator &&
             p.meta.packageName === pkg.meta.packageName
         );
-        // Include the clicked package if not already
-        setResolveData({ open: true, duplicates: dups });
-    };
 
-    const handleConfirmResolve = async (keepPkg: VarPackage) => {
-        const others = resolveData.duplicates.filter(p => p.filePath !== keepPkg.filePath).map(p => p.filePath);
-        setResolveData({ open: false, duplicates: [] }); // Close immediately, optimistic UI
-
-        try {
-            // @ts-ignore
-            if (window.go) {
-                // @ts-ignore
-                const res = await window.go.main.App.ResolveConflicts(keepPkg.filePath, others, activeLibraryPath);
-
-                let msg = "Conflicts resolved";
-                if (res.merged > 0) msg += `, ${res.merged} merged`;
-                if (res.disabled > 0) msg += `, ${res.disabled} disabled`;
-
-                addToast(msg, 'success');
-                scanPackages(); // Refresh to show new state/paths
-            } else {
-                // Web Mode
-                const res = await fetch('/api/resolve', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        keepPath: keepPkg.filePath,
-                        others: others,
-                        libraryPath: activeLibraryPath
-                    })
-                }).then(r => r.json());
-
-                if (res.error || res.success === false) {
-                    throw new Error(res.message || "Unknown error");
-                }
-
-                let msg = "Conflicts resolved";
-                if (res.merged > 0) msg += `, ${res.merged} merged`;
-                if (res.disabled > 0) msg += `, ${res.disabled} disabled`;
-                addToast(msg, 'success');
-            }
-            scanPackages(); // Refresh to show new state/paths
-        } catch (e) {
-            console.error(e);
-            addToast("Failed to resolve: " + e, 'error');
-        }
-    };
-
-    const handleConfirmBulkResolve = async () => {
-        if (bulkResolveData.plan.length === 0) {
-            setBulkResolveData(prev => ({ ...prev, open: false }));
+        if (conflictGroup.length <= 1) {
+            addToast("No conflicts found for this package", "info");
             return;
         }
-        setBulkResolveData(prev => ({ ...prev, open: false }));
+
+        const mergePlan: { keep: VarPackage, delete: VarPackage[] }[] = [];
+        const resolveGroups: { id: string, packages: VarPackage[] }[] = [];
+
+        // 2. Identify Exact Duplicates within this group
+        const exactGroups = new Map<string, VarPackage[]>();
+        conflictGroup.forEach(p => {
+            const key = `${p.meta.version}.${p.size}`;
+            if (!exactGroups.has(key)) exactGroups.set(key, []);
+            exactGroups.get(key)?.push(p);
+        });
+
+        const uniqueVersions: VarPackage[] = [];
+
+        exactGroups.forEach((dupes) => {
+            if (dupes.length > 1) {
+                // Sort to pick keeper
+                dupes.sort((a, b) => {
+                    const aPath = normalize(a.filePath);
+                    const bPath = normalize(b.filePath);
+                    const aParent = aPath.substring(0, Math.max(aPath.lastIndexOf('/'), aPath.lastIndexOf('\\')));
+                    const bParent = bPath.substring(0, Math.max(bPath.lastIndexOf('/'), bPath.lastIndexOf('\\')));
+                    const aInRoot = aParent === libPathClean;
+                    const bInRoot = bParent === libPathClean;
+
+                    if (aInRoot && !bInRoot) return -1;
+                    if (!aInRoot && bInRoot) return 1;
+                    if (a.isEnabled !== b.isEnabled) return a.isEnabled ? -1 : 1;
+                    return 0;
+                });
+
+                const keep = dupes[0];
+                const toDelete = dupes.slice(1);
+                mergePlan.push({ keep, delete: toDelete });
+                uniqueVersions.push(keep);
+            } else {
+                uniqueVersions.push(dupes[0]);
+            }
+        });
+
+        // 3. Identify Version Conflicts
+        if (uniqueVersions.length > 1) {
+            uniqueVersions.sort((a, b) => {
+                const vA = parseInt(a.meta.version) || 0;
+                const vB = parseInt(b.meta.version) || 0;
+                return vB - vA;
+            });
+            resolveGroups.push({
+                id: `${pkg.meta.creator}.${pkg.meta.packageName}`,
+                packages: uniqueVersions
+            });
+        }
+
+        if (mergePlan.length === 0 && resolveGroups.length === 0) {
+            addToast("No actionable conflicts or duplicates found.", "info");
+            return;
+        }
+
+        setOptimizationData({
+            open: true,
+            mergePlan: mergePlan,
+            resolveGroups: resolveGroups
+        });
+    };
+
+    const handleConfirmOptimization = async (enableMerge: boolean, resolutionStrategy: 'latest' | 'manual' | 'none', manualPlan: ManualPlan) => {
+        setOptimizationData(prev => ({ ...prev, open: false }));
         setLoading(true);
 
-        let mergedCount = 0;
-        let disabledCount = 0;
-        let errorCount = 0;
-
         try {
-            for (const item of bulkResolveData.plan) {
-                try {
-                    // @ts-ignore
-                    if (window.go) {
+            // 1. Execute Merges
+            let mergeDeleted = 0;
+            if (enableMerge && optimizationData.mergePlan.length > 0) {
+                for (const group of optimizationData.mergePlan) {
+                    const { keep, delete: toDelete } = group;
+
+                    const normalize = (p: string) => p.replace(/[\\/]/g, '/').replace(/\/$/, '').toLowerCase();
+                    const libPathClean = normalize(activeLibraryPath);
+                    const keepPath = normalize(keep.filePath);
+                    const keepParent = keepPath.substring(0, Math.max(keepPath.lastIndexOf('/'), keepPath.lastIndexOf('\\')));
+                    const inRoot = keepParent === libPathClean;
+
+                    if (!inRoot) {
+                        // Move to root
                         // @ts-ignore
-                        const res = await window.go.main.App.ResolveConflicts(item.keep.filePath, item.others, activeLibraryPath);
-                        mergedCount += res.merged;
-                        disabledCount += res.disabled;
-                    } else {
-                        // Web
-                        const res = await fetch('/api/resolve', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                keepPath: item.keep.filePath,
-                                others: item.others,
-                                libraryPath: activeLibraryPath
-                            })
-                        }).then(r => r.json());
-                        mergedCount += res.merged;
-                        disabledCount += res.disabled;
+                        await window.go.main.App.CopyPackagesToLibrary([keep.filePath], activeLibraryPath, false);
+                        // Delete source (simulated move)
+                        await togglePackage(keep, false, true);
                     }
-                } catch (e) {
-                    errorCount++;
-                    console.error("Failed to resolve item", e);
+
+                    // Delete duplicates (Fix: Actually delete instead of disable)
+                    for (const d of toDelete) {
+                        try {
+                            // @ts-ignore
+                            await window.go.main.App.DeleteFileToRecycleBin(d.filePath);
+                            mergeDeleted++;
+                        } catch (err) {
+                            console.error("Failed to delete", d.filePath, err);
+                        }
+                    }
                 }
+                if (mergeDeleted > 0) addToast(`Consolidated and deleted ${mergeDeleted} duplicate files`, 'success');
             }
-            addToast(`Batch resolution complete. Merged: ${mergedCount}, Disabled: ${disabledCount}` + (errorCount > 0 ? `, Errors: ${errorCount}` : ""), errorCount > 0 ? 'warning' : 'success');
-        } catch (e) {
-            console.error(e);
-            addToast("Batch resolution failed", 'error');
+
+            // 2. Execute Version Resolution
+            let resolvedCount = 0;
+            if (resolutionStrategy !== 'none' && optimizationData.resolveGroups.length > 0) {
+                for (const group of optimizationData.resolveGroups) {
+                    const allPkgs = group.packages;
+                    let targetVersionPath = "";
+
+                    if (resolutionStrategy === 'latest') {
+                        const sorted = [...allPkgs].sort((a, b) => {
+                            const vA = parseInt(a.meta.version) || 0;
+                            const vB = parseInt(b.meta.version) || 0;
+                            return vB - vA;
+                        });
+                        targetVersionPath = sorted[0].filePath;
+                    } else if (resolutionStrategy === 'manual') {
+                        const selection = manualPlan[group.id];
+                        if (!selection || selection === 'none') continue;
+                        targetVersionPath = selection;
+                    }
+
+                    if (!targetVersionPath) continue;
+
+                    // Disable everything except target
+                    for (const p of allPkgs) {
+                        if (p.filePath === targetVersionPath) {
+                            if (!p.isEnabled) await togglePackage(p, true, false);
+                        } else {
+                            if (p.isEnabled) await togglePackage(p, false, false);
+                        }
+                    }
+                    resolvedCount++;
+                }
+                if (resolvedCount > 0) addToast(`Resolved versions for ${resolvedCount} packages`, 'success');
+            }
+
+            scanPackages();
+        } catch (e: any) {
+            console.error("Optimization failed", e);
+            addToast("Optimization failed: " + e.message, 'error');
         } finally {
             setLoading(false);
-            scanPackages();
         }
     };
+
 
     const handleSidebarAction = async (action: 'enable-all' | 'disable-all' | 'resolve-all', groupType: 'creator' | 'type' | 'status', key: string) => {
         const targets = packages.filter(p => {
@@ -1366,6 +1542,8 @@ function App() {
                 if (key === 'disabled') return !p.isEnabled;
                 if (key === 'missing-deps') return p.missingDeps && p.missingDeps.length > 0;
                 if (key === 'duplicates') return p.isDuplicate;
+                if (key === 'version-conflicts') return p.isDuplicate; // Alias
+                if (key === 'exact-duplicates') return p.isExactDuplicate;
             }
             return false;
         });
@@ -1373,78 +1551,96 @@ function App() {
         if (targets.length === 0) return;
 
         if (action === 'resolve-all') {
-            // Group by package name
-            const groups: Record<string, VarPackage[]> = {};
-            targets.forEach(p => {
-                // Only consider packages that are actually duplicates?
-                // No, resolve-all implies checking for duplicates within the target set OR against global?
-                // Usually duplicates are defined globally.
-                // We should only resolve groups that have >1 elements.
-                const id = `${p.meta.creator}.${p.meta.packageName}`;
-                if (!groups[id]) groups[id] = [];
-                groups[id].push(p);
-            });
+            const mergePlan: { keep: VarPackage, delete: VarPackage[] }[] = [];
+            const resolveGroups: { id: string, packages: VarPackage[] }[] = [];
+            let totalMergeDelete = 0;
+            let totalResolveDisable = 0;
 
-            const plan: { keep: VarPackage, others: string[] }[] = [];
-            let totalToUpdate = 0;
+            const normalize = (p: string) => p.replace(/[\\/]/g, '/').replace(/\/$/, '').toLowerCase();
+            const libPathClean = normalize(activeLibraryPath);
 
-            for (const pid in groups) {
-                const group = groups[pid];
-                // If the group has only 1 item in the filtered view, but that item IS a duplicate globally,
-                // should we resolve it?
-                // Current logic: We only resolve conflicts WITHIN the selected set?
-                // Or do we resolve conflicts for any selected item against the world?
-                // User expects "Fix Conflicts" for "Creator X". This likely means "Fix conflicts where Creator X involved".
-                // But wait, `p` includes ALL packages. `targets` are filtered.
-                // If I filter by Creator X, I might see pkg A v1.
-                // Pkg A v2 might be by Creator Y? (Unlikely for same package).
-                // So generally safe.
+            // First, regroup everything by "Identity" (Creator + PackageName)
+            // We need to look at ALL packages that match the identity of the target selection
+            const processedIdentities = new Set<string>();
 
-                // BUT: If I filter by "Status: Duplicates", group will have all versions.
+            // Collect all relevant packages from global list
 
-                // Issue: If `targets` doesn't contain all versions (e.g. filtered by tag), we might resolving partially?
-                // We should probably find ALL duplicates for the target packages from the global `packages` list to be safe.
 
-                // Improved Logic:
-                // 1. Identify Unique Packages (Name+Creator) in targets that are marked as duplicate.
-                // 2. For each, find ALL versions in `packages` (global).
-                // 3. Resolve them.
+            targets.forEach(t => {
+                const id = `${t.meta.creator}.${t.meta.packageName}`;
+                if (processedIdentities.has(id)) return;
+                processedIdentities.add(id);
 
-                if (group.length <= 1) {
-                    // Check global packages if this item is a duplicate
-                    if (group.length === 1 && group[0].isDuplicate) {
-                        const p = group[0];
-                        const allVersions = packages.filter(pk => pk.meta.creator === p.meta.creator && pk.meta.packageName === p.meta.packageName);
-                        if (allVersions.length > 1) {
-                            // Use this global group
-                            group.length = 0; // Clear
-                            group.push(...allVersions);
-                        }
-                    } else {
-                        continue;
-                    }
-                }
-                if (group.length <= 1) continue;
+                // Find ALL versions/dupes globally
+                const group = packages.filter(p => p.meta.creator === t.meta.creator && p.meta.packageName === t.meta.packageName);
 
-                // Sort by version (descending)
-                group.sort((a, b) => {
-                    const vA = parseInt(a.meta.version) || 0;
-                    const vB = parseInt(b.meta.version) || 0;
-                    return vB - vA;
+                // Step 1: Detect Exact Duplicates
+                const exactGroups = new Map<string, VarPackage[]>();
+                group.forEach(p => {
+                    const key = `${p.meta.version}.${p.size}`;
+                    if (!exactGroups.has(key)) exactGroups.set(key, []);
+                    exactGroups.get(key)?.push(p);
                 });
 
-                const keep = group[0];
-                const others = group.slice(1).map(x => x.filePath);
-                plan.push({ keep, others });
-                totalToUpdate += others.length;
-            }
+                // For each set of exact dupes, pick a keeper and schedule others for deletion
+                const uniqueVersions: VarPackage[] = []; // This will form the list for version resolution
 
-            if (plan.length === 0) {
-                addToast("No solvable conflicts found in selection", 'info');
+                exactGroups.forEach((dupes) => {
+                    if (dupes.length > 1) {
+                        // Sort to pick keeper (Root > Enabled > First)
+                        dupes.sort((a, b) => {
+                            const aPath = normalize(a.filePath);
+                            const bPath = normalize(b.filePath);
+                            const aParent = aPath.substring(0, Math.max(aPath.lastIndexOf('/'), aPath.lastIndexOf('\\')));
+                            const bParent = bPath.substring(0, Math.max(bPath.lastIndexOf('/'), bPath.lastIndexOf('\\')));
+                            const aInRoot = aParent === libPathClean;
+                            const bInRoot = bParent === libPathClean;
+
+                            if (aInRoot && !bInRoot) return -1;
+                            if (!aInRoot && bInRoot) return 1;
+                            if (a.isEnabled !== b.isEnabled) return a.isEnabled ? -1 : 1;
+                            return 0;
+                        });
+
+                        const keep = dupes[0];
+                        const toDelete = dupes.slice(1);
+                        mergePlan.push({ keep, delete: toDelete });
+                        totalMergeDelete += toDelete.length;
+
+                        // The 'keep' represents this version in the next step
+                        uniqueVersions.push(keep);
+                    } else {
+                        uniqueVersions.push(dupes[0]);
+                    }
+                });
+
+                // Step 2: Resolve Version Conflicts among the unique versions
+                if (uniqueVersions.length > 1) {
+                    // Sort by version descending (Numeric)
+                    uniqueVersions.sort((a, b) => {
+                        const vA = parseInt(a.meta.version) || 0;
+                        const vB = parseInt(b.meta.version) || 0;
+                        return vB - vA;
+                    });
+
+                    resolveGroups.push({
+                        id: id,
+                        packages: uniqueVersions
+                    });
+                    totalResolveDisable += uniqueVersions.length - 1;
+                }
+            });
+
+            if (mergePlan.length === 0 && resolveGroups.length === 0) {
+                addToast("No solvable issues (merges or conflicts) found", 'info');
                 return;
             }
 
-            setBulkResolveData({ open: true, count: totalToUpdate, plan });
+            setOptimizationData({
+                open: true,
+                mergePlan: mergePlan,
+                resolveGroups: resolveGroups
+            });
             return;
         }
 
@@ -1528,12 +1724,7 @@ function App() {
                 <DragDropOverlay onDrop={handleDrop} onWebUpload={handleWebUpload} />
 
 
-                <VersionResolutionModal
-                    isOpen={resolveData.open}
-                    onClose={() => setResolveData(prev => ({ ...prev, open: false }))}
-                    duplicates={resolveData.duplicates}
-                    onResolve={handleConfirmResolve}
-                />
+
                 <SettingsModal
                     isOpen={isSettingsOpen}
                     onClose={() => setIsSettingsOpen(false)}
@@ -1584,15 +1775,15 @@ function App() {
                     confirmStyle="primary"
                 />
 
-                <ConfirmationModal
-                    isOpen={bulkResolveData.open}
-                    onClose={() => setBulkResolveData(prev => ({ ...prev, open: false }))}
-                    onConfirm={handleConfirmBulkResolve}
-                    title="Confirm Bulk Resolution"
-                    message={`This will automatically resolve conflicts for ${bulkResolveData.plan.length} distinct packages. ${bulkResolveData.count} older versions will be disabled or merged, leaving only the newest version active. This action cannot be undone easily.\n\nAre you sure you want to proceed?`}
-                    confirmText="Fix All Conflicts"
-                    confirmStyle="primary"
+                <OptimizationModal
+                    isOpen={optimizationData.open}
+                    onClose={() => setOptimizationData(prev => ({ ...prev, open: false }))}
+                    onConfirm={handleConfirmOptimization}
+                    mergePlan={optimizationData.mergePlan}
+                    resolveGroups={optimizationData.resolveGroups}
                 />
+
+
 
                 {/* Hide sidebar on small screens when not needed, or use CSS media queries */}
                 {/* Mobile Overlay Backdrop */}
@@ -1984,7 +2175,7 @@ function App() {
                                 <RightSidebar
                                     pkg={selectedPackage}
                                     onClose={() => { setIsDetailsPanelOpen(false); setSelectedPackage(null); setSelectedIds(new Set()); }}
-                                    onResolve={handleOpenResolve}
+                                    onResolve={handleSingleResolve}
                                     activeTab={activeRightSidebarTab}
                                     onTabChange={handleRightTabChange}
                                 />
@@ -2013,6 +2204,9 @@ function App() {
                         onCopyFile={handleCopyFile}
                         onCutFile={handleCutFile}
                         onDelete={handleDeleteClick}
+                        onMerge={(pkg) => handleInstantMerge(pkg, false)}
+                        onMergeInPlace={(pkg) => handleInstantMerge(pkg, true)}
+                        onResolve={handleSingleResolve}
                     />
                 )}
             </div>
@@ -2211,5 +2405,6 @@ function App() {
         </div>
     );
 }
+
 
 export default App;

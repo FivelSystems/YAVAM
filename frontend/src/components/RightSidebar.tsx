@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Check, AlertCircle, Box, FileImage, User, Scissors } from 'lucide-react';
+import { X, Check, AlertCircle, Box, FileImage, User, Scissors, Copy } from 'lucide-react';
 import clsx from 'clsx';
 import { motion } from 'framer-motion';
 
@@ -30,6 +30,7 @@ interface VarPackage {
     hasThumbnail: boolean;
     missingDeps: string[];
     isDuplicate: boolean;
+    isExactDuplicate: boolean;
     type?: string;
     tags?: string[];
 }
@@ -50,7 +51,7 @@ interface RightSidebarProps {
     onTabChange: (tab: 'details' | 'contents') => void;
 }
 
-const RightSidebar = ({ pkg, onClose, onResolve, activeTab, onTabChange }: RightSidebarProps) => {
+const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange }: RightSidebarProps) => {
     // ... (state hooks same as before) ...
     const [contents, setContents] = useState<PackageContent[]>([]);
     const [loading, setLoading] = useState(false);
@@ -172,23 +173,46 @@ const RightSidebar = ({ pkg, onClose, onResolve, activeTab, onTabChange }: Right
                 </div>
 
                 {/* Conflict/Duplicate Resolver - Prominent if Issue Exists */}
-                {pkg.isDuplicate && (
-                    <div className="p-4 bg-yellow-500/10 border-b border-yellow-500/20">
+                {(pkg.isDuplicate || pkg.isExactDuplicate) && (
+                    <div className={clsx(
+                        "p-4 border-b",
+                        pkg.isExactDuplicate
+                            ? "bg-purple-500/10 border-purple-500/20"
+                            : "bg-yellow-500/10 border-yellow-500/20"
+                    )}>
                         <div className="flex items-start gap-3">
-                            <AlertCircle size={18} className="text-yellow-500 mt-0.5 shrink-0" />
+                            {pkg.isExactDuplicate
+                                ? <Copy size={18} className="text-purple-500 mt-0.5 shrink-0" />
+                                : <AlertCircle size={18} className="text-yellow-500 mt-0.5 shrink-0" />
+                            }
                             <div className="flex-1">
-                                <h4 className="text-sm font-semibold text-yellow-400 mb-1">Duplicate Detected</h4>
-                                <p className="text-xs text-gray-400 mb-2">This package has conflicting versions.</p>
+                                <h4 className={clsx(
+                                    "text-sm font-semibold mb-1",
+                                    pkg.isExactDuplicate ? "text-purple-400" : "text-yellow-400"
+                                )}>
+                                    {pkg.isExactDuplicate ? "Duplicate Detected" : "Obsolete Version"}
+                                </h4>
+                                <p className="text-xs text-gray-400 mb-2">
+                                    {pkg.isExactDuplicate
+                                        ? "The same package has been found somewhere else across the library."
+                                        : "A newer version of this package is available."}
+                                </p>
                                 <button
                                     onClick={() => onResolve(pkg)}
-                                    className="w-full py-1.5 bg-yellow-600 hover:bg-yellow-500 text-white rounded text-xs font-medium transition-colors shadow-sm"
+                                    className={clsx(
+                                        "w-full py-1.5 rounded text-xs font-medium transition-colors shadow-sm text-white",
+                                        pkg.isExactDuplicate
+                                            ? "bg-purple-600 hover:bg-purple-500"
+                                            : "bg-yellow-600 hover:bg-yellow-500"
+                                    )}
                                 >
-                                    Resolve Conflicts
+                                    Fix
                                 </button>
                             </div>
                         </div>
                     </div>
                 )}
+
 
                 {/* Tabs / Switcher */}
                 <div className="flex border-b border-gray-800 sticky top-0 bg-gray-900 z-10 text-sm font-medium">
