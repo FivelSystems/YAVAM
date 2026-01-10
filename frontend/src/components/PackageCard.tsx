@@ -10,9 +10,10 @@ interface PackageCardProps {
     onSelect: (pkg: VarPackage, e?: React.MouseEvent) => void;
     isSelected?: boolean;
     viewMode?: 'grid' | 'list';
+    censorThumbnails?: boolean;
 }
 
-const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'grid' }: PackageCardProps) => {
+const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'grid', censorThumbnails = false }: PackageCardProps) => {
     const cardRef = useRef<HTMLDivElement>(null);
     const [thumbSrc, setThumbSrc] = useState<string | undefined>(
         pkg.thumbnailBase64 ? `data:image/jpeg;base64,${pkg.thumbnailBase64}` : undefined
@@ -110,7 +111,10 @@ const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'gri
                             src={thumbSrc}
                             alt={pkg.fileName}
                             loading="lazy"
-                            className="w-full h-full object-cover"
+                            className={clsx(
+                                "w-full h-full object-cover",
+                                censorThumbnails && "blur-[8px] scale-110" // Intensified Blur
+                            )}
                         />
                     ) : (
                         <div className="w-full h-full flex items-center justify-center text-gray-700 border border-gray-700">
@@ -163,7 +167,10 @@ const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'gri
                         src={thumbSrc}
                         alt={pkg.fileName}
                         loading="lazy"
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                        className={clsx(
+                            "w-full h-full object-cover transition-transform duration-500 group-hover:scale-110",
+                            censorThumbnails && "blur-[15px] scale-125" // Intense Blur
+                        )}
                     />
                 ) : (
                     <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">

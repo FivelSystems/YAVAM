@@ -14,9 +14,10 @@ interface CardGridProps {
     selectedIds?: Set<string>;
     viewMode: 'grid' | 'list';
     gridSize?: number;
+    censorThumbnails?: boolean;
 }
 
-const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, selectedPkgId, selectedIds, viewMode, gridSize = 150 }: CardGridProps) => {
+const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, selectedPkgId, selectedIds, viewMode, gridSize = 150, censorThumbnails = false }: CardGridProps) => {
 
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -73,6 +74,7 @@ const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, 
                                 onSelect={onSelect}
                                 isSelected={selectedIds ? selectedIds.has(pkg.filePath) : pkg.filePath === selectedPkgId}
                                 viewMode={viewMode}
+                                censorThumbnails={censorThumbnails}
                             />
                         </motion.div>
                     ))}
