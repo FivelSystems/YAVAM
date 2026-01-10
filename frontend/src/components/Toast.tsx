@@ -19,48 +19,32 @@ interface ToastProps {
 
 export const Toast: React.FC<ToastProps> = ({ toast, onRemove }) => {
     const DURATION = 3000;
-    const [elapsed, setElapsed] = useState(0);
     const [isPaused, setIsPaused] = useState(false);
-    const elapsedRef = useRef(0);
+
+    const startRef = useRef(Date.now());
+    const remainingRef = useRef(DURATION);
+    const timerRef = useRef<ReturnType<typeof setTimeout>>();
+
+    useEffect(() => {
+        if (isPaused) return;
+
+        startRef.current = Date.now();
+        timerRef.current = setTimeout(() => {
+            onRemove(toast.id);
+        }, remainingRef.current);
+
+        return () => {
+            if (timerRef.current) clearTimeout(timerRef.current);
+            const elapsed = Date.now() - startRef.current;
+            remainingRef.current = Math.max(0, remainingRef.current - elapsed);
+        };
+    }, [isPaused, onRemove, toast.id]);
 
     const handleClick = () => {
         if (toast.action) {
             toast.action();
-            // Don't remove immediately, let user see feedback? 
-            // Or maybe remove it? Usually clicking a notification dismisses it OR performs action.
-            // Let's perform action. If action navigates away, toast might persist.
         }
     };
-
-    useEffect(() => {
-        let animationFrameId: number;
-        let lastTime = Date.now();
-
-        const updateTimer = () => {
-            if (isPaused) {
-                lastTime = Date.now(); // Keep advancing 'now' so we don't jump when unpausing
-                animationFrameId = requestAnimationFrame(updateTimer);
-                return;
-            }
-
-            const now = Date.now();
-            const delta = now - lastTime;
-            lastTime = now;
-
-            elapsedRef.current += delta;
-            setElapsed(elapsedRef.current);
-
-            if (elapsedRef.current >= DURATION) {
-                onRemove(toast.id);
-            } else {
-                animationFrameId = requestAnimationFrame(updateTimer);
-            }
-        };
-
-        animationFrameId = requestAnimationFrame(updateTimer);
-
-        return () => cancelAnimationFrame(animationFrameId);
-    }, [isPaused, toast.id, onRemove]);
 
     const icons = {
         success: <CheckCircle size={20} className="text-green-400" />,
@@ -83,8 +67,6 @@ export const Toast: React.FC<ToastProps> = ({ toast, onRemove }) => {
         warning: "bg-yellow-500"
     };
 
-    const progress = Math.min(100, (elapsed / DURATION) * 100);
-
     return (
         <motion.div
             layout
@@ -100,6 +82,14 @@ export const Toast: React.FC<ToastProps> = ({ toast, onRemove }) => {
             onMouseLeave={() => setIsPaused(false)}
             onClick={handleClick}
         >
+            {/* Inject Keyframes once per instance (or globally, but harmless here due to dedupe by browser) */}
+            <style>{`
+                @keyframes toast-progress {
+                    from { width: 0%; }
+                    to { width: 100%; }
+                }
+            `}</style>
+
             <div className="shrink-0">{icons[toast.type]}</div>
             <p className="text-sm text-gray-200 flex-1 font-medium break-words leading-snug z-10">{toast.message}</p>
             <button onClick={() => onRemove(toast.id)} className="text-gray-500 hover:text-white transition-colors p-1 z-10">
@@ -109,8 +99,11 @@ export const Toast: React.FC<ToastProps> = ({ toast, onRemove }) => {
             {/* Progress Bar */}
             <div className="absolute bottom-0 left-0 h-1 w-full bg-black/20">
                 <div
-                    className={clsx("h-full transition-all duration-75 ease-linear", progressColors[toast.type])}
-                    style={{ width: `${progress}%` }}
+                    className={clsx("h-full origin-left", progressColors[toast.type])}
+                    style={{
+                        animation: `toast-progress ${DURATION}ms linear forwards`,
+                        animationPlayState: isPaused ? 'paused' : 'running'
+                    }}
                 />
             </div>
         </motion.div>
