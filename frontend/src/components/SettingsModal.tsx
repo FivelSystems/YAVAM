@@ -139,7 +139,17 @@ const SettingsModal = ({
             // @ts-ignore
             window.go.main.App.GetAppVersion().then(v => setAppVersion("v" + v));
         } else {
-            setAppVersion("v1.1.4-e (Web)");
+            // Web Mode: Fetch version from backend config
+            fetch('/api/config')
+                .then(r => r.json())
+                .then(data => {
+                    if (data && data.version) {
+                        setAppVersion("v" + data.version + " (Web)");
+                    } else {
+                        setAppVersion("v1.1.4-e (Web)"); // Fallback if missing
+                    }
+                })
+                .catch(() => setAppVersion("v1.1.4-e (Web)"));
         }
     }, []);
 
