@@ -806,7 +806,12 @@ function App() {
                 const batch = [...packageBuffer];
                 packageBuffer = []; // Clear local buffer
                 setPackages(prev => {
-                    return [...prev, ...batch];
+                    // Deduplicate logic: Create Set of existing paths
+                    const existingPaths = new Set(prev.map(p => p.filePath));
+                    const uniqueBatch = batch.filter(p => !existingPaths.has(p.filePath));
+
+                    if (uniqueBatch.length === 0) return prev;
+                    return [...prev, ...uniqueBatch];
                 });
             };
 
