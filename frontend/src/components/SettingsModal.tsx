@@ -61,6 +61,8 @@ interface SettingsModalProps {
     keybinds: { [key: string]: string };
     onUpdateKeybind: (action: string, key: string) => void;
     // Server Tab
+    maxToasts: number;
+    setMaxToasts: (val: number) => void;
     serverEnabled: boolean;
     onToggleServer: () => void;
     serverPort: string;
@@ -82,6 +84,8 @@ const SettingsModal = ({
     setCensorThumbnails,
     keybinds,
     onUpdateKeybind,
+    maxToasts,
+    setMaxToasts,
     serverEnabled,
     onToggleServer,
     serverPort,
@@ -359,6 +363,27 @@ const SettingsModal = ({
                                             censorThumbnails ? "translate-x-6" : "translate-x-1"
                                         )} />
                                     </button>
+                                </div>
+                            </div>
+
+                            <div className="bg-gray-700/30 rounded-xl p-4 border border-gray-700/50 mt-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h4 className="text-sm font-medium text-white">Max Notifications</h4>
+                                        <p className="text-xs text-gray-500">Limit simultaneous toast messages.</p>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-xs text-gray-400 w-4 text-center">{maxToasts}</span>
+                                        <input
+                                            type="range"
+                                            min="1"
+                                            max="10"
+                                            step="1"
+                                            value={maxToasts}
+                                            onChange={(e) => setMaxToasts(parseInt(e.target.value))}
+                                            className="w-24 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>
