@@ -1778,15 +1778,19 @@ function App(): JSX.Element {
             // Filter targets that need changing
             const toToggle = targets.filter(p => action === 'enable-all' ? !p.isEnabled : p.isEnabled);
 
+            // Initialize Progress Bar
+            setScanProgress({ current: 0, total: toToggle.length });
+
             for (const p of toToggle) {
                 // We use silent=true to avoid spamming toasts
                 // We use merge=false (users should use "Merge" for handling collisions, this is just a quick toggle)
                 await togglePackage(p, false, true).catch(console.error);
                 processed++;
+                // Update Progress Bar
+                setScanProgress({ current: processed, total: toToggle.length });
             }
             setLoading(false);
             addToast(`${action === 'enable-all' ? 'Enabled' : 'Disabled'} ${processed} packages`, 'success');
-            scanPackages();
             return;
         }
 
