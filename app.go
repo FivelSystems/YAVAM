@@ -268,7 +268,9 @@ func (a *App) DisableOldVersions(creator string, pkgName string, vamPath string)
 // InstallFiles handles dropped files
 func (a *App) InstallFiles(files []string, vamPath string) ([]string, error) {
 	fmt.Printf("Backend received files to install: %v\n", files)
-	return a.manager.InstallPackage(files, vamPath)
+	return a.manager.InstallPackage(files, vamPath, func(current, total int) {
+		runtime.EventsEmit(a.ctx, "scan:progress", map[string]int{"current": current, "total": total})
+	})
 }
 
 // SelectDirectory opens a native dialog to select a folder
