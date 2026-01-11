@@ -120,7 +120,7 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
             const c = p.meta.creator || "Unknown";
             counts[c] = (counts[c] || 0) + 1;
         });
-        return Object.entries(counts).sort((a, b) => b[1] - a[1]); // Sort by count
+        return Object.entries(counts).sort((a, b) => a[0].localeCompare(b[0])); // Sort by Name (A-Z)
     }, [packages]);
 
     const statusCounts = useMemo(() => {
