@@ -405,6 +405,17 @@ func (m *Manager) InstallPackage(files []string, vamPath string) ([]string, erro
 		fileName := filepath.Base(f)
 		destPath := filepath.Join(destDir, fileName)
 
+		// Self-overwrite prevention (Desktop Issue #12)
+		// Clean and compare absolute paths if possible
+		absSrc, _ := filepath.Abs(f)
+		absDest, _ := filepath.Abs(destPath)
+		if strings.EqualFold(filepath.Clean(absSrc), filepath.Clean(absDest)) {
+			// Skip self
+			sLog := fmt.Sprintf("Skipping self-overwrite: %s", fileName)
+			fmt.Println(sLog)
+			continue
+		}
+
 		// COPY OPERATION (Do not Move/Delete Source)
 		srcFile, err := os.Open(f)
 		if err != nil {

@@ -954,7 +954,8 @@ function App(): JSX.Element {
                     throw new Error(err.message || `HTTP ${res.status}`);
                 }
                 const pkgs = await res.json();
-                if (Array.isArray(pkgs)) {
+                // FIX: Check for null response (Issue #12)
+                if (pkgs && Array.isArray(pkgs)) {
                     setPackages(analyzePackages(pkgs));
                     const tags = new Set<string>();
                     pkgs.forEach((p: any) => p.tags?.forEach((t: string) => tags.add(t)));
