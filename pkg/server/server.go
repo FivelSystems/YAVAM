@@ -466,16 +466,22 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 			return
 		}
 		var req struct {
-			FilePath string `json:"filePath"`
-			Enable   bool   `json:"enable"`
-			Merge    bool   `json:"merge"`
+			FilePath    string `json:"filePath"`
+			Enable      bool   `json:"enable"`
+			Merge       bool   `json:"merge"`
+			LibraryPath string `json:"libraryPath"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			s.writeError(w, err.Error(), 400)
 			return
 		}
 
-		newPath, err := s.manager.TogglePackage(nil, req.FilePath, req.Enable, activePath, req.Merge)
+		targetLib := activePath
+		if req.LibraryPath != "" {
+			targetLib = req.LibraryPath
+		}
+
+		newPath, err := s.manager.TogglePackage(nil, req.FilePath, req.Enable, targetLib, req.Merge)
 		if err != nil {
 			s.log(fmt.Sprintf("Error toggling package: %v", err))
 			s.writeError(w, err.Error(), 500)
@@ -498,15 +504,21 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 			return
 		}
 		var req struct {
-			FilePath string `json:"filePath"`
+			FilePath    string `json:"filePath"`
+			LibraryPath string `json:"libraryPath"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			s.writeError(w, err.Error(), 400)
 			return
 		}
 
+		targetLib := activePath
+		if req.LibraryPath != "" {
+			targetLib = req.LibraryPath
+		}
+
 		// Security Check
-		rel, err := filepath.Rel(activePath, req.FilePath)
+		rel, err := filepath.Rel(targetLib, req.FilePath)
 		if err != nil || strings.HasPrefix(rel, "..") {
 			s.writeError(w, "Security violation: Invalid file path", 403)
 			return
