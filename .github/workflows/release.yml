@@ -70,10 +70,22 @@ jobs:
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           echo "Generating changelog since $PREV_TAG"
           echo "## Changelog (${{ env.VERSION }})" > release_notes.md
+          
+          # Use %s for subject (title), %b for body (bullets), %n for newlines
+          # Using ** for bold subject to match user preference and reduce header clutter
+          # Minimized newlines to avoid large gaps on empty bodies
+          FORMAT="**%s**%n%b"
+          
           if [ -z "$PREV_TAG" ]; then
-             git log --pretty=format:"- %s" >> release_notes.md
+             git log --pretty=format:"$FORMAT" >> release_notes.md
           else
-             git log $PREV_TAG..HEAD --pretty=format:"- %s" >> release_notes.md
+             git log $PREV_TAG..HEAD --pretty=format:"$FORMAT" >> release_notes.md
+          fi
+
+          echo "" >> release_notes.md
+          echo "" >> release_notes.md
+          if [ -n "$PREV_TAG" ]; then
+             echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/$PREV_TAG...${{ env.VERSION }}" >> release_notes.md
           fi
         shell: bash
 
