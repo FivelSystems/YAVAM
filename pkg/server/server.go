@@ -277,6 +277,44 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		json.NewEncoder(w).Encode(pkgs)
 	})
 
+	// Disk Space Endpoint
+	mux.HandleFunc("/api/disk-space", func(w http.ResponseWriter, r *http.Request) {
+		targetPath := r.URL.Query().Get("path")
+		if targetPath == "" {
+			targetPath = activePath
+		}
+
+		// Security: Ensure targetPath is in allowed libraries
+		cleanTarget := strings.ToLower(filepath.Clean(targetPath))
+		cleanActive := strings.ToLower(filepath.Clean(activePath))
+		allowed := false
+
+		if cleanTarget == cleanActive {
+			allowed = true
+		} else {
+			for _, lib := range s.libraries {
+				if strings.ToLower(filepath.Clean(lib)) == cleanTarget {
+					allowed = true
+					break
+				}
+			}
+		}
+
+		if !allowed {
+			s.writeError(w, "Access denied", 403)
+			return
+		}
+
+		info, err := s.manager.GetDiskSpace(targetPath)
+		if err != nil {
+			s.writeError(w, err.Error(), 500)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(info)
+	})
+
 	// Thumbnail Endpoint
 	mux.HandleFunc("/api/thumbnail", func(w http.ResponseWriter, r *http.Request) {
 		filePath := r.URL.Query().Get("filePath")
@@ -617,7 +655,14 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 			}
 		}
 
-		collisions, err := s.manager.CopyPackagesToLibrary(req.FilePaths, destPath, req.Overwrite)
+		collisions, err := s.manager.CopyPackagesToLibrary(req.FilePaths, destPath, req.Overwrite, func(current, total int, filename string, status string) {
+			s.Broadcast("install-progress", map[string]interface{}{
+				"current":  current,
+				"total":    total,
+				"filename": filename,
+				"status":   status,
+			})
+		})
 		if err != nil {
 			s.log(fmt.Sprintf("Error installing packages: %v", err))
 			s.writeError(w, err.Error(), 500)

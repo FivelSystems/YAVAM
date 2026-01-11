@@ -1,5 +1,21 @@
 export namespace manager {
 	
+	export class DiskSpaceInfo {
+	    free: number;
+	    total: number;
+	    totalFree: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new DiskSpaceInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.free = source["free"];
+	        this.total = source["total"];
+	        this.totalFree = source["totalFree"];
+	    }
+	}
 	export class ResolveConflictResult {
 	    merged: number;
 	    disabled: number;

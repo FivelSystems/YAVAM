@@ -107,7 +107,14 @@ func (a *App) DeleteFileToRecycleBin(path string) error {
 // CopyPackagesToLibrary copies a list of package files to a destination library
 // Returns list of collided filenames (if overwrite=false) or error
 func (a *App) CopyPackagesToLibrary(filePaths []string, destLibPath string, overwrite bool) ([]string, error) {
-	return a.manager.CopyPackagesToLibrary(filePaths, destLibPath, overwrite)
+	return a.manager.CopyPackagesToLibrary(filePaths, destLibPath, overwrite, func(current, total int, filename string, status string) {
+		runtime.EventsEmit(a.ctx, "install-progress", map[string]interface{}{
+			"current":  current,
+			"total":    total,
+			"filename": filename,
+			"status":   status,
+		})
+	})
 }
 
 func (a *App) CopyFileToClipboard(path string) {
@@ -158,7 +165,12 @@ func (a *App) GetAppVersion() string {
 	return cfg.Info.ProductVersion
 }
 
-// CancelScan cancels the current scan and waits for it to finish
+func (a *App) GetDiskSpace(path string) (manager.DiskSpaceInfo, error) {
+	return a.manager.GetDiskSpace(path)
+}
+
+// CancelScan signals the running scan to stop
+// and waits for it to finish
 func (a *App) CancelScan() {
 	a.scanMu.Lock()
 	if a.scanCancel != nil {
