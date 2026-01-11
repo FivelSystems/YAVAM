@@ -316,12 +316,10 @@ func (m *Manager) TogglePackage(pkgs []models.VarPackage, pkgID string, enable b
 	// specific implementation: pkgID IS the FilePath
 	sourcePath := pkgID
 
-	// Security Check
-	if !m.validatePath(sourcePath, vamPath) {
-		// validatePath handles basic containment check
-		if !strings.HasPrefix(strings.ToLower(sourcePath), strings.ToLower(vamPath)) {
-			return "", fmt.Errorf("security violation: path outside VaM folder")
-		}
+	// Security Check: Ensure file is within the currently active library
+	// We Clean paths to handle separator mismatches (e.g. forward vs backslashes)
+	if !m.validatePath(filepath.Clean(sourcePath), filepath.Clean(vamPath)) {
+		return "", fmt.Errorf("security violation: file '%s' is not within the active library '%s'", sourcePath, vamPath)
 	}
 
 	// Prepare new path

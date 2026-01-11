@@ -19,6 +19,7 @@ import { UpgradeModal } from "./components/UpgradeModal";
 import { Pagination } from './components/Pagination';
 import { ScanProgressBar } from './components/ScanProgressBar';
 import { OptimizationModal, ManualPlan } from './components/OptimizationModal';
+import { OptimizationProgressModal } from './components/OptimizationProgressModal';
 
 // Define types based on our Go models
 export interface VarPackage {
@@ -468,7 +469,20 @@ function App(): JSX.Element {
         open: boolean;
         mergePlan: { keep: VarPackage; delete: VarPackage[] }[];
         resolveGroups: { id: string; packages: VarPackage[] }[];
-    }>({ open: false, mergePlan: [], resolveGroups: [] });
+        forceGlobalMode?: boolean;
+        targetPackage?: VarPackage;
+    }>({ open: false, mergePlan: [], resolveGroups: [], forceGlobalMode: false, targetPackage: undefined });
+
+    // Optimization Progress State
+    const [optimizationProgress, setOptimizationProgress] = useState<{
+        open: boolean;
+        current: number;
+        total: number;
+        currentFile: string;
+        spaceSaved: number;
+        completed: boolean;
+        errors: string[];
+    }>({ open: false, current: 0, total: 0, currentFile: '', spaceSaved: 0, completed: false, errors: [] });
     // Bulk Merge State
 
 
@@ -587,8 +601,24 @@ function App(): JSX.Element {
                     if (data.libraries && Array.isArray(data.libraries)) {
                         setLibraries(data.libraries);
                     }
-                    if (data.path) {
-                        // Trust server config
+
+                    const savedPath = localStorage.getItem("activeLibraryPath");
+
+                    const normalize = (p: string) => p.toLowerCase().replace(/[\\/]/g, '/');
+                    let foundLib: string | undefined;
+
+                    if (savedPath && data.libraries && Array.isArray(data.libraries)) {
+                        const savedNorm = normalize(savedPath);
+                        foundLib = data.libraries.find((lib: string) => normalize(lib) === savedNorm);
+                    }
+
+                    if (foundLib) {
+                        // Use the matched library path from server list (canonical)
+                        setActiveLibraryPath(foundLib);
+                        // Update storage to match canonical if needed
+                        if (foundLib !== savedPath) localStorage.setItem('activeLibraryPath', foundLib);
+                    } else if (data.path) {
+                        // Fallback to server active path
                         setActiveLibraryPath(data.path);
                         localStorage.setItem('activeLibraryPath', data.path);
                     }
@@ -1180,7 +1210,7 @@ function App(): JSX.Element {
                 const res = await fetch('/api/toggle', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ filePath: pkg.filePath, enable: !pkg.isEnabled, merge: merge })
+                    body: JSON.stringify({ filePath: pkg.filePath, enable: !pkg.isEnabled, merge: merge, libraryPath: activeLibraryPath })
                 }).then(r => r.json());
 
                 if (!res.success) throw new Error(res.message || res.error || "Unknown error");
@@ -1331,9 +1361,19 @@ function App(): JSX.Element {
         setLoading(true);
         try {
             // Delete duplicates
+            // Delete duplicates
             for (const d of duplicates) {
                 // @ts-ignore
-                await window.go.main.App.DeleteFileToRecycleBin(d.filePath);
+                if (window.go) {
+                    // @ts-ignore
+                    await window.go.main.App.DeleteFileToRecycleBin(d.filePath);
+                } else {
+                    const res = await fetch('/api/delete', {
+                        method: 'POST',
+                        body: JSON.stringify({ filePath: d.filePath, libraryPath: activeLibraryPath })
+                    }).then(r => r.json());
+                    if (!res.success) throw new Error("Web delete failed");
+                }
             }
 
             if (!inPlace) {
@@ -1346,11 +1386,16 @@ function App(): JSX.Element {
                 if (pkgParent !== libPathClean) {
                     // Move to root: Copy then Delete original logic
                     // @ts-ignore
-                    const newPath = await window.go.main.App.CopyPackagesToLibrary([pkg.filePath], activeLibraryPath, false); // assumes copy returns path or success?
-                    // Delete old file
-                    // @ts-ignore
-                    await window.go.main.App.DeleteFileToRecycleBin(pkg.filePath);
-                    addToast(`Merged ${confirmCount + 1} files to root.`, "success");
+                    if (window.go) {
+                        // @ts-ignore
+                        const newPath = await window.go.main.App.CopyPackagesToLibrary([pkg.filePath], activeLibraryPath, false); // assumes copy returns path or success?
+                        // Delete old file
+                        // @ts-ignore
+                        await window.go.main.App.DeleteFileToRecycleBin(pkg.filePath);
+                        addToast(`Merged ${confirmCount + 1} files to root.`, "success");
+                    } else {
+                        addToast(`Merged ${confirmCount} duplicates (Move to root skipped in Web Mode).`, "warning");
+                    }
                 } else {
                     addToast(`Merged ${confirmCount} duplicates.`, "success");
                 }
@@ -1441,17 +1486,37 @@ function App(): JSX.Element {
         setOptimizationData({
             open: true,
             mergePlan: mergePlan,
-            resolveGroups: resolveGroups
+            resolveGroups: resolveGroups,
+            targetPackage: pkg,
+            forceGlobalMode: true
         });
     };
 
-    const handleConfirmOptimization = async (enableMerge: boolean, resolutionStrategy: 'latest' | 'manual' | 'none', manualPlan: ManualPlan) => {
+    const handleConfirmOptimization = async (enableMerge: boolean, resolutionStrategy: 'latest' | 'manual' | 'none' | 'delete-older', manualPlan: ManualPlan) => {
         setOptimizationData(prev => ({ ...prev, open: false }));
-        setLoading(true);
+        // setLoading(true); // Don't use global loading, use Progress Modal
+
+        const totalMerges = enableMerge ? optimizationData.mergePlan.reduce((acc, g) => acc + g.delete.length, 0) : 0;
+        const totalResolves = (resolutionStrategy !== 'none') ? optimizationData.resolveGroups.length : 0;
+        const totalOps = totalMerges + totalResolves;
+
+        setOptimizationProgress({
+            open: true,
+            current: 0,
+            total: totalOps,
+            currentFile: 'Starting...',
+            spaceSaved: 0,
+            completed: false,
+            errors: []
+        });
+
+        const errors: string[] = [];
+        const deletedPaths = new Set<string>();
+        let savedBytes = 0;
+        let processed = 0;
 
         try {
             // 1. Execute Merges
-            let mergeDeleted = 0;
             if (enableMerge && optimizationData.mergePlan.length > 0) {
                 for (const group of optimizationData.mergePlan) {
                     const { keep, delete: toDelete } = group;
@@ -1463,35 +1528,59 @@ function App(): JSX.Element {
                     const inRoot = keepParent === libPathClean;
 
                     if (!inRoot) {
-                        // Move to root
-                        // @ts-ignore
-                        await window.go.main.App.CopyPackagesToLibrary([keep.filePath], activeLibraryPath, false);
-                        // Delete source (simulated move)
-                        await togglePackage(keep, false, true);
-                    }
-
-                    // Delete duplicates (Fix: Actually delete instead of disable)
-                    for (const d of toDelete) {
                         try {
+                            // Move to root simulated
                             // @ts-ignore
-                            await window.go.main.App.DeleteFileToRecycleBin(d.filePath);
-                            mergeDeleted++;
-                        } catch (err) {
-                            console.error("Failed to delete", d.filePath, err);
+                            if (window.go) {
+                                // @ts-ignore
+                                await window.go.main.App.CopyPackagesToLibrary([keep.filePath], activeLibraryPath, false);
+                                await togglePackage(keep, false, true);
+                            } else {
+                                console.warn("Auto-move to root not supported in web mode");
+                            }
+                        } catch (e: any) {
+                            errors.push(`Failed to move ${keep.fileName}: ${e.message}`);
                         }
                     }
+
+                    // Delete duplicates
+                    for (const d of toDelete) {
+                        setOptimizationProgress(prev => ({ ...prev, currentFile: `Deleting ${d.fileName}...` }));
+                        try {
+                            // @ts-ignore
+                            if (window.go) {
+                                // @ts-ignore
+                                await window.go.main.App.DeleteFileToRecycleBin(d.filePath);
+                            } else {
+                                await fetch('/api/delete', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ filePath: d.filePath, libraryPath: activeLibraryPath })
+                                });
+                            }
+                            savedBytes += d.size;
+                            deletedPaths.add(d.filePath);
+                        } catch (err: any) {
+                            console.error("Failed to delete", d.filePath, err);
+                            errors.push(`Failed to delete ${d.fileName}: ${err.message}`);
+                        }
+                        processed++;
+                        setOptimizationProgress(prev => ({ ...prev, current: processed, spaceSaved: savedBytes }));
+                    }
                 }
-                if (mergeDeleted > 0) addToast(`Consolidated and deleted ${mergeDeleted} duplicate files`, 'success');
             }
 
             // 2. Execute Version Resolution
-            let resolvedCount = 0;
             if (resolutionStrategy !== 'none' && optimizationData.resolveGroups.length > 0) {
                 for (const group of optimizationData.resolveGroups) {
-                    const allPkgs = group.packages;
+                    const allPkgs = group.packages.filter(p => !deletedPaths.has(p.filePath));
+                    if (allPkgs.length < 2) continue; // No conflict remaining
+
                     let targetVersionPath = "";
 
-                    if (resolutionStrategy === 'latest') {
+                    setOptimizationProgress(prev => ({ ...prev, currentFile: `Resolving ${group.packages[0].meta.packageName}...` }));
+
+                    if (resolutionStrategy === 'latest' || resolutionStrategy === 'delete-older') {
                         const sorted = [...allPkgs].sort((a, b) => {
                             const vA = parseInt(a.meta.version) || 0;
                             const vB = parseInt(b.meta.version) || 0;
@@ -1500,31 +1589,61 @@ function App(): JSX.Element {
                         targetVersionPath = sorted[0].filePath;
                     } else if (resolutionStrategy === 'manual') {
                         const selection = manualPlan[group.id];
-                        if (!selection || selection === 'none') continue;
-                        targetVersionPath = selection;
+                        if (selection && selection !== 'none') targetVersionPath = selection;
                     }
 
-                    if (!targetVersionPath) continue;
-
-                    // Disable everything except target
-                    for (const p of allPkgs) {
-                        if (p.filePath === targetVersionPath) {
-                            if (!p.isEnabled) await togglePackage(p, true, false);
-                        } else {
-                            if (p.isEnabled) await togglePackage(p, false, false);
+                    if (targetVersionPath) {
+                        // Process Group
+                        for (const p of allPkgs) {
+                            try {
+                                if (p.filePath === targetVersionPath) {
+                                    // Target: Ensure Enabled
+                                    if (!p.isEnabled) await togglePackage(p, true, false);
+                                } else {
+                                    // Non-Target: Disable or Delete
+                                    if (resolutionStrategy === 'delete-older') {
+                                        // DELETE
+                                        // @ts-ignore
+                                        if (window.go) {
+                                            // @ts-ignore
+                                            await window.go.main.App.DeleteFileToRecycleBin(p.filePath);
+                                        } else {
+                                            await fetch('/api/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: p.filePath, libraryPath: activeLibraryPath }) });
+                                        }
+                                        savedBytes += p.size;
+                                    } else {
+                                        // DISABLE (Default)
+                                        if (p.isEnabled) await togglePackage(p, false, false);
+                                    }
+                                }
+                            } catch (e: any) {
+                                errors.push(`Failed to process ${p.fileName}: ${e.message}`);
+                            }
                         }
                     }
-                    resolvedCount++;
+                    processed++;
+                    setOptimizationProgress(prev => ({ ...prev, current: processed }));
                 }
-                if (resolvedCount > 0) addToast(`Resolved versions for ${resolvedCount} packages`, 'success');
             }
 
             scanPackages();
         } catch (e: any) {
             console.error("Optimization failed", e);
-            addToast("Optimization failed: " + e.message, 'error');
+            errors.push("Critical Failure: " + e.message);
         } finally {
             setLoading(false);
+            setOptimizationProgress(prev => ({
+                ...prev,
+                completed: true,
+                spaceSaved: savedBytes,
+                errors: errors,
+                currentFile: 'Done.'
+            }));
+            if (errors.length === 0) {
+                addToast("Optimization Completed Successfully", 'success');
+            } else {
+                addToast("Optimization Completed with Errors", 'warning');
+            }
         }
     };
 
@@ -1639,7 +1758,8 @@ function App(): JSX.Element {
             setOptimizationData({
                 open: true,
                 mergePlan: mergePlan,
-                resolveGroups: resolveGroups
+                resolveGroups: resolveGroups,
+                forceGlobalMode: true
             });
             return;
         }
@@ -1781,8 +1901,19 @@ function App(): JSX.Element {
                     onConfirm={handleConfirmOptimization}
                     mergePlan={optimizationData.mergePlan}
                     resolveGroups={optimizationData.resolveGroups}
+                    targetPackage={optimizationData.targetPackage}
                 />
 
+                <OptimizationProgressModal
+                    isOpen={optimizationProgress.open}
+                    onClose={() => setOptimizationProgress(prev => ({ ...prev, open: false }))}
+                    current={optimizationProgress.current}
+                    total={optimizationProgress.total}
+                    currentFile={optimizationProgress.currentFile}
+                    spaceSaved={optimizationProgress.spaceSaved}
+                    completed={optimizationProgress.completed}
+                    errors={optimizationProgress.errors}
+                />
 
 
                 {/* Hide sidebar on small screens when not needed, or use CSS media queries */}
