@@ -469,8 +469,20 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 
 		downloadDir := targetPath
 
+		// Calculate potential progress
+		// We can't easily know byte progress without reading all files first, which wastes memory.
+		// We track file count progress instead, matching Desktop behavior.
+		totalFiles := len(files)
 		count := 0
-		for _, fileHeader := range files {
+
+		for i, fileHeader := range files {
+			// Broadcast Progress
+			current := i + 1 // 1-based index
+			s.Broadcast("scan:progress", map[string]int{
+				"current": current,
+				"total":   totalFiles,
+			})
+
 			file, err := fileHeader.Open()
 			if err != nil {
 				continue

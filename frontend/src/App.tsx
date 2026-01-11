@@ -960,8 +960,13 @@ function App(): JSX.Element {
                     const tags = new Set<string>();
                     pkgs.forEach((p: any) => p.tags?.forEach((t: string) => tags.add(t)));
                     setAvailableTags(Array.from(tags));
+                } else if (pkgs && pkgs.success === false) {
+                    // Only throw if we received a valid error object
+                    throw new Error(pkgs.message);
                 } else {
-                    if (pkgs.success === false) throw new Error(pkgs.message);
+                    // unexpected null or format, just assume empty?
+                    // console.warn("Received empty or invalid package list");
+                    // setPackages([]);
                 }
             } catch (e: any) {
                 if (e.name === 'AbortError') return; // Ignore intentional aborts
@@ -1053,6 +1058,7 @@ function App(): JSX.Element {
         filterPackages();
     }, [packages, currentFilter, selectedCreator, selectedType, selectedTags, searchQuery, sortMode]);
 
+
     // Persist Sort Mode
     useEffect(() => {
         localStorage.setItem("sortMode", sortMode);
@@ -1061,19 +1067,30 @@ function App(): JSX.Element {
     const handleDrop = useCallback(async (files: string[]) => {
         console.log("Dropped files:", files);
         if (!activeLibraryPath) return;
+        setLoading(true);
+        setScanProgress({ current: 0, total: files.length });
+
         try {
             // @ts-ignore
             await window.go.main.App.InstallFiles(files, activeLibraryPath);
+            addToast(`Successfully processed ${files.length} files.`, 'success');
             scanPackages(); // Refresh
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
-            alert(e);
+            let msg = e.message || e.toString();
+            if (msg.length > 150) {
+                msg = msg.substring(0, 147) + "... (see console)";
+            }
+            addToast("Install failed: " + msg, 'error');
+            setLoading(false);
         }
     }, [activeLibraryPath]);
 
     const handleWebUpload = async (files: FileList) => {
         if (!files || files.length === 0) return;
         setLoading(true);
+        setScanProgress({ current: 0, total: files.length });
+
         const formData = new FormData();
         formData.append('path', activeLibraryPath || "");
         for (let i = 0; i < files.length; i++) {
@@ -1086,11 +1103,20 @@ function App(): JSX.Element {
                 body: formData
             });
             if (!res.ok) throw new Error("Upload failed");
+
+            const data = await res.json();
+            if (data.success) {
+                addToast(`Successfully uploaded ${data.count} files.`, 'success');
+            }
             // Trigger Scan
             scanPackages();
-        } catch (e) {
+        } catch (e: any) {
             console.error(e);
-            addToast("Upload failed: " + e, 'error');
+            let msg = e.message || e.toString();
+            if (msg.length > 150) {
+                msg = msg.substring(0, 147) + "... (see console)";
+            }
+            addToast("Upload failed: " + msg, 'error');
         } finally {
             setLoading(false);
         }
