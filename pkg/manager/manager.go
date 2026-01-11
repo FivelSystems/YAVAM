@@ -451,7 +451,7 @@ func (m *Manager) InstallPackage(files []string, vamPath string, onProgress func
 			srcFile.Close()
 			// Refine Permission Errors
 			if strings.Contains(err.Error(), "Access is denied") || strings.Contains(err.Error(), "user name or password") {
-				ignored = append(ignored, fmt.Sprintf("%s (remote permissions error: please verify write access)", fileName))
+				ignored = append(ignored, fmt.Sprintf("%s (Access Denied. Please log in to the folder.)", fileName))
 			} else {
 				ignored = append(ignored, fmt.Sprintf("%s (create error: %v)", fileName, err))
 			}
