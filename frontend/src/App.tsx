@@ -1772,6 +1772,24 @@ function App(): JSX.Element {
             return;
         }
 
+        if (action === 'enable-all' || action === 'disable-all') {
+            setLoading(true);
+            let processed = 0;
+            // Filter targets that need changing
+            const toToggle = targets.filter(p => action === 'enable-all' ? !p.isEnabled : p.isEnabled);
+
+            for (const p of toToggle) {
+                // We use silent=true to avoid spamming toasts
+                // We use merge=false (users should use "Merge" for handling collisions, this is just a quick toggle)
+                await togglePackage(p, false, true).catch(console.error);
+                processed++;
+            }
+            setLoading(false);
+            addToast(`${action === 'enable-all' ? 'Enabled' : 'Disabled'} ${processed} packages`, 'success');
+            scanPackages();
+            return;
+        }
+
         scanPackages();
     };
 
