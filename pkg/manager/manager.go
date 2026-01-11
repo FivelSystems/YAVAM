@@ -14,6 +14,9 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+
+	"golang.org/x/sys/windows"
+
 	"varmanager/pkg/models"
 	"varmanager/pkg/parser"
 	"varmanager/pkg/scanner"
@@ -328,7 +331,13 @@ func (m *Manager) TogglePackage(pkgs []models.VarPackage, pkgID string, enable b
 	if enable {
 		// We expect source to end in .var.disabled
 		if strings.HasSuffix(strings.ToLower(sourcePath), ".var.disabled") {
-			destPath = sourcePath[:len(sourcePath)-len(".disabled")]
+			if merge {
+				// Merge requested: Target the library root
+				baseName := filepath.Base(sourcePath[:len(sourcePath)-len(".disabled")])
+				destPath = filepath.Join(vamPath, baseName)
+			} else {
+				destPath = sourcePath[:len(sourcePath)-len(".disabled")]
+			}
 		} else if strings.HasSuffix(strings.ToLower(sourcePath), ".var") {
 			// Already enabled?
 			return sourcePath, nil
@@ -777,17 +786,24 @@ func (m *Manager) ResolveConflicts(keepPath string, others []string, libraryPath
 			// Target exists. Is it me?
 			if filepath.Clean(keepPath) != filepath.Clean(targetPath) {
 				// We have a collision at the destination.
-				// This shouldn't happen if we passed all duplicates in 'others'.
-				// But safety check:
-				fmt.Printf("[ResolveConflicts] Target path exists: %s. Cannot move.\n", targetPath)
-				// Don't error out, just keep it where it is.
+				// User Strategy: "Overlap (Lucky Merge)" - Overwrite root with survivor
+				fmt.Printf("[ResolveConflicts] Target exists at root. Overwriting: %s\n", targetPath)
+				if err := os.Remove(targetPath); err != nil {
+					return result, fmt.Errorf("failed to remove existing root file for overwrite: %w", err)
+				}
 			}
-		} else {
-			// Move
+		}
+
+		// Move
+		// If target was me, we just skipped the block above (no-op)
+		// If target was removed, we move now.
+		// If target didn't exist, we move now.
+		if filepath.Clean(keepPath) != filepath.Clean(targetPath) { // Double check we still need to move
 			if err := os.Rename(keepPath, targetPath); err == nil {
 				result.NewPath = targetPath
 			} else {
 				fmt.Printf("[ResolveConflicts] Failed to move keep file to root: %v\n", err)
+				return result, fmt.Errorf("failed to move survivor to root: %w", err)
 			}
 		}
 	}
@@ -797,7 +813,9 @@ func (m *Manager) ResolveConflicts(keepPath string, others []string, libraryPath
 
 // CopyPackagesToLibrary copies a list of package files to a destination library
 // Returns list of collided filenames (if overwrite=false) or error
-func (m *Manager) CopyPackagesToLibrary(filePaths []string, destLibPath string, overwrite bool) ([]string, error) {
+// CopyPackagesToLibrary copies a list of package files to a destination library
+// Returns list of collided filenames (if overwrite=false) or error
+func (m *Manager) CopyPackagesToLibrary(filePaths []string, destLibPath string, overwrite bool, onProgress func(current, total int, filename string, status string)) ([]string, error) {
 	fmt.Printf("[Manager] CopyPackagesToLibrary called. Dest: %s, Overwrite: %v, Count: %d\n", destLibPath, overwrite, len(filePaths))
 	var collisions []string
 	// Ensure destination exists
@@ -806,39 +824,44 @@ func (m *Manager) CopyPackagesToLibrary(filePaths []string, destLibPath string, 
 		return nil, fmt.Errorf("failed to create destination: %v", err)
 	}
 
-	// First pass: check for collisions if not overwriting
-	if !overwrite {
-		for _, src := range filePaths {
-			baseName := filepath.Base(src)
-			dest := filepath.Join(addonPath, baseName)
-			fmt.Printf("[Manager] Checking collision for %s -> %s\n", src, dest)
-			if info, err := os.Stat(dest); err == nil {
-				fmt.Printf("[Manager] Collision found: %s (IsDir: %v)\n", dest, info.IsDir())
-				collisions = append(collisions, baseName)
-			}
-		}
-		if len(collisions) > 0 {
-			return collisions, nil
-		}
-	}
-
-	// Second pass: perform copy
-	for _, src := range filePaths {
+	// Combined pass: Check and Copy
+	total := len(filePaths)
+	for i, src := range filePaths {
 		baseName := filepath.Base(src)
 		dest := filepath.Join(addonPath, baseName)
 
-		sourceFile, err := os.Open(src)
-		if err != nil {
-			return nil, fmt.Errorf("failed to open source %s: %v", baseName, err)
+		// Check for collision
+		if !overwrite {
+			if info, err := os.Stat(dest); err == nil && !info.IsDir() {
+				fmt.Printf("[Manager] Collision skipping: %s\n", dest)
+				collisions = append(collisions, baseName)
+				// Emit progress even for skipped items so the bar fills up
+				if onProgress != nil {
+					onProgress(i+1, total, baseName, "skipped")
+				}
+				continue
+			}
 		}
 
-		err = func() error {
+		// Emit "installing" status BEFORE start
+		if onProgress != nil {
+			onProgress(i+1, total, baseName, "installing")
+		}
+
+		// Perform Copy
+		err := func() error {
+			sourceFile, err := os.Open(src)
+			if err != nil {
+				return fmt.Errorf("failed to open source %s: %v", baseName, err)
+			}
 			defer sourceFile.Close()
-			destFile, err := os.Create(dest) // Create truncates if exists
+
+			destFile, err := os.Create(dest) // Create truncates if exists (which happens if overwrite=true)
 			if err != nil {
 				return err
 			}
 			defer destFile.Close()
+
 			if _, err := io.Copy(destFile, sourceFile); err != nil {
 				return err
 			}
@@ -846,11 +869,24 @@ func (m *Manager) CopyPackagesToLibrary(filePaths []string, destLibPath string, 
 		}()
 
 		if err != nil {
-			return nil, fmt.Errorf("failed to copy %s: %v", baseName, err)
+			if onProgress != nil {
+				onProgress(i+1, total, baseName, "error")
+			}
+			// Decide: Abort on error or compile errors?
+			// Let's log and abort for now to avoid partial messy states on write errors
+			return collisions, fmt.Errorf("failed to copy %s: %v", baseName, err)
 		}
-		fmt.Printf("[Manager] Copied %s to %s\n", baseName, dest)
+
+		// Optional: Emit "installed" if we want to be explicit about success completion
+		// But "installing" followed by next file's event implies success.
+		// For the UI to show green check, it needs to know it finished.
+		// Let's emit "success" or "installed"
+		if onProgress != nil {
+			onProgress(i+1, total, baseName, "installed")
+		}
 	}
-	return nil, nil // Success, no collisions/errors
+
+	return collisions, nil // Success (potentially with some skipped)
 }
 
 // FinishSetup marks the application as configured
@@ -884,4 +920,30 @@ func (m *Manager) GetLibraryCounts(libraries []string) map[string]int {
 
 	wg.Wait()
 	return results
+}
+
+type DiskSpaceInfo struct {
+	Free      uint64 `json:"free"`
+	Total     uint64 `json:"total"`
+	TotalFree uint64 `json:"totalFree"`
+}
+
+func (m *Manager) GetDiskSpace(path string) (DiskSpaceInfo, error) {
+	var freeBytes, totalBytes, totalFreeBytes uint64
+
+	pathPtr, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return DiskSpaceInfo{}, err
+	}
+
+	err = windows.GetDiskFreeSpaceEx(pathPtr, &freeBytes, &totalBytes, &totalFreeBytes)
+	if err != nil {
+		return DiskSpaceInfo{}, err
+	}
+
+	return DiskSpaceInfo{
+		Free:      freeBytes,
+		Total:     totalBytes,
+		TotalFree: totalFreeBytes,
+	}, nil
 }

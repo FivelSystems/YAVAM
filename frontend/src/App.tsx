@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { RefreshCw, Search, X, PanelLeft, LayoutGrid, List, Filter, WifiOff, AlertTriangle, ArrowUpDown, Calendar, ArrowUpAZ, ArrowDownZA, ArrowDownWideNarrow, ArrowUpNarrowWide } from 'lucide-react';
+import { RefreshCw, Search, X, PanelLeft, LayoutGrid, List, Filter, WifiOff, ArrowUpDown, Calendar, ArrowUpAZ, ArrowDownZA, ArrowDownWideNarrow, ArrowUpNarrowWide } from 'lucide-react';
 import clsx from 'clsx';
 import { Toast, ToastItem, ToastType } from './components/Toast';
 import DragDropOverlay from './components/DragDropOverlay';
@@ -20,6 +20,7 @@ import { Pagination } from './components/Pagination';
 import { ScanProgressBar } from './components/ScanProgressBar';
 import { OptimizationModal, ManualPlan } from './components/OptimizationModal';
 import { OptimizationProgressModal } from './components/OptimizationProgressModal';
+import { InstallPackageModal } from './components/InstallPackageModal';
 
 // Define types based on our Go models
 export interface VarPackage {
@@ -498,7 +499,6 @@ function App(): JSX.Element {
     // Install Modal State
     const [installModal, setInstallModal] = useState<{ open: boolean, pkgs: VarPackage[] }>({ open: false, pkgs: [] });
     // Install Collision
-    const [installCollision, setInstallCollision] = useState<{ open: boolean, collisions: string[], libPath: string, pkgs: VarPackage[] }>({ open: false, collisions: [], libPath: "", pkgs: [] });
     // Details Panel Visibility
     const [isDetailsPanelOpen, setIsDetailsPanelOpen] = useState(false);
 
@@ -710,6 +710,9 @@ function App(): JSX.Element {
                         if (flushTimer) clearTimeout(flushTimer);
                         flush();
                         setLoading(false);
+                    } else {
+                        // Dispatch other events (like install-progress) globally for components to pick up
+                        window.dispatchEvent(new CustomEvent(type, { detail: data }));
                     }
                 } catch (e) {
                     console.error("SSE parse error", e);
@@ -1648,7 +1651,7 @@ function App(): JSX.Element {
     };
 
 
-    const handleSidebarAction = async (action: 'enable-all' | 'disable-all' | 'resolve-all', groupType: 'creator' | 'type' | 'status', key: string) => {
+    const handleSidebarAction = async (action: 'enable-all' | 'disable-all' | 'resolve-all' | 'install-all', groupType: 'creator' | 'type' | 'status', key: string) => {
         const targets = packages.filter(p => {
             if (groupType === 'creator') return (p.meta.creator || "Unknown") === key;
             if (groupType === 'type') {
@@ -1764,31 +1767,12 @@ function App(): JSX.Element {
             return;
         }
 
-        setLoading(true);
-        try {
-            if (action === 'enable-all') {
-                let count = 0;
-                for (const p of targets) {
-                    if (!p.isEnabled) {
-                        await togglePackage(p, false, true);
-                        count++;
-                    }
-                }
-                addToast(`Enabled ${count} packages in ${key}`, 'success');
-            } else if (action === 'disable-all') {
-                const toDisable = targets.filter(p => p.isEnabled);
-                for (const p of toDisable) {
-                    await togglePackage(p, false, true);
-                }
-                addToast(`Disabled ${toDisable.length} packages in ${key}`, 'success');
-            }
-        } catch (e: any) {
-            console.error(e);
-            addToast("Bulk action failed: " + e.message, 'error');
-        } finally {
-            setLoading(false);
-            scanPackages();
+        if (action === 'install-all') {
+            setInstallModal({ open: true, pkgs: targets });
+            return;
         }
+
+        scanPackages();
     };
 
     if (!activeLibraryPath) {
@@ -2362,159 +2346,18 @@ function App(): JSX.Element {
             </AnimatePresence>
 
             {/* Install Modal */}
-            <AnimatePresence>
-                {installModal.open && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                        <div className="bg-gray-800 border border-gray-700 rounded-xl shadow-2xl p-6 w-full max-w-sm">
-                            <h2 className="text-xl font-bold text-white mb-4">Install to Library</h2>
-                            <p className="text-gray-400 mb-4">Select the destination library for {installModal.pkgs.length} package(s):</p>
-                            <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar mb-4">
-                                {libraries.filter(l => l.toLowerCase() !== activeLibraryPath.toLowerCase()).map(lib => (
-                                    <button
-                                        key={lib}
-                                        onClick={async () => {
-                                            console.log("Install button clicked for lib:", lib);
-                                            // Trigger Install
-                                            // @ts-ignore
-                                            if (window.go) {
-                                                try {
-                                                    const paths = installModal.pkgs.map(p => p.filePath);
-                                                    // @ts-ignore
-                                                    // Try copy without overwrite first
-                                                    const collisions = await window.go.main.App.CopyPackagesToLibrary(paths, lib, false);
-
-                                                    if (collisions && collisions.length > 0) {
-                                                        // Close install modal and show collision modal
-                                                        setInstallModal({ open: false, pkgs: [] });
-                                                        setInstallCollision({ open: true, collisions: collisions, libPath: lib, pkgs: installModal.pkgs });
-                                                        return;
-                                                    }
-
-                                                    // Desktop Install
-                                                    // @ts-ignore
-                                                    await window.go.main.App.InstallFiles(paths, lib);
-
-                                                    const destIndex = libraries.findIndex(l => l === lib);
-                                                    addToast(`Installed ${paths.length} packages`, 'success', () => {
-                                                        if (destIndex !== -1) handleSwitchLibrary(destIndex);
-                                                    });
-
-                                                    setInstallModal({ open: false, pkgs: [] });
-                                                } catch (e) {
-                                                    addToast("Install failed: " + e, 'error');
-                                                }
-                                            } else {
-                                                console.log("Web mode install detected");
-                                                // Web Mode
-                                                try {
-                                                    const paths = installModal.pkgs.map(p => p.filePath);
-                                                    console.log("Installing paths:", paths, "to", lib);
-                                                    const res = await fetch("/api/install", {
-                                                        method: "POST",
-                                                        headers: { "Content-Type": "application/json" },
-                                                        body: JSON.stringify({
-                                                            filePaths: paths,
-                                                            destLib: lib,
-                                                            overwrite: false
-                                                        })
-                                                    });
-                                                    const data = await res.json();
-                                                    if (!res.ok) throw new Error(data.message || "Install failed");
-
-                                                    if (data.collisions && data.collisions.length > 0) {
-                                                        setInstallModal({ open: false, pkgs: [] });
-                                                        setInstallCollision({ open: true, collisions: data.collisions, libPath: lib, pkgs: installModal.pkgs });
-                                                        return;
-                                                    }
-
-                                                    const destIndex = libraries.findIndex(l => l === lib);
-                                                    addToast(`Installed ${paths.length} packages`, 'success', () => {
-                                                        if (destIndex !== -1) handleSwitchLibrary(destIndex);
-                                                    });
-
-                                                    setInstallModal({ open: false, pkgs: [] });
-                                                } catch (e: any) {
-                                                    console.error("Install error:", e);
-                                                    addToast(e.message, 'error');
-                                                }
-
-                                            }
-                                        }}
-                                        className="w-full text-left px-3 py-2 rounded bg-gray-700 hover:bg-blue-600 text-gray-200 hover:text-white transition-colors truncate"
-                                        title={lib}
-                                    >
-                                        {lib.split(/[/\\]/).pop()}
-                                    </button>
-                                ))}
-                                {libraries.length <= 1 && <div className="text-gray-500 text-sm italic p-2 text-center">No other libraries configured.</div>}
-                            </div>
-                            <button onClick={() => setInstallModal({ open: false, pkgs: [] })} className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg">Cancel</button>
-                        </div>
-                    </div>
-                )}
-                {/* Install Collision Modal */}
-                {installCollision.open && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                        <div className="bg-gray-800 border border-gray-700 rounded-xl shadow-2xl p-6 w-full max-w-sm">
-                            <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2"><div className="text-yellow-500"><AlertTriangle size={24} /></div> Warning</h2>
-                            <p className="text-gray-300 mb-2">The following packages already exist in the destination library:</p>
-                            <div className="bg-gray-900 rounded p-2 mb-4 max-h-32 overflow-y-auto text-xs font-mono text-gray-400">
-                                {installCollision.collisions.map(c => <div key={c}>{c}</div>)}
-                            </div>
-                            <p className="text-gray-400 mb-6 text-sm">Do you want to overwrite them?</p>
-                            <div className="flex gap-3">
-                                <button
-                                    onClick={() => setInstallCollision({ open: false, collisions: [], libPath: "", pkgs: [] })}
-                                    className="flex-1 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={async () => {
-                                        // @ts-ignore
-                                        // Overwrite logic
-                                        // @ts-ignore
-                                        if (window.go) {
-                                            try {
-                                                const paths = installCollision.pkgs.map(p => p.filePath);
-                                                // @ts-ignore
-                                                await window.go.main.App.CopyPackagesToLibrary(paths, installCollision.libPath, true);
-                                                addToast(`Installed/Overwrote ${paths.length} packages`, 'success');
-                                                setInstallCollision({ open: false, collisions: [], libPath: "", pkgs: [] });
-                                            } catch (e) {
-                                                addToast("Install failed: " + e, 'error');
-                                            }
-                                        } else {
-                                            try {
-                                                const paths = installCollision.pkgs.map(p => p.filePath);
-                                                const res = await fetch("/api/install", {
-                                                    method: "POST",
-                                                    headers: { "Content-Type": "application/json" },
-                                                    body: JSON.stringify({
-                                                        filePaths: paths,
-                                                        destLib: installCollision.libPath,
-                                                        overwrite: true
-                                                    })
-                                                });
-                                                const data = await res.json();
-                                                if (!res.ok) throw new Error(data.message || "Install failed");
-
-                                                addToast(`Installed/Overwrote ${paths.length} packages`, 'success');
-                                                setInstallCollision({ open: false, collisions: [], libPath: "", pkgs: [] });
-                                            } catch (e: any) {
-                                                addToast(e.message, 'error');
-                                            }
-                                        }
-                                    }}
-                                    className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg"
-                                >
-                                    Overwrite
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </AnimatePresence>
+            <InstallPackageModal
+                isOpen={installModal.open}
+                onClose={() => setInstallModal({ open: false, pkgs: [] })}
+                packages={installModal.pkgs}
+                libraries={libraries}
+                currentLibrary={activeLibraryPath}
+                onSuccess={(result) => {
+                    const idx = libraries.indexOf(result.targetLib);
+                    if (idx !== -1) handleSwitchLibrary(idx);
+                    setInstallModal({ open: false, pkgs: [] });
+                }}
+            />
 
             <UpgradeModal
                 open={showUpdateModal}

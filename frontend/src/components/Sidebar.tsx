@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, AlertTriangle, Copy, Layers, Package, Settings, CheckCircle2, CircleOff, Power, Sparkles, Trash2, GripVertical } from 'lucide-react';
+import { ChevronDown, ChevronRight, AlertTriangle, Copy, Layers, Package, Settings, CheckCircle2, CircleOff, Power, Sparkles, Trash2, GripVertical, Download } from 'lucide-react';
 import { VarPackage } from '../App';
 import clsx from 'clsx';
 import { useMemo, useState, useEffect } from 'react';
@@ -23,7 +23,7 @@ interface SidebarProps {
     // Status & Actions
     creatorStatus: Record<string, 'normal' | 'warning' | 'error'>;
     typeStatus: Record<string, 'normal' | 'warning' | 'error'>;
-    onSidebarAction: (action: 'enable-all' | 'disable-all' | 'resolve-all' | 'merge-dupes', groupType: 'creator' | 'type' | 'status', key: string) => void;
+    onSidebarAction: (action: 'enable-all' | 'disable-all' | 'resolve-all' | 'merge-dupes' | 'install-all', groupType: 'creator' | 'type' | 'status', key: string) => void;
 }
 
 const SidebarLibraryItem = ({ lib, idx, isActive, count, onSelect, onRemove }: { lib: string, idx: number, isActive: boolean, count?: number, onSelect: () => void, onRemove?: (idx: number) => void }) => {
@@ -442,7 +442,11 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
                             </button>
                         )}
 
+                    <div className="border-b border-gray-700/50 my-1"></div>
 
+                    <button onClick={() => { onSidebarAction('install-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
+                        <Download size={14} className="text-blue-400" /> Install All to Library
+                    </button>
                 </div>
             )}
         </aside>

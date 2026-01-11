@@ -58,6 +58,10 @@ export function GetConfiguredLibraries() {
   return window['go']['main']['App']['GetConfiguredLibraries']();
 }
 
+export function GetDiskSpace(arg1) {
+  return window['go']['main']['App']['GetDiskSpace'](arg1);
+}
+
 export function GetFilters(arg1) {
   return window['go']['main']['App']['GetFilters'](arg1);
 }
