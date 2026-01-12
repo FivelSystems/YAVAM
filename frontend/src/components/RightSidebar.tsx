@@ -49,10 +49,12 @@ interface RightSidebarProps {
     onResolve: (pkg: VarPackage) => void;
     activeTab: 'details' | 'contents';
     onTabChange: (tab: 'details' | 'contents') => void;
+    onFilterByCreator: (creator: string) => void;
+    selectedCreator?: string | null;
 }
 
-const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange }: RightSidebarProps) => {
-    // ... (state hooks same as before) ...
+const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilterByCreator, selectedCreator }: RightSidebarProps) => {
+
     const [contents, setContents] = useState<PackageContent[]>([]);
     const [loading, setLoading] = useState(false);
     const [thumbSrc, setThumbSrc] = useState<string | undefined>(undefined);
@@ -158,9 +160,21 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange }: Right
                     <div className="absolute bottom-0 left-0 right-0 p-4">
                         <div className="flex items-center gap-2 mb-1">
                             {pkg.meta.creator && (
-                                <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-xs font-medium border border-blue-500/30">
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onFilterByCreator(pkg.meta.creator);
+                                    }}
+                                    className={clsx(
+                                        "px-2 py-0.5 rounded-full text-xs font-medium border transition-colors cursor-pointer",
+                                        selectedCreator === pkg.meta.creator
+                                            ? "bg-blue-500 text-white border-blue-400 hover:bg-blue-600"
+                                            : "bg-blue-500/20 text-blue-300 border-blue-500/30 hover:bg-blue-500/50 hover:text-white"
+                                    )}
+                                    title={selectedCreator === pkg.meta.creator ? "Clear filter" : `Filter by ${pkg.meta.creator}`}
+                                >
                                     {pkg.meta.creator}
-                                </span>
+                                </button>
                             )}
                             <span className="px-2 py-0.5 rounded-full bg-gray-700 text-gray-300 text-xs font-medium border border-gray-600">
                                 v{pkg.meta.version}

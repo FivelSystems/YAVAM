@@ -2354,6 +2354,17 @@ function App(): JSX.Element {
                                     onResolve={handleSingleResolve}
                                     activeTab={activeRightSidebarTab}
                                     onTabChange={handleRightTabChange}
+                                    onFilterByCreator={(creator) => {
+                                        if (selectedCreator === creator && currentFilter === 'creator') {
+                                            setSelectedCreator(null);
+                                            setCurrentFilter('all');
+                                        } else {
+                                            setSelectedCreator(creator);
+                                            setCurrentFilter('creator');
+                                        }
+                                        // Sidebar remains open as requested
+                                    }}
+                                    selectedCreator={selectedCreator}
                                 />
                             )}
                         </AnimatePresence>

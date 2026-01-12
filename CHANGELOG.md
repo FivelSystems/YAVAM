@@ -12,6 +12,7 @@
 - **Collision Detection**: Added instant visual feedback for duplicate files in the upload modal (yellow highlighting).
 - **Web Client Crash Protection**: Added null checks for package scanning to prevent "property of null" errors.
 - **Disk Space Check**: Uploads now verify available disk space before starting.
+- **Creator Filter**: Clicking the creator name in the details panel now filters the dashboard by that creator. Click again to reset.
 
 ### Fixed
 - **Library Persistence**: Web clients now remember the last selected library after a page reload.
