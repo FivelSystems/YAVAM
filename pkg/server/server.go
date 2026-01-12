@@ -792,18 +792,15 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		}
 
 		// Security Check: targetFile must be inside one of the libraries
-		cleanTarget := strings.ToLower(filepath.Clean(targetFile))
-		cleanActive := strings.ToLower(filepath.Clean(activePath))
 		allowed := false
 
 		// Check activePath first
-		if strings.HasPrefix(cleanTarget, cleanActive) {
+		if s.isSafePath(targetFile, activePath) {
 			allowed = true
 		} else {
 			// Check other libraries
 			for _, lib := range s.libraries {
-				cleanLib := strings.ToLower(filepath.Clean(lib))
-				if strings.HasPrefix(cleanTarget, cleanLib) {
+				if s.isSafePath(targetFile, lib) {
 					allowed = true
 					break
 				}
@@ -820,8 +817,11 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 
 	mux.Handle("/", distFs)
 
+	// Default to binding to localhost only for security
+	bindAddr := "127.0.0.1:" + port
+
 	s.httpSrv = &http.Server{
-		Addr:    ":" + port,
+		Addr:    bindAddr,
 		Handler: s.corsMiddleware(s.loggingMiddleware(mux)),
 	}
 
@@ -884,4 +884,47 @@ func (s *Server) GetOutboundIP() string {
 	localAddr := conn.LocalAddr().(*net.UDPAddr)
 
 	return localAddr.IP.String()
+}
+
+// isSafePath checks if the requested path is within the allowed root directory
+// It resolves symlinks and absolute paths to prevent traversal attacks
+func (s *Server) isSafePath(requestedPath, root string) bool {
+	// 1. Get Absolute Path of Root (resolve symlinks)
+	absRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		// Fallback to simpler Abs if symlink eval fails
+		absRoot, err = filepath.Abs(root)
+		if err != nil {
+			return false
+		}
+	}
+
+	// 2. Get Absolute Path of Request
+	absPath, err := filepath.Abs(requestedPath)
+	if err != nil {
+		return false
+	}
+
+	// 3. Eval Symlinks of Request (if it exists)
+	if info, err := os.Lstat(absPath); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			resolved, err := filepath.EvalSymlinks(absPath)
+			if err == nil {
+				absPath = resolved
+			}
+		}
+	}
+
+	// 4. Case Insensitive Compare on Windows
+	rel, err := filepath.Rel(strings.ToLower(absRoot), strings.ToLower(absPath))
+	if err != nil {
+		return false
+	}
+
+	// 5. Ensure no ".." in relative path
+	if strings.Contains(rel, "..") {
+		return false
+	}
+
+	return !strings.HasPrefix(rel, "..")
 }

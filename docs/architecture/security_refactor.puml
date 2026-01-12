@@ -1,0 +1,45 @@
+@startuml security_refactor
+header Phase 1: Security Hardening & Isolation
+title Security Refactoring: Isolation of Dangerous Operations
+
+actor User
+participant "App (Frontend)" as UI
+participant "Server (Backend)" as SRV
+participant "Manager" as MGR
+participant "FileSystem (Interface)" as FS
+participant "Windows Native (Shell32)" as OS
+
+== Network Isolation ==
+User -> UI : Open App
+UI -> SRV : HTTP Request (localhost:8080)
+opt Request from External IP
+    User -> SRV : HTTP Request (<LAN_IP>:8080)
+    SRV -> User : Connection Refused (Bind 127.0.0.1)
+end
+
+== Path Validation ==
+UI -> SRV : GET /files?p=../../windows/system32
+SRV -> SRV : isSafePath("../../windows/system32")
+SRV -> UI : 403 Forbidden
+note right
+  Prevents Path Traversal
+  and Local File Inclusion
+end note
+
+== Safe File Deletion ==
+UI -> MGR : DeleteFile(path)
+MGR -> FS : DeleteToTrash(path)
+activate FS
+    FS -> OS : UTF16FromString(path) + 0
+    FS -> OS : SHFileOperationW(FO_DELETE)
+    OS --> FS : Success
+deactivate FS
+MGR -> UI : Success
+note right
+  <b>No PowerShell</b>
+  <b>No CMD.exe</b>
+  Direct API Call prevents
+  Command Injection
+end note
+
+@enduml

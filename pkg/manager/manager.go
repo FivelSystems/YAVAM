@@ -15,8 +15,7 @@ import (
 	"sync"
 	"syscall"
 
-	"golang.org/x/sys/windows"
-
+	"varmanager/pkg/fs"
 	"varmanager/pkg/models"
 	"varmanager/pkg/parser"
 	"varmanager/pkg/scanner"
@@ -24,19 +23,25 @@ import (
 
 type Manager struct {
 	scanner  *scanner.Scanner
+	fs       fs.FileSystem
 	mu       sync.Mutex
 	DataPath string
 	config   *Config
 }
 
-func NewManager() *Manager {
+func NewManager(fileSystem fs.FileSystem) *Manager {
 	configDir, _ := os.UserConfigDir()
 	// Standard Location: %AppData%\YAVAM
 	dataPath := filepath.Join(configDir, "YAVAM")
 	os.MkdirAll(dataPath, 0755)
 
+	if fileSystem == nil {
+		fileSystem = &fs.WindowsFileSystem{}
+	}
+
 	m := &Manager{
 		scanner:  scanner.NewScanner(),
+		fs:       fileSystem,
 		DataPath: dataPath,
 	}
 	m.LoadConfig()
@@ -546,31 +551,17 @@ func (m *Manager) validatePath(path string, root string) bool {
 // User Configuration Methods
 
 // OpenFolder opens the folder containing the file in File Explorer
+// OpenFolder opens the folder containing the file in File Explorer securely
+// OpenFolder opens the folder containing the file in File Explorer securely
 func (m *Manager) OpenFolder(path string) error {
-	// windows: explorer /select,"path"
-	cmd := exec.Command("explorer", "/select,", path)
-	return cmd.Start()
+	cleanPath := filepath.Clean(path)
+	// We delegate the OS interaction to the file system interface
+	return m.fs.OpenFolder(cleanPath)
 }
 
-// DeleteToTrash moves the file to the Recycle Bin using PowerShell
+// DeleteToTrash moves the file to the Recycle Bin using Native Windows API (via fs interface)
 func (m *Manager) DeleteToTrash(path string) error {
-	// PowerShell command to delete to recycle bin
-	// Add-Type -AssemblyName Microsoft.VisualBasic
-	// [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($path, 'OnlyErrorDialogs', 'SendToRecycleBin')
-
-	// Safety check: path exist?
-	if _, err := os.Stat(path); err != nil {
-		return err
-	}
-
-	psCmd := fmt.Sprintf(`
-        Add-Type -AssemblyName Microsoft.VisualBasic;
-        [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile('%s', 'OnlyErrorDialogs', 'SendToRecycleBin')
-    `, path)
-
-	cmd := exec.Command("powershell", "-NoProfile", "-Command", psCmd)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	return cmd.Run()
+	return m.fs.DeleteToTrash(path)
 }
 
 // CopyFileToClipboard copies the file object to the clipboard (so it can be pasted in Explorer)
@@ -968,14 +959,7 @@ type DiskSpaceInfo struct {
 }
 
 func (m *Manager) GetDiskSpace(path string) (DiskSpaceInfo, error) {
-	var freeBytes, totalBytes, totalFreeBytes uint64
-
-	pathPtr, err := windows.UTF16PtrFromString(path)
-	if err != nil {
-		return DiskSpaceInfo{}, err
-	}
-
-	err = windows.GetDiskFreeSpaceEx(pathPtr, &freeBytes, &totalBytes, &totalFreeBytes)
+	freeBytes, totalBytes, totalFreeBytes, err := m.fs.GetDiskFreeSpace(path)
 	if err != nil {
 		return DiskSpaceInfo{}, err
 	}

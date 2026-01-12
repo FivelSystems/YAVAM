@@ -14,7 +14,7 @@ var assets embed.FS
 
 func main() {
 	// Create manager
-	mgr := manager.NewManager()
+	mgr := manager.NewManager(nil)
 
 	// Create an instance of the app structure
 	app := NewApp(assets, mgr)
