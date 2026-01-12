@@ -58,7 +58,7 @@ const DragDropOverlay = ({ onDrop, onWebUpload }: DragDropOverlayProps) => {
     if (!isDragging) return null;
 
     return (
-        <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center border-4 border-blue-500 border-dashed m-4 rounded-xl animate-in fade-in duration-200 pointer-events-none">
+        <div className="absolute inset-0 z-[70] bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center border-4 border-blue-500 border-dashed m-4 rounded-xl animate-in fade-in duration-200 pointer-events-none">
             <Upload size={64} className="text-blue-400 mb-4 animate-bounce" />
             <h2 className="text-3xl font-bold text-white mb-2">Drop Packages Here</h2>
             <p className="text-gray-300">{isWeb ? "Upload to Server" : "Add .var files to your library"}</p>

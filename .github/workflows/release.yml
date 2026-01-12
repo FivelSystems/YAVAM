@@ -14,8 +14,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+        # Optimization: fetch-depth: 0 (full history) is no longer needed since we read CHANGELOG.md directly
 
       - name: Read Version from wails.json
         id: version
@@ -45,12 +44,14 @@ jobs:
         with:
           go-version: '1.21'
           check-latest: true
+          cache: true
 
       - name: Setup Node
         if: env.EXISTS == 'false'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
       - name: Install Wails
         if: env.EXISTS == 'false'
@@ -66,27 +67,26 @@ jobs:
 
       - name: Generate Changelog
         id: changelog
-        run: |
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          echo "Generating changelog since $PREV_TAG"
-          echo "## Changelog (${{ env.VERSION }})" > release_notes.md
-          
-          # Use %s for subject (title), %b for body (bullets), %n for newlines
-          # Using ### to make the subject a header
-          FORMAT="%s%n%n%b%n"
-          
-          if [ -z "$PREV_TAG" ]; then
-             git log --pretty=format:"$FORMAT" >> release_notes.md
-          else
-             git log $PREV_TAG..HEAD --pretty=format:"$FORMAT" >> release_notes.md
-          fi
-
-          echo "" >> release_notes.md
-          echo "" >> release_notes.md
-          if [ -n "$PREV_TAG" ]; then
-             echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/$PREV_TAG...${{ env.VERSION }}" >> release_notes.md
-          fi
         shell: bash
+        run: |
+          echo "Extracting release notes for ${{ env.VERSION }} from CHANGELOG.md"
+          
+          # Extract content between the current version header and the next one
+          # pattern matches lines starting with "## [v1.2.17]"
+          awk "/^## \[${{ env.VERSION }}\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md > release_notes.md
+          
+          # Trim leading/trailing whitespace (optional but nice)
+          # check if empty
+          if [ ! -s release_notes.md ]; then
+             echo "No specific release notes found in CHANGELOG.md for ${{ env.VERSION }}." > release_notes.md
+             echo "See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for full history." >> release_notes.md
+          else
+             # Append full log link for reference at the bottom
+             echo "" >> release_notes.md
+             echo "**Full Changelog**: https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md" >> release_notes.md
+          fi
+          
+          cat release_notes.md
 
       - name: Create Release
         if: env.EXISTS == 'false'
