@@ -10,6 +10,8 @@ export function ApplyUpdate(arg1:string):Promise<void>;
 
 export function CancelScan():Promise<void>;
 
+export function CheckCollisions(arg1:Array<string>,arg2:string):Promise<Array<string>>;
+
 export function CheckForUpdates():Promise<updater.UpdateInfo>;
 
 export function ClearAppData():Promise<void>;

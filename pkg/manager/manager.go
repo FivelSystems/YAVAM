@@ -986,3 +986,16 @@ func (m *Manager) GetDiskSpace(path string) (DiskSpaceInfo, error) {
 		TotalFree: totalFreeBytes,
 	}, nil
 }
+
+// CheckCollisions checks if files already exist in the destination library without copying
+func (m *Manager) CheckCollisions(filePaths []string, destLibPath string) ([]string, error) {
+	var collisions []string
+	for _, src := range filePaths {
+		baseName := filepath.Base(src)
+		dest := filepath.Join(destLibPath, baseName)
+		if info, err := os.Stat(dest); err == nil && !info.IsDir() {
+			collisions = append(collisions, baseName)
+		}
+	}
+	return collisions, nil
+}
