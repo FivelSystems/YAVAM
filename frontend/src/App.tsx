@@ -21,6 +21,7 @@ import { ScanProgressBar } from './components/ScanProgressBar';
 import { OptimizationModal, ManualPlan } from './components/OptimizationModal';
 import { OptimizationProgressModal } from './components/OptimizationProgressModal';
 import { InstallPackageModal } from './components/InstallPackageModal';
+import { UploadModal } from './components/UploadModal';
 
 // Define types based on our Go models
 export interface VarPackage {
@@ -130,7 +131,30 @@ function App(): JSX.Element {
         }
     };
 
-    // ... (SSE Listener unchanged) ...
+    // SSE Listener
+    useEffect(() => {
+        // @ts-ignore
+        if (!window.go) {
+            const evtSource = new EventSource('/api/events');
+            evtSource.onmessage = (e) => {
+                if (!e.data) return;
+                try {
+                    const payload = JSON.parse(e.data);
+                    if (payload.event) {
+                        // Dispatch as custom event for components to listen to
+                        window.dispatchEvent(new CustomEvent(payload.event, { detail: payload.data }));
+
+                        if (payload.event === 'server:log') {
+                            setServerLogs(prev => [...prev, payload.data].slice(-100));
+                        }
+                    }
+                } catch (err) {
+                    console.error("SSE Parse Error", err);
+                }
+            };
+            return () => evtSource.close();
+        }
+    }, []);
 
     // New Handler for Sidebar Selection
 
@@ -285,7 +309,8 @@ function App(): JSX.Element {
         const saved = localStorage.getItem("savedLibraries");
         const libs = saved ? JSON.parse(saved) : [];
         if (current) {
-            const idx = libs.indexOf(current);
+            const normCurrent = current.toLowerCase().replace(/[\\/]/g, '/');
+            const idx = libs.findIndex((l: string) => l.toLowerCase().replace(/[\\/]/g, '/') === normCurrent);
             if (idx !== -1) return idx;
             return 0;
         }
@@ -767,8 +792,13 @@ function App(): JSX.Element {
                 .then(r => r.json())
                 .then(cfg => {
                     if (cfg.path) {
-                        setActiveLibraryPath(cfg.path);
-                        localStorage.setItem('activeLibraryPath', cfg.path);
+                        // Only set if we don't have a local preference, OR if local pref is invalid?
+                        // Actually, we trust local storage if present. 
+                        const saved = localStorage.getItem('activeLibraryPath');
+                        if (!saved) {
+                            setActiveLibraryPath(cfg.path);
+                            localStorage.setItem('activeLibraryPath', cfg.path);
+                        }
                     }
                 })
                 .catch(() => console.log("Not in web mode or server offline"));
@@ -818,10 +848,15 @@ function App(): JSX.Element {
         setCurrentPage(1);
     }, [searchQuery, currentFilter, selectedCreator, selectedType, selectedTags]);
 
-    const scanPackages = async () => {
+    const scanPackages = useCallback(async (keepPage: boolean = false) => {
         if (!activeLibraryPath) return;
+
         setLoading(true);
-        setPackages([]); // Clear current list immediately
+        setPackages([]); // Clear current list? Or keep for smoother refresh? Clearing signals load.
+        // Assuming we want to show loading spinner.
+
+        // Reset pagination unless kept
+        if (!keepPage) setCurrentPage(1);
         setFilteredPkgs([]);
         setScanProgress({ current: 0, total: 0 });
 
@@ -954,17 +989,34 @@ function App(): JSX.Element {
                     throw new Error(err.message || `HTTP ${res.status}`);
                 }
                 const pkgs = await res.json();
-                if (Array.isArray(pkgs)) {
+                // FIX: Check for null response (Issue #12)
+                if (pkgs && Array.isArray(pkgs)) {
                     setPackages(analyzePackages(pkgs));
                     const tags = new Set<string>();
                     pkgs.forEach((p: any) => p.tags?.forEach((t: string) => tags.add(t)));
                     setAvailableTags(Array.from(tags));
+                } else if (pkgs && pkgs.success === false) {
+                    // Only throw if we received a valid error object
+                    throw new Error(pkgs.message);
                 } else {
-                    if (pkgs.success === false) throw new Error(pkgs.message);
+                    // unexpected null or format, just assume empty?
+                    // console.warn("Received empty or invalid package list");
+                    // setPackages([]);
                 }
             } catch (e: any) {
                 if (e.name === 'AbortError') return; // Ignore intentional aborts
                 if (e.message === 'context canceled') return; // Ignore backend cancellation
+                if (e.message === 'Failed to fetch' && controller.signal.aborted) return; // Ignore aborted fetches that report generic error
+                if (e.message === 'Failed to fetch') {
+                    // Check if it's likely a cancellation race
+                    // Or just suppress it if we are switching libs?
+                    // Let's suppress it if it looks like a transient network issue during switch
+                    // Actually, "Failed to fetch" is annoying to see. Let's log it but not toast it if it's likely abort.
+                    // But if the server is down, we want to know.
+                    // However, "switching between libraries" implies rapid action.
+                    // Let's ignore it if controller.signal.aborted is true.
+                }
+                if (controller.signal.aborted) return; // Catch-all for any error if we aborted
 
                 console.error(e);
                 addToast("Scan Error: " + e.message, 'error');
@@ -976,7 +1028,7 @@ function App(): JSX.Element {
                 }
             }
         }
-    };
+    }, [activeLibraryPath]); // End useCallback
 
     const filterPackages = () => {
         let res = [...packages];
@@ -1052,48 +1104,35 @@ function App(): JSX.Element {
         filterPackages();
     }, [packages, currentFilter, selectedCreator, selectedType, selectedTags, searchQuery, sortMode]);
 
+
     // Persist Sort Mode
     useEffect(() => {
         localStorage.setItem("sortMode", sortMode);
     }, [sortMode]);
 
+    // Upload Modal State
+    // Upload Modal State
+    const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+    // Queue now holds strings (Desktop) or File objects (Web)
+    const [uploadQueue, setUploadQueue] = useState<(string | File)[]>([]);
+
     const handleDrop = useCallback(async (files: string[]) => {
-        console.log("Dropped files:", files);
+        // Desktop Drop (Wails)
         if (!activeLibraryPath) return;
-        try {
-            // @ts-ignore
-            await window.go.main.App.InstallFiles(files, activeLibraryPath);
-            scanPackages(); // Refresh
-        } catch (e) {
-            console.error(e);
-            alert(e);
-        }
+        setUploadQueue(prev => [...prev, ...files]);
+        setIsUploadModalOpen(true);
     }, [activeLibraryPath]);
 
-    const handleWebUpload = async (files: FileList) => {
+    // Web Native Drop Handler
+    // Web Native Drop Handler (via DragDropOverlay combined)
+    const handleWebDrop = useCallback((files: FileList | File[]) => {
         if (!files || files.length === 0) return;
-        setLoading(true);
-        const formData = new FormData();
-        formData.append('path', activeLibraryPath || "");
-        for (let i = 0; i < files.length; i++) {
-            formData.append("file", files[i]);
-        }
+        const fileArray = files instanceof FileList ? Array.from(files) : files;
 
-        try {
-            const res = await fetch("/api/upload", {
-                method: "POST",
-                body: formData
-            });
-            if (!res.ok) throw new Error("Upload failed");
-            // Trigger Scan
-            scanPackages();
-        } catch (e) {
-            console.error(e);
-            addToast("Upload failed: " + e, 'error');
-        } finally {
-            setLoading(false);
-        }
-    };
+        // Open Modal
+        setUploadQueue(prev => [...prev, ...fileArray]);
+        setIsUploadModalOpen(true);
+    }, []);
 
     const analyzePackages = (pkgs: VarPackage[]): VarPackage[] => {
         // 1. Build Index and Group by "Creator.Package"
@@ -1847,7 +1886,7 @@ function App(): JSX.Element {
             {/* @ts-ignore */}
             {window.go && <TitleBar />}
             <div className="flex-1 flex overflow-hidden relative">
-                <DragDropOverlay onDrop={handleDrop} onWebUpload={handleWebUpload} />
+                <DragDropOverlay onDrop={handleDrop} onWebUpload={handleWebDrop} />
 
 
 
@@ -2191,8 +2230,8 @@ function App(): JSX.Element {
                                         <span className="hidden sm:inline">{filteredPkgs.length} packages found</span>
                                     )}
                                     <button
-                                        onClick={scanPackages}
-                                        className="hover:text-white transition-colors"
+                                        onClick={() => scanPackages()}
+                                        className="p-2 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors"
                                         title="Refresh Packages"
                                     >
                                         <RefreshCw size={20} className={loading ? "animate-spin" : ""} />
@@ -2315,6 +2354,17 @@ function App(): JSX.Element {
                                     onResolve={handleSingleResolve}
                                     activeTab={activeRightSidebarTab}
                                     onTabChange={handleRightTabChange}
+                                    onFilterByCreator={(creator) => {
+                                        if (selectedCreator === creator && currentFilter === 'creator') {
+                                            setSelectedCreator(null);
+                                            setCurrentFilter('all');
+                                        } else {
+                                            setSelectedCreator(creator);
+                                            setCurrentFilter('creator');
+                                        }
+                                        // Sidebar remains open as requested
+                                    }}
+                                    selectedCreator={selectedCreator}
                                 />
                             )}
                         </AnimatePresence>
@@ -2374,10 +2424,21 @@ function App(): JSX.Element {
                 packages={installModal.pkgs}
                 libraries={libraries}
                 currentLibrary={activeLibraryPath}
-                onSuccess={(result) => {
-                    const idx = libraries.indexOf(result.targetLib);
-                    if (idx !== -1) handleSwitchLibrary(idx);
+                onSuccess={(res: { installed: number, skipped: number, targetLib: string }) => {
                     setInstallModal({ open: false, pkgs: [] });
+
+                    let msg = `Installed ${res.installed} packages`;
+                    if (res.skipped > 0) msg += ` (${res.skipped} skipped)`;
+                    addToast(msg, 'success');
+
+                    // Refresh if we installed to CURRENT library
+                    if (res.targetLib === activeLibraryPath) {
+                        scanPackages(true); // Keep Page
+                    } else {
+                        // If installed to a different library, switch to it if it exists
+                        const idx = libraries.indexOf(res.targetLib);
+                        if (idx !== -1) handleSwitchLibrary(idx);
+                    }
                 }}
             />
 
@@ -2387,6 +2448,23 @@ function App(): JSX.Element {
                 onUpdate={handleUpdate}
                 onCancel={() => setShowUpdateModal(false)}
                 downloading={isUpdating}
+            />
+
+            <UploadModal
+                isOpen={isUploadModalOpen}
+                onClose={() => setIsUploadModalOpen(false)}
+                initialFiles={uploadQueue}
+                onAppendFiles={(_: any) => setUploadQueue([])} // We clear initial buffer logic if needed, or append? The modal handles its own queue usually, initialFiles is just seeder. 
+                // Actually UploadModal maintains its own queue. initialFiles adds to it on mount/change.
+                // We should clear our local queue after passing it?
+                // logic: onAppendFiles (if used by modal) 
+                libraries={libraries}
+                initialLibrary={activeLibraryPath}
+                onSuccess={() => {
+                    addToast("Upload complete", "success");
+                    scanPackages(true); // Keep page
+                    setUploadQueue([]); // Clear queue
+                }}
             />
 
             {/* Toasts Container - Lifted to avoid Pagination (bottom-20) */}

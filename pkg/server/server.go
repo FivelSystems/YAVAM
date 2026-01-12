@@ -469,8 +469,20 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 
 		downloadDir := targetPath
 
+		// Calculate potential progress
+		// We can't easily know byte progress without reading all files first, which wastes memory.
+		// We track file count progress instead, matching Desktop behavior.
+		totalFiles := len(files)
 		count := 0
-		for _, fileHeader := range files {
+
+		for i, fileHeader := range files {
+			// Broadcast Progress
+			current := i + 1 // 1-based index
+			s.Broadcast("scan:progress", map[string]int{
+				"current": current,
+				"total":   totalFiles,
+			})
+
 			file, err := fileHeader.Open()
 			if err != nil {
 				continue
@@ -673,6 +685,60 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 			s.log(fmt.Sprintf("Install collisions detected: %d files", len(collisions)))
 		} else {
 			s.log(fmt.Sprintf("Installed %d packages to %s", len(req.FilePaths), filepath.Base(destPath)))
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success":    true,
+			"collisions": collisions,
+		})
+	})
+
+	// Collision Check Endpoint
+	mux.HandleFunc("/api/scan/collisions", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Files []string `json:"files"`
+			Path  string   `json:"path"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.writeError(w, err.Error(), 400)
+			return
+		}
+
+		targetPath := req.Path
+		if targetPath == "" {
+			targetPath = activePath
+		}
+
+		// Security Check
+		cleanTarget := strings.ToLower(filepath.Clean(targetPath))
+		cleanActive := strings.ToLower(filepath.Clean(activePath))
+		allowed := false
+
+		if cleanTarget == cleanActive {
+			allowed = true
+		} else {
+			for _, lib := range s.libraries {
+				if strings.ToLower(filepath.Clean(lib)) == cleanTarget {
+					allowed = true
+					break
+				}
+			}
+		}
+
+		if !allowed {
+			s.writeError(w, "Access denied: Invalid library path", 403)
+			return
+		}
+
+		collisions, err := s.manager.CheckCollisions(req.Files, targetPath)
+		if err != nil {
+			s.writeError(w, err.Error(), 500)
+			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")

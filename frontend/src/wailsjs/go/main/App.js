@@ -14,6 +14,10 @@ export function CancelScan() {
   return window['go']['main']['App']['CancelScan']();
 }
 
+export function CheckCollisions(arg1, arg2) {
+  return window['go']['main']['App']['CheckCollisions'](arg1, arg2);
+}
+
 export function CheckForUpdates() {
   return window['go']['main']['App']['CheckForUpdates']();
 }

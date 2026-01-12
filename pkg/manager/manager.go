@@ -389,14 +389,37 @@ func (m *Manager) TogglePackage(pkgs []models.VarPackage, pkgID string, enable b
 }
 
 // InstallPackage moves a list of files to the AddonPackages folder
-func (m *Manager) InstallPackage(files []string, vamPath string) ([]string, error) {
+func (m *Manager) InstallPackage(files []string, vamPath string, onProgress func(current, total int)) ([]string, error) {
 	var installed []string
 	var ignored []string
 
+	// 1. Pre-calculate total size for Disk Space Check
+	var totalSize uint64
+	for _, f := range files {
+		info, err := os.Stat(f)
+		if err == nil {
+			totalSize += uint64(info.Size())
+		}
+	}
+
+	// 2. Check Disk Space
+	spaceInfo, err := m.GetDiskSpace(vamPath)
+	if err == nil {
+		if spaceInfo.Free < totalSize {
+			return nil, fmt.Errorf("insufficient disk space: need %d bytes, have %d bytes available", totalSize, spaceInfo.Free)
+		}
+	}
+
 	// Install directly to the repository root
 	destDir := vamPath
+	totalFiles := len(files)
 
-	for _, f := range files {
+	for i, f := range files {
+		// Emit Progress
+		if onProgress != nil {
+			onProgress(i+1, totalFiles)
+		}
+
 		if filepath.Ext(strings.ToLower(f)) != ".var" {
 			ignored = append(ignored, filepath.Base(f))
 			continue
@@ -405,17 +428,33 @@ func (m *Manager) InstallPackage(files []string, vamPath string) ([]string, erro
 		fileName := filepath.Base(f)
 		destPath := filepath.Join(destDir, fileName)
 
-		// COPY OPERATION (Do not Move/Delete Source)
+		// Self-overwrite prevention (Desktop Issue #12)
+		// Use os.SameFile for robust physical file checking
+		if pkgInfo, err := os.Stat(f); err == nil {
+			if destInfo, err := os.Stat(destPath); err == nil {
+				if os.SameFile(pkgInfo, destInfo) {
+					fmt.Printf("[Skipping] Source and destination are the same file: %s\n", fileName)
+					continue
+				}
+			}
+		}
+
+		// COPY OPERATION
 		srcFile, err := os.Open(f)
 		if err != nil {
-			ignored = append(ignored, fmt.Sprintf("%s (read error)", fileName))
+			ignored = append(ignored, fmt.Sprintf("%s (read error: %v)", fileName, err))
 			continue
 		}
 
 		dstFile, err := os.Create(destPath)
 		if err != nil {
 			srcFile.Close()
-			ignored = append(ignored, fmt.Sprintf("%s (create error)", fileName))
+			// Refine Permission Errors
+			if strings.Contains(err.Error(), "Access is denied") || strings.Contains(err.Error(), "user name or password") {
+				ignored = append(ignored, fmt.Sprintf("%s (Access Denied. Please log in to the folder.)", fileName))
+			} else {
+				ignored = append(ignored, fmt.Sprintf("%s (create error: %v)", fileName, err))
+			}
 			continue
 		}
 
@@ -424,7 +463,7 @@ func (m *Manager) InstallPackage(files []string, vamPath string) ([]string, erro
 		dstFile.Close()
 
 		if err != nil {
-			ignored = append(ignored, fmt.Sprintf("%s (copy error)", fileName))
+			ignored = append(ignored, fmt.Sprintf("%s (copy error: %v)", fileName, err))
 			continue
 		}
 
@@ -432,7 +471,7 @@ func (m *Manager) InstallPackage(files []string, vamPath string) ([]string, erro
 	}
 
 	if len(ignored) > 0 {
-		return installed, fmt.Errorf("the following files are not Virt-A-Mate packages and were ignored: %s", strings.Join(ignored, ", "))
+		return installed, fmt.Errorf("the following files were ignored: %s", strings.Join(ignored, ", "))
 	}
 
 	return installed, nil
@@ -946,4 +985,17 @@ func (m *Manager) GetDiskSpace(path string) (DiskSpaceInfo, error) {
 		Total:     totalBytes,
 		TotalFree: totalFreeBytes,
 	}, nil
+}
+
+// CheckCollisions checks if files already exist in the destination library without copying
+func (m *Manager) CheckCollisions(filePaths []string, destLibPath string) ([]string, error) {
+	var collisions []string
+	for _, src := range filePaths {
+		baseName := filepath.Base(src)
+		dest := filepath.Join(destLibPath, baseName)
+		if info, err := os.Stat(dest); err == nil && !info.IsDir() {
+			collisions = append(collisions, baseName)
+		}
+	}
+	return collisions, nil
 }
