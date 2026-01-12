@@ -1,0 +1,50 @@
+@startuml
+!theme plain
+title Current Architecture (The Monolith)
+
+package "Frontend" {
+  [App.tsx] as APP
+  note right of APP
+    <b>God Component</b>
+    - 2500+ Lines where logic dies
+    - Handles Routing
+    - Handles State
+    - Handles UI
+    - Handles API Calls
+  end note
+
+  [Components] as COMPS
+  APP --> COMPS : Imports directly
+}
+
+package "Backend (Go)" {
+  [Main] --> [App] : Creates
+  [App] as B_APP
+  
+  [Manager] as MGR
+  note right of MGR
+    <b>God Object</b>
+    - Scans Files
+    - Deletes Files
+    - Installs Archives
+    - Moves Files
+    - Calculates Space
+  end note
+
+  [Server] as SRV
+  note bottom of SRV
+    <b>Security Hole</b>
+    - Re-implements path validation
+    - Direct access to Manager
+    - No Auth
+  end note
+
+  B_APP --> MGR : Wraps methods
+  B_APP --> SRV : Starts/Stops
+  SRV --> MGR : Calls directly
+}
+
+APP <--> B_APP : Wails Bindings
+APP <--> SRV : REST API (Localhost)
+
+@enduml

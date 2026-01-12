@@ -1,0 +1,49 @@
+@startuml target_state
+skinparam componentStyle uml2
+
+package "YAVAM Application" {
+    [App]
+}
+
+package "Backend Packages" {
+    [Manager]
+    [Server]
+    [Scanner]
+    [Parser]
+    [Models]
+    
+    interface "FileSystem" as IFS
+    component "WindowsFileSystem" as WFS
+    component "MockFileSystem" as MFS
+}
+
+database "File System" {
+    folder "Library 1"
+    folder "Library 2"
+    folder "Trash"
+}
+
+[App] --> [Manager]
+[App] --> [Server]
+[Server] --> [Manager]
+[Manager] --> [Scanner]
+[Manager] --> IFS
+WFS .up.|> IFS
+MFS .up.|> IFS
+
+WFS --> "File System" : Native Syscalls (shell32)\nSHFileOperationW
+MFS --> "File System" : No-Op / In-Memory
+
+note right of [Server]
+  <b>Security Hardening:</b>
+  - Binds to 127.0.0.1
+  - Strict Path Validation (isSafePath)
+end note
+
+note right of WFS
+  <b>Safe File Ops:</b>
+  - No PowerShell/CMD
+  - Prevents Command Injection
+end note
+
+@enduml

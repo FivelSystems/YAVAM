@@ -50,6 +50,9 @@ type App struct {
 
 // NewApp creates a new App application struct
 func NewApp(assets fs.FS, m *manager.Manager) *App {
+	if m == nil {
+		m = manager.NewManager(nil)
+	}
 	return &App{
 		manager: m,
 		assets:  assets,
@@ -490,9 +493,9 @@ func (a *App) RestartApp() {
 	if err != nil {
 		return
 	}
-	// Use cmd /C start to detach completely and avoid child termination
-	// syscall.HideWindow prevents the cmd window from flashing
-	cmd := exec.Command("cmd", "/C", "start", "", executable)
+	// Use direct process creation without shell wrapper
+	// This prevents command injection vulnerabilities
+	cmd := exec.Command(executable)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	cmd.Start()
 
