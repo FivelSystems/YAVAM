@@ -117,6 +117,11 @@ func (a *App) CopyPackagesToLibrary(filePaths []string, destLibPath string, over
 	})
 }
 
+// CheckCollisions checks if files already exist in the destination library without copying
+func (a *App) CheckCollisions(filePaths []string, destLibPath string) ([]string, error) {
+	return a.manager.CheckCollisions(filePaths, destLibPath)
+}
+
 func (a *App) CopyFileToClipboard(path string) {
 	err := a.manager.CopyFileToClipboard(path)
 	if err != nil {

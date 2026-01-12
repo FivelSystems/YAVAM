@@ -694,6 +694,60 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		})
 	})
 
+	// Collision Check Endpoint
+	mux.HandleFunc("/api/scan/collisions", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Files []string `json:"files"`
+			Path  string   `json:"path"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.writeError(w, err.Error(), 400)
+			return
+		}
+
+		targetPath := req.Path
+		if targetPath == "" {
+			targetPath = activePath
+		}
+
+		// Security Check
+		cleanTarget := strings.ToLower(filepath.Clean(targetPath))
+		cleanActive := strings.ToLower(filepath.Clean(activePath))
+		allowed := false
+
+		if cleanTarget == cleanActive {
+			allowed = true
+		} else {
+			for _, lib := range s.libraries {
+				if strings.ToLower(filepath.Clean(lib)) == cleanTarget {
+					allowed = true
+					break
+				}
+			}
+		}
+
+		if !allowed {
+			s.writeError(w, "Access denied: Invalid library path", 403)
+			return
+		}
+
+		collisions, err := s.manager.CheckCollisions(req.Files, targetPath)
+		if err != nil {
+			s.writeError(w, err.Error(), 500)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success":    true,
+			"collisions": collisions,
+		})
+	})
+
 	// Restore Endpoint
 	mux.HandleFunc("/api/restore", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
