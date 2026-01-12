@@ -1,0 +1,66 @@
+@startuml
+!theme plain
+title Target Architecture (Modular & Secure)
+
+package "Frontend (React)" {
+  [Router] as ROUTER
+  
+  package "Views" {
+    [LibraryView]
+    [SettingsView]
+    [DashboardView]
+  }
+  
+  package "Stores (Zustand)" {
+    [LibraryStore]
+    [ConfigStore]
+  }
+
+  package "Services (API)" {
+    [WailsClient]
+    [RestClient]
+  }
+
+  ROUTER --> Views
+  Views --> Stores : Actions/Select
+  Stores --> Services : Async Calls
+}
+
+package "Backend (Go)" {
+  [Main]
+
+  package "Application Layer" {
+    [AppController] as APP_CTRL
+    [ServerController] as SRV_CTRL
+  }
+
+  package "Domain Services" {
+    [LibraryService]
+    [ScannerService]
+    [InstallService]
+  }
+
+  package "Infrastructure (IO)" {
+    [SecureFileSystem] as SFS
+    note right of SFS
+      <b>Safe Wrapper</b>
+      - Validates Paths
+      - Uses Native Syscalls
+      - No Shell Execution
+    end note
+    [ConfigRepository]
+  }
+
+  Main --> APP_CTRL
+  APP_CTRL --> LibraryService
+  SRV_CTRL --> LibraryService
+  
+  LibraryService --> SFS
+  InstallService --> SFS
+  ScannerService --> SFS
+}
+
+Services <--> APP_CTRL : Wails
+Services <--> SRV_CTRL : REST API (Auth Token)
+
+@enduml
