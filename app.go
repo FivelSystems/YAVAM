@@ -51,7 +51,7 @@ type App struct {
 // NewApp creates a new App application struct
 func NewApp(assets fs.FS, m *manager.Manager) *App {
 	if m == nil {
-		m = manager.NewManager(nil)
+		m = manager.NewManager(nil, nil, nil)
 	}
 	return &App{
 		manager: m,
@@ -190,9 +190,9 @@ func (a *App) CancelScan() {
 
 // ScanPackages triggers the scan process
 func (a *App) ScanPackages(vamPath string) error {
-	// Robustness: If user selected "AddonPackages" directly, move up to root
-	if filepath.Base(vamPath) == "AddonPackages" {
-		vamPath = filepath.Dir(vamPath)
+	if vamPath == "" || vamPath == "." {
+		// Nothing to scan
+		return nil
 	}
 
 	// Cancel previous scan and wait
@@ -439,7 +439,7 @@ func (a *App) onTrayReady() {
 }
 
 // ResolveConflicts handles deduplication and cleanup of conflicting packages
-func (a *App) ResolveConflicts(keepPath string, others []string, libraryPath string) (*manager.ResolveConflictResult, error) {
+func (a *App) ResolveConflicts(keepPath string, others []string, libraryPath string) (*models.ResolveConflictResult, error) {
 	return a.manager.ResolveConflicts(keepPath, others, libraryPath)
 }
 

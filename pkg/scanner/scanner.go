@@ -15,7 +15,7 @@ func NewScanner() *Scanner {
 }
 
 // ScanForPackages walks the given directory and returns a list of potential package files.
-// It looks for .var and .var.disabled files in "AddonPackages".
+// It looks for .var and .var.disabled files recursively.
 func (s *Scanner) ScanForPackages(vamPath string) ([]models.VarPackage, error) {
 	// Scan the provided path recursively (Generic Repository Support)
 	return s.scanDirectory(vamPath)

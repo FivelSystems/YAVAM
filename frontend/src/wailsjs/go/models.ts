@@ -16,22 +16,6 @@ export namespace manager {
 	        this.totalFree = source["totalFree"];
 	    }
 	}
-	export class ResolveConflictResult {
-	    merged: number;
-	    disabled: number;
-	    newPath: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new ResolveConflictResult(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.merged = source["merged"];
-	        this.disabled = source["disabled"];
-	        this.newPath = source["newPath"];
-	    }
-	}
 
 }
 
@@ -55,6 +39,22 @@ export namespace models {
 	        this.type = source["type"];
 	        this.thumbnailBase64 = source["thumbnailBase64"];
 	        this.size = source["size"];
+	    }
+	}
+	export class ResolveConflictResult {
+	    merged: number;
+	    disabled: number;
+	    newPath: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ResolveConflictResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.merged = source["merged"];
+	        this.disabled = source["disabled"];
+	        this.newPath = source["newPath"];
 	    }
 	}
 

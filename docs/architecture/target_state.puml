@@ -12,6 +12,12 @@ package "Backend Packages" {
     [Parser]
     [Models]
     
+    package "Services" {
+        component [ConfigService] as CS
+        component [SystemService] as SS
+        component [LibraryService] as LS
+    }
+    
     interface "FileSystem" as IFS
     component "WindowsFileSystem" as WFS
     component "MockFileSystem" as MFS
@@ -26,8 +32,15 @@ database "File System" {
 [App] --> [Manager]
 [App] --> [Server]
 [Server] --> [Manager]
-[Manager] --> [Scanner]
-[Manager] --> IFS
+
+[Manager] --> CS
+[Manager] --> SS
+[Manager] --> LS
+
+LS --> [Scanner]
+LS --> SS
+LS --> [Parser]
+SS --> IFS
 WFS .up.|> IFS
 MFS .up.|> IFS
 
