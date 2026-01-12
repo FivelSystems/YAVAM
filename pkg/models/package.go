@@ -41,3 +41,10 @@ type ScanResult struct {
 	Packages []VarPackage `json:"packages"`
 	Tags     []string     `json:"tags"`
 }
+
+// ResolveConflictResult holds statistics about the resolution operation
+type ResolveConflictResult struct {
+	Merged   int    `json:"merged"`
+	Disabled int    `json:"disabled"`
+	NewPath  string `json:"newPath"`
+}

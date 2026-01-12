@@ -2,6 +2,7 @@ package manager
 
 import (
 	"testing"
+	"varmanager/pkg/services/system"
 )
 
 // MockFileSystem for testing
@@ -30,7 +31,19 @@ func (m *MockFileSystem) GetDiskFreeSpace(path string) (uint64, uint64, uint64, 
 
 func TestDeleteToTrash_CallsFileSystem(t *testing.T) {
 	mockFS := &MockFileSystem{}
-	m := NewManager(mockFS)
+	sys := system.NewSystemService(mockFS)
+	// We pass nil for config as we aren't testing it here, or simplistic mock?
+	// NewManager handles nil config gracefully? In new code it assigns it.
+	// We might need a dummy config service if NewManager requires it.
+	// NewManager implementation: m.config = cfg.
+	// If method uses it, it might panic.
+	// TestDeleteToTrash doesn't use config.
+
+	// Create manager with mock system, default library (which uses mock system if passed?), nil config
+	// Since we are testing Manager logic that delegates, we might want a Mock Library too?
+	// Or use real library with mock system.
+	// For now, passing nil for library will create default library using the mock system.
+	m := NewManager(sys, nil, nil)
 
 	testPath := "C:\\test\\file.var"
 	err := m.DeleteToTrash(testPath)

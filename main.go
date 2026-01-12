@@ -2,7 +2,10 @@ package main
 
 import (
 	"embed"
+	"os"
+	"path/filepath"
 	"varmanager/pkg/manager"
+	"varmanager/pkg/services/config"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -13,14 +16,26 @@ import (
 var assets embed.FS
 
 func main() {
-	// Create manager
-	mgr := manager.NewManager(nil)
+	// Initialize Config Service
+	configDir, _ := os.UserConfigDir()
+	dataPath := filepath.Join(configDir, "YAVAM")
+	os.MkdirAll(dataPath, 0755)
+
+	cfgService, err := config.NewFileConfigService(dataPath)
+	if err != nil {
+		// Log error but proceed with defaults?
+		println("Warning: Failed to load config:", err.Error())
+	}
+
+	// Create manager with dependencies
+	// Services are initialized in NewManager if nil
+	mgr := manager.NewManager(nil, nil, cfgService)
 
 	// Create an instance of the app structure
 	app := NewApp(assets, mgr)
 
 	// Create application with options
-	err := wails.Run(&options.App{
+	err = wails.Run(&options.App{
 		Title:     "YAVAM",
 		Width:     1024,
 		Height:    768,
