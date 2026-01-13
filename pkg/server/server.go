@@ -15,6 +15,7 @@ import (
 	"time"
 	"varmanager/pkg/manager"
 	"varmanager/pkg/models"
+	"varmanager/pkg/services/auth"
 	"varmanager/pkg/updater"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -27,9 +28,10 @@ type Server struct {
 	mu        sync.Mutex
 	logMutex  sync.Mutex
 	manager   *manager.Manager
-	libraries []string // List of allowed library paths
-	assets    fs.FS    // Embedded frontend assets
-	version   string   // App Version
+	auth      auth.AuthService // Injected Auth Service
+	libraries []string         // List of allowed library paths
+	assets    fs.FS            // Embedded frontend assets
+	version   string           // App Version
 	onRestore func()
 
 	// SSE Clients
@@ -42,10 +44,11 @@ type Server struct {
 	scanWg     sync.WaitGroup
 }
 
-func NewServer(ctx context.Context, m *manager.Manager, assets fs.FS, version string, onRestore func()) *Server {
+func NewServer(ctx context.Context, m *manager.Manager, authService auth.AuthService, assets fs.FS, version string, onRestore func()) *Server {
 	return &Server{
 		ctx:       ctx,
 		manager:   m,
+		auth:      authService,
 		onRestore: onRestore,
 		libraries: []string{},
 		assets:    assets,
@@ -201,12 +204,69 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		// Wait for completion
 		s.scanWg.Wait()
 
-		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]bool{"success": true})
 	})
 
+	// Auth: Challenge Endpoint
+	mux.HandleFunc("/api/auth/challenge", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Username string `json:"username"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.writeError(w, "Invalid request body", 400)
+			return
+		}
+
+		nonce, err := s.auth.InitiateLogin(req.Username)
+		if err != nil {
+			// Don't leak user existence? Actually for simple auth it's fine.
+			// Ideally return generic error or 401.
+			s.writeError(w, "Authentication failed", 401)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"nonce":   nonce,
+		})
+	})
+
+	// Auth: Login Endpoint (Complete)
+	mux.HandleFunc("/api/auth/login", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Username string `json:"username"`
+			Nonce    string `json:"nonce"`
+			Proof    string `json:"proof"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.writeError(w, "Invalid request body", 400)
+			return
+		}
+
+		token, err := s.auth.CompleteLogin(req.Username, req.Nonce, req.Proof)
+		if err != nil {
+			s.writeError(w, "Invalid credentials or expired nonce", 401)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"token":   token,
+		})
+	})
+
 	// API Endpoint
-	mux.HandleFunc("/api/packages", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/packages", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
 		// Allow client to request a specific library, default to activePath
@@ -275,10 +335,10 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		}
 
 		json.NewEncoder(w).Encode(pkgs)
-	})
+	})))
 
 	// Disk Space Endpoint
-	mux.HandleFunc("/api/disk-space", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/disk-space", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		targetPath := r.URL.Query().Get("path")
 		if targetPath == "" {
 			targetPath = activePath
@@ -313,10 +373,10 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(info)
-	})
+	})))
 
 	// Thumbnail Endpoint
-	mux.HandleFunc("/api/thumbnail", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/thumbnail", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		filePath := r.URL.Query().Get("filePath")
 		if filePath == "" {
 			http.NotFound(w, r)
@@ -354,10 +414,10 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		w.Header().Set("Content-Type", "image/jpeg")
 		w.Header().Set("Cache-Control", "public, max-age=86400")
 		w.Write(thumbData)
-	})
+	})))
 
 	// Contents Endpoint (for Web Mode)
-	mux.HandleFunc("/api/contents", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/contents", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -402,10 +462,10 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(contents)
-	})
+	})))
 
 	// Config Endpoint
-	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/config", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"webMode":   true,
@@ -413,7 +473,7 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 			"libraries": s.libraries,
 			"version":   s.version,
 		})
-	})
+	})))
 
 	// Version Check Endpoint
 	mux.HandleFunc("/api/version/check", func(w http.ResponseWriter, r *http.Request) {
@@ -427,7 +487,7 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 	})
 
 	// Upload Endpoint
-	mux.HandleFunc("/api/upload", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/upload", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -507,10 +567,10 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 			"success": true,
 			"count":   count,
 		})
-	})
+	})))
 
 	// Toggle Endpoint
-	mux.HandleFunc("/api/toggle", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/toggle", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -545,10 +605,10 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 			"success": true,
 			"newPath": newPath,
 		})
-	})
+	})))
 
 	// Delete Endpoint
-	mux.HandleFunc("/api/delete", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/delete", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -588,7 +648,7 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 	})
 
 	// Resolve Endpoint
-	mux.HandleFunc("/api/resolve", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/resolve", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -622,10 +682,10 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		s.log(fmt.Sprintf("Resolved conflicts. Merged: %d, Disabled: %d", res.Merged, res.Disabled))
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(res)
-	})
+	})))
 
 	// Install Endpoint (Copy/Move to Library)
-	mux.HandleFunc("/api/install", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/install", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -695,7 +755,7 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 	})
 
 	// Collision Check Endpoint
-	mux.HandleFunc("/api/scan/collisions", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/scan/collisions", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -771,7 +831,7 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 	distFs := http.FileServer(http.FS(s.assets))
 
 	// Custom File Serving Logic
-	mux.HandleFunc("/files/", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/files/", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Expected format: /files/encodedpath OR /files/?path=... (cleaner to key off valid paths)
 		// Simplest: The frontend requests the file by partial path, but we need to know WHICH library.
 		// Actually, the package struct usually contains "filePath". In web mode, we might need to send absolute path?
@@ -813,7 +873,7 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		}
 
 		http.ServeFile(w, r, targetFile)
-	})
+	})))
 
 	mux.Handle("/", distFs)
 
