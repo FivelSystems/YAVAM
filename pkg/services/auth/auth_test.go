@@ -3,12 +3,21 @@ package auth
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"path/filepath"
 	"testing"
 )
 
 func TestChallengeResponseFlow(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "auth.json")
+
+	svc, err := NewSimpleAuthService(configPath)
+	if err != nil {
+		t.Fatalf("Failed to create auth service: %v", err)
+	}
+
 	password := "secret"
-	svc := NewSimpleAuthService(password)
+	svc.SetPassword(password)
 
 	// 1. Initiate Login
 	nonce, err := svc.InitiateLogin("admin")
@@ -48,8 +57,12 @@ func TestChallengeResponseFlow(t *testing.T) {
 }
 
 func TestReplayAttack(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "auth.json")
+
+	svc, _ := NewSimpleAuthService(configPath)
 	password := "secret"
-	svc := NewSimpleAuthService(password)
+	svc.SetPassword(password)
 
 	nonce, _ := svc.InitiateLogin("admin")
 
@@ -72,7 +85,11 @@ func TestReplayAttack(t *testing.T) {
 }
 
 func TestInvalidProof(t *testing.T) {
-	svc := NewSimpleAuthService("secret")
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "auth.json")
+
+	svc, _ := NewSimpleAuthService(configPath)
+	svc.SetPassword("secret")
 	nonce, _ := svc.InitiateLogin("admin")
 
 	_, err := svc.CompleteLogin("admin", nonce, "badproof")
@@ -82,7 +99,10 @@ func TestInvalidProof(t *testing.T) {
 }
 
 func TestUnknownUser(t *testing.T) {
-	svc := NewSimpleAuthService("secret")
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "auth.json")
+
+	svc, _ := NewSimpleAuthService(configPath)
 	_, err := svc.InitiateLogin("hacker")
 	if err == nil {
 		t.Fatal("Expected error for unknown user")

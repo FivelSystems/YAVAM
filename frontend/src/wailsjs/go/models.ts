@@ -1,3 +1,30 @@
+export namespace auth {
+	
+	export class User {
+	    id: string;
+	    username: string;
+	    role: string;
+	    deviceName: string;
+	    ipAddress: string;
+	    createdAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new User(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.username = source["username"];
+	        this.role = source["role"];
+	        this.deviceName = source["deviceName"];
+	        this.ipAddress = source["ipAddress"];
+	        this.createdAt = source["createdAt"];
+	    }
+	}
+
+}
+
 export namespace manager {
 	
 	export class DiskSpaceInfo {

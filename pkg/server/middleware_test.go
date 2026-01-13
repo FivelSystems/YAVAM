@@ -15,7 +15,7 @@ func (m *MockAuthService) InitiateLogin(username string) (string, error) {
 	return "mock-nonce", nil
 }
 
-func (m *MockAuthService) CompleteLogin(username, nonce, proof string) (string, error) {
+func (m *MockAuthService) CompleteLogin(username, nonce, proof, deviceName string) (string, error) {
 	return m.validToken, nil
 }
 
@@ -31,6 +31,18 @@ func (m *MockAuthService) GenerateToken() (string, error) {
 }
 
 func (m *MockAuthService) RevokeToken(token string) {}
+
+func (m *MockAuthService) SetPassword(newPassword string) error {
+	return nil
+}
+
+func (m *MockAuthService) ListSessions() ([]auth.User, error) {
+	return []auth.User{}, nil
+}
+
+func (m *MockAuthService) RevokeSession(id string) error {
+	return nil
+}
 
 func TestAuthMiddleware(t *testing.T) {
 	mockAuth := &MockAuthService{validToken: "valid-token"}

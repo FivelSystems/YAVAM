@@ -79,3 +79,25 @@ To further harden the codebase, execute these standard industry tools:
 2.  **Immediate:** Bind Server to `localhost`.
 3.  **Short-term:** Implement `Bearer` token auth for the API.
 4.  **Long-term:** Rewrite the file serving logic to use a hardened "FileSystem Sandbox" interface.
+
+### 4. Admin Password Management Audit -> **PASSED**
+**Description:**
+The application now supports dynamic administrator password updates. A security audit was performed to ensure this feature does not introduce remote takeover vulnerabilities.
+
+**Findings:**
+1.  **Isolation:** The `UpdatePassword` function is strictly bound to the Wails Application struct. It is **NOT** exposed via the HTTP API (`pkg/server/server.go`).
+2.  **Attack Surface:**
+    -   **Remote Attacker (HTTP):** Impossible. No route exists to trigger this function.
+    -   **Local User (Desktop):** Can change password via Settings. This is intended behavior.
+    -   **XSS (Desktop):** If an attacker can achieve Cross-Site Scripting within the Electron/Wails context, they can call `window.go.main.App.UpdatePassword`. *Mitigation:* The application acts as a Manager for local files, so XSS would already be catastrophic (RCE via `OpenFolder` etc.). The risk profile is unchanged.
+3.  **Verification:** Manual code review of `pkg/server/server.go` confirms zero references to `SetPassword` or `UpdatePassword`.
+
+### 5. Brute Force Mitigation -> **RESOLVED**
+**Description:**
+To prevent attackers from guessing passwords or valid nonces, we implemented strict rate limiting on authentication endpoints.
+
+**Mechanism:**
+-   **Limit:** 5 requests per minute per IP address.
+-   **Scope:** Applied to `/api/auth/challenge` and `/api/auth/login`.
+-   **Implementation:** Memory-based sliding window rate limiter (`pkg/server/ratelimit.go`).
+-   **Effect:** Brute force attacks become computationally infeasible (max 300 attempts/hour).

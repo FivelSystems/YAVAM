@@ -95,6 +95,10 @@ const SettingsModal = ({
     setLogs,
     isWeb,
 }: SettingsModalProps) => {
+    // Password Change State
+    const [newPassword, setNewPassword] = useState("");
+    const [confirmPassword, setConfirmPassword] = useState("");
+    const [showPasswordUI, setShowPasswordUI] = useState(false);
 
     const [activeTab, setActiveTab] = useState<'dashboard' | 'general' | 'appearance' | 'keybinds' | 'network' | 'storage' | 'about'>('general');
 
@@ -109,6 +113,38 @@ const SettingsModal = ({
     const [minimizeOnClose, setMinimizeOnClose] = useState(() => localStorage.getItem('minimizeOnClose') === 'true');
     const [appVersion, setAppVersion] = useState("");
     const [hasChanges, setHasChanges] = useState(false);
+
+    // Session State
+    const [sessions, setSessions] = useState<any[]>([]);
+
+    const fetchSessions = async () => {
+        // @ts-ignore
+        if (window.go && window.go.main && window.go.main.App) {
+            // @ts-ignore
+            const list = await window.go.main.App.ListSessions();
+            setSessions(list || []);
+        }
+    };
+
+    const handleRevokeSession = async (id: string) => {
+        if (!confirm("Are you sure you want to disconnect this device?")) return;
+        try {
+            // @ts-ignore
+            await window.go.main.App.RevokeSession(id);
+            fetchSessions();
+        } catch (e) {
+            console.error("Failed to revoke session", e);
+        }
+    };
+
+    useEffect(() => {
+        if (activeTab === 'network' && !isWeb) {
+            fetchSessions();
+            // Poll every 5 seconds?
+            const interval = setInterval(fetchSessions, 5000);
+            return () => clearInterval(interval);
+        }
+    }, [activeTab, isWeb]);
 
     // On Open: Snapshot headers
     useEffect(() => {
@@ -435,6 +471,72 @@ const SettingsModal = ({
                                     )} />
                                 </button>
                             </div>
+
+                            {/* Password Change Section */}
+                            <div className="bg-black/30 rounded-xl p-4 border border-gray-700/50 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h4 className="text-sm font-medium text-white">Access Password</h4>
+                                        <p className="text-xs text-gray-500">Protect your library from unauthorized access.</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setShowPasswordUI(!showPasswordUI)}
+                                        className="text-xs text-blue-400 hover:text-blue-300"
+                                    >
+                                        {showPasswordUI ? "Cancel" : "Change Password"}
+                                    </button>
+                                </div>
+
+                                {showPasswordUI && (
+                                    <div className="space-y-3 pt-2 animate-in fade-in slide-in-from-top-2">
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-bold text-gray-500 uppercase">New Password</label>
+                                            <input
+                                                type="password"
+                                                value={newPassword}
+                                                onChange={(e) => setNewPassword(e.target.value)}
+                                                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                                                placeholder="Enter new password"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Confirm Password</label>
+                                            <input
+                                                type="password"
+                                                value={confirmPassword}
+                                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                                                placeholder="Confirm new password"
+                                            />
+                                        </div>
+                                        <div className="flex justify-end">
+                                            <button
+                                                disabled={!newPassword || newPassword !== confirmPassword}
+                                                onClick={async () => {
+                                                    try {
+                                                        // @ts-ignore
+                                                        if (window.go) {
+                                                            // @ts-ignore
+                                                            await window.go.main.App.UpdatePassword(newPassword);
+                                                            alert("Password updated successfully!");
+                                                            setNewPassword("");
+                                                            setConfirmPassword("");
+                                                            setShowPasswordUI(false);
+                                                        } else {
+                                                            alert("Password change only available in Desktop mode for now.");
+                                                        }
+                                                    } catch (e) {
+                                                        alert("Failed to update password: " + e);
+                                                    }
+                                                }}
+                                                className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                                            >
+                                                Update
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                             <div className="bg-black/30 rounded-xl p-4 border border-gray-700/50 space-y-4">
                                 <div className="flex items-center gap-4">
                                     <div className="flex-1 space-y-1">
@@ -486,6 +588,49 @@ const SettingsModal = ({
                                     <div ref={logEndRef} />
                                 </div>
                             </div>
+
+                            {/* Active Sessions */}
+                            {!isWeb && (
+                                <div className="mt-6 border-t border-gray-700 pt-6">
+                                    <h4 className="text-sm font-medium text-white mb-3 flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                                        Active Devices ({sessions.length})
+                                    </h4>
+                                    <div className="space-y-2">
+                                        {sessions.length === 0 ? (
+                                            <p className="text-xs text-gray-500 italic">No active sessions (except this one).</p>
+                                        ) : (
+                                            sessions.map((session) => (
+                                                <div key={session.id} className="bg-gray-800 border border-gray-700 rounded-lg p-3 flex items-center justify-between">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center">
+                                                            <Network size={16} />
+                                                        </div>
+                                                        <div>
+                                                            <div className="text-sm text-gray-200 font-medium">{session.deviceName || "Unknown Device"}</div>
+                                                            <div className="text-xs text-gray-500">
+                                                                Connected: {new Date(session.createdAt).toLocaleString()}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {session.deviceName !== "Local System" && (
+                                                        <button
+                                                            onClick={() => handleRevokeSession(session.id)}
+                                                            className="text-xs text-red-400 hover:text-red-300 hover:bg-red-900/20 px-2 py-1 rounded transition-colors"
+                                                        >
+                                                            Disconnect
+                                                        </button>
+                                                    )}
+                                                    {session.deviceName === "Local System" && (
+                                                        <span className="text-xs text-gray-600 italic px-2">Current</span>
+                                                    )}
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 );

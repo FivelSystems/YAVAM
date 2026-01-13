@@ -102,6 +102,14 @@ export function IsConfigured() {
   return window['go']['main']['App']['IsConfigured']();
 }
 
+export function ListSessions() {
+  return window['go']['main']['App']['ListSessions']();
+}
+
+export function Login(arg1, arg2) {
+  return window['go']['main']['App']['Login'](arg1, arg2);
+}
+
 export function OpenAppDataFolder() {
   return window['go']['main']['App']['OpenAppDataFolder']();
 }
@@ -124,6 +132,10 @@ export function ResolveConflicts(arg1, arg2, arg3) {
 
 export function RestartApp() {
   return window['go']['main']['App']['RestartApp']();
+}
+
+export function RevokeSession(arg1) {
+  return window['go']['main']['App']['RevokeSession'](arg1);
 }
 
 export function ScanPackages(arg1) {
@@ -152,6 +164,10 @@ export function StopServer() {
 
 export function TogglePackage(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['TogglePackage'](arg1, arg2, arg3, arg4);
+}
+
+export function UpdatePassword(arg1) {
+  return window['go']['main']['App']['UpdatePassword'](arg1);
 }
 
 export function UpdateServerLibraries(arg1) {

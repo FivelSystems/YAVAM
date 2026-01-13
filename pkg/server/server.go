@@ -207,8 +207,11 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		json.NewEncoder(w).Encode(map[string]bool{"success": true})
 	})
 
+	// Rate Limiter for Login: 5 attempts per minute
+	loginLimiter := NewRateLimiter(5, 1*time.Minute)
+
 	// Auth: Challenge Endpoint
-	mux.HandleFunc("/api/auth/challenge", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/auth/challenge", loginLimiter.Middleware(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -234,25 +237,26 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 			"success": true,
 			"nonce":   nonce,
 		})
-	})
+	}))
 
 	// Auth: Login Endpoint (Complete)
-	mux.HandleFunc("/api/auth/login", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/auth/login", loginLimiter.Middleware(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 		var req struct {
-			Username string `json:"username"`
-			Nonce    string `json:"nonce"`
-			Proof    string `json:"proof"`
+			Username   string `json:"username"`
+			Nonce      string `json:"nonce"`
+			Proof      string `json:"proof"`
+			DeviceName string `json:"deviceName"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			s.writeError(w, "Invalid request body", 400)
 			return
 		}
 
-		token, err := s.auth.CompleteLogin(req.Username, req.Nonce, req.Proof)
+		token, err := s.auth.CompleteLogin(req.Username, req.Nonce, req.Proof, req.DeviceName)
 		if err != nil {
 			s.writeError(w, "Invalid credentials or expired nonce", 401)
 			return
@@ -263,7 +267,7 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 			"success": true,
 			"token":   token,
 		})
-	})
+	}))
 
 	// API Endpoint
 	mux.Handle("/api/packages", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -645,7 +649,7 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": true,
 		})
-	})
+	})))
 
 	// Resolve Endpoint
 	mux.Handle("/api/resolve", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -752,7 +756,7 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 			"success":    true,
 			"collisions": collisions,
 		})
-	})
+	})))
 
 	// Collision Check Endpoint
 	mux.Handle("/api/scan/collisions", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -806,7 +810,7 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 			"success":    true,
 			"collisions": collisions,
 		})
-	})
+	})))
 
 	// Restore Endpoint
 	mux.HandleFunc("/api/restore", func(w http.ResponseWriter, r *http.Request) {

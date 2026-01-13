@@ -15,23 +15,49 @@ type SimpleTokenAuthService struct {
 	validTokens map[string]*User
 	nonces      map[string]time.Time // Nonce -> Expiration
 	adminHash   string               // SHA256(password)
+	store       *FileAuthStore
 }
 
-func NewSimpleAuthService(adminPassword string) *SimpleTokenAuthService {
-	// Store only the hash of the password
-	hash := sha256.Sum256([]byte(adminPassword))
-	hashStr := hex.EncodeToString(hash[:])
+func NewSimpleAuthService(configPath string) (*SimpleTokenAuthService, error) {
+	store := NewFileAuthStore(configPath)
+	config, err := store.Load()
+	if err != nil {
+		return nil, err
+	}
+
+	var hashStr string
+	if config != nil && config.AdminHash != "" {
+		hashStr = config.AdminHash
+	} else {
+		// Default to "admin" if no config exists
+		hash := sha256.Sum256([]byte("admin"))
+		hashStr = hex.EncodeToString(hash[:])
+		// Save default
+		store.Save(&AuthConfig{AdminHash: hashStr})
+	}
 
 	s := &SimpleTokenAuthService{
 		validTokens: make(map[string]*User),
 		nonces:      make(map[string]time.Time),
 		adminHash:   hashStr,
+		store:       store,
 	}
 
 	// Start cleanup routine for nonces
 	go s.cleanupNonces()
 
-	return s
+	return s, nil
+}
+
+func (s *SimpleTokenAuthService) SetPassword(newPassword string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	hash := sha256.Sum256([]byte(newPassword))
+	hashStr := hex.EncodeToString(hash[:])
+
+	s.adminHash = hashStr
+	return s.store.Save(&AuthConfig{AdminHash: hashStr})
 }
 
 func (s *SimpleTokenAuthService) InitiateLogin(username string) (string, error) {
@@ -55,31 +81,28 @@ func (s *SimpleTokenAuthService) InitiateLogin(username string) (string, error) 
 	return nonce, nil
 }
 
-func (s *SimpleTokenAuthService) CompleteLogin(username, nonce, proof string) (string, error) {
+func (s *SimpleTokenAuthService) CompleteLogin(username, nonce, proof, deviceName string) (string, error) {
 	if username != "admin" {
 		return "", ErrInvalidToken
 	}
 
 	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	// Check Nonce validity
 	expiry, exists := s.nonces[nonce]
 	if !exists {
-		s.mu.Unlock()
 		return "", fmt.Errorf("invalid or expired nonce")
 	}
 	if time.Now().After(expiry) {
 		delete(s.nonces, nonce)
-		s.mu.Unlock()
 		return "", fmt.Errorf("nonce expired")
 	}
 	// Consume nonce (prevent replay)
 	delete(s.nonces, nonce)
-	s.mu.Unlock()
 
 	// Verify Proof
 	// Expected Proof = SHA256(MasterHash + Nonce)
-	// MasterHash is already hex string, Nonce is hex string.
-	// We concat them as strings.
 	data := s.adminHash + nonce
 	hash := sha256.Sum256([]byte(data))
 	expectedProof := hex.EncodeToString(hash[:])
@@ -88,8 +111,32 @@ func (s *SimpleTokenAuthService) CompleteLogin(username, nonce, proof string) (s
 		return "", fmt.Errorf("invalid proof")
 	}
 
-	// Proof Valid! Generate Token
-	return s.GenerateToken()
+	// Generate Token directly here
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	token := hex.EncodeToString(b)
+
+	// Generate Session ID
+	sid := make([]byte, 8)
+	rand.Read(sid)
+	sessionID := hex.EncodeToString(sid)
+
+	if deviceName == "" {
+		deviceName = "Unknown Device"
+	}
+
+	s.validTokens[token] = &User{
+		ID:         sessionID,
+		Username:   username,
+		Role:       "admin",
+		DeviceName: deviceName,
+		CreatedAt:  time.Now().Format(time.RFC3339),
+		Token:      token,
+	}
+
+	return token, nil
 }
 
 func (s *SimpleTokenAuthService) ValidateToken(token string) (*User, error) {
@@ -105,7 +152,7 @@ func (s *SimpleTokenAuthService) ValidateToken(token string) (*User, error) {
 }
 
 func (s *SimpleTokenAuthService) GenerateToken() (string, error) {
-	// Generate 32 bytes of entropy
+	// Internal use
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
@@ -115,13 +162,50 @@ func (s *SimpleTokenAuthService) GenerateToken() (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Store token for "admin"
+	// Generate Session ID
+	sid := make([]byte, 8)
+	rand.Read(sid)
+	sessionID := hex.EncodeToString(sid)
+
 	s.validTokens[token] = &User{
-		Username: "admin",
-		Role:     "admin",
+		ID:         sessionID,
+		Username:   "system",
+		Role:       "admin",
+		DeviceName: "Local System",
+		CreatedAt:  time.Now().Format(time.RFC3339),
+		Token:      token,
+	}
+	return token, nil
+}
+
+func (s *SimpleTokenAuthService) ListSessions() ([]User, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var sessions []User
+	for _, user := range s.validTokens {
+		sessions = append(sessions, *user)
+	}
+	return sessions, nil
+}
+
+func (s *SimpleTokenAuthService) RevokeSession(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var tokenToRevoke string
+	for token, user := range s.validTokens {
+		if user.ID == id {
+			tokenToRevoke = token
+			break
+		}
 	}
 
-	return token, nil
+	if tokenToRevoke != "" {
+		delete(s.validTokens, tokenToRevoke)
+		return nil
+	}
+	return fmt.Errorf("session not found")
 }
 
 // RevokeToken removes a token

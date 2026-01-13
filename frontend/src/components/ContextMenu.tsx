@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useLayoutEffect } from 'react';
-import { VarPackage } from '../App';
+import { VarPackage } from '../types';
 import { Power, FolderOpen, Copy, Trash2, FileCode, Scissors, Download, Layers, Sparkles } from 'lucide-react';
 
 interface ContextMenuProps {
