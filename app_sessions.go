@@ -1,7 +1,7 @@
 package main
 
 import (
-	"varmanager/pkg/services/auth"
+	"yavam/pkg/services/auth"
 )
 
 // ListSessions returns all active sessions

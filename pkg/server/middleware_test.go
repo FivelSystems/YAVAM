@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"varmanager/pkg/services/auth"
+	"yavam/pkg/services/auth"
 )
 
 type MockAuthService struct {

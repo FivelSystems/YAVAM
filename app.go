@@ -13,12 +13,12 @@ import (
 	"path/filepath"
 	"sync"
 	"syscall"
-	"varmanager/pkg/manager"
-	"varmanager/pkg/models"
-	"varmanager/pkg/services/auth"
-	"varmanager/pkg/updater"
+	"yavam/pkg/manager"
+	"yavam/pkg/models"
+	"yavam/pkg/services/auth"
+	"yavam/pkg/updater"
 
-	"varmanager/pkg/server"
+	"yavam/pkg/server"
 
 	_ "embed"
 

@@ -4,7 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"varmanager/pkg/models"
+	"yavam/pkg/models"
 )
 
 // Scanner handles file system operations

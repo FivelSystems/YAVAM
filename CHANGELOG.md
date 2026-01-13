@@ -29,6 +29,9 @@
 - **Critical:** Implemented strict `PathValidator` and bound internal server to `127.0.0.1` to prevent Local Network exploits.
 - **Architecture:** Decoupled `Manager` from OS syscalls via new `FileSystem` interface (Dependency Injection).
 - **Frontend Refactor:** Reorganized source code into a Feature-based Architecture (`features/`, `components/`) for better maintainability.
+- **Refactor:** Renamed Go module and internal references from `varmanager` to `yavam` for brand consistency.
+- **Security:** Hardened Auto-Updater with Ed25519 Digital Signatures (SHA256) to prevent supply-chain attacks.
+- **CI/CD:** Added GitHub Actions automation for signed releases.
 
 ## [v1.2.17] - 2026-01-12
 

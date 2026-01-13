@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"varmanager/pkg/models"
+	"yavam/pkg/models"
 )
 
 // GetPackageContents scans a .var file and returns a list of its displayable contents

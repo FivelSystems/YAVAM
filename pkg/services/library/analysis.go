@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"varmanager/pkg/models"
+	"yavam/pkg/models"
 )
 
 // ResolveConflictResult holds statistics about the resolution operation

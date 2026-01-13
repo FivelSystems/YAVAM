@@ -9,10 +9,10 @@ import (
 	"strings"
 	"sync"
 
-	"varmanager/pkg/models"
-	"varmanager/pkg/services/config"
-	"varmanager/pkg/services/library"
-	"varmanager/pkg/services/system"
+	"yavam/pkg/models"
+	"yavam/pkg/services/config"
+	"yavam/pkg/services/library"
+	"yavam/pkg/services/system"
 )
 
 type Manager struct {

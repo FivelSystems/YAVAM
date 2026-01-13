@@ -1,4 +1,4 @@
-module varmanager
+module yavam
 
 go 1.22.0
 

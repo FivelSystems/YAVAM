@@ -1,7 +1,7 @@
 package system
 
 import (
-	"varmanager/pkg/fs"
+	"yavam/pkg/fs"
 )
 
 // DiskSpaceInfo holds space information

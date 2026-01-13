@@ -1,103 +1,54 @@
-name: Release
+name: Release Build
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*'
 
 jobs:
-  release:
+  build:
+    name: Build and Release
     runs-on: windows-latest
+
     permissions:
       contents: write
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        # Optimization: fetch-depth: 0 (full history) is no longer needed since we read CHANGELOG.md directly
-
-      - name: Read Version from wails.json
-        id: version
-        shell: bash
-        run: |
-          VERSION=$(jq -r .info.productVersion wails.json)
-          echo "VERSION=v$VERSION" >> $GITHUB_ENV
-          echo "Detected version: v$VERSION"
-
-      - name: Check if Release Exists
-        id: check_release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if gh release view ${{ env.VERSION }} >/dev/null 2>&1; then
-            echo "Release ${{ env.VERSION }} already exists. Skipping."
-            echo "EXISTS=true" >> $GITHUB_ENV
-          else
-            echo "Release ${{ env.VERSION }} does not exist. Proceeding with build."
-            echo "EXISTS=false" >> $GITHUB_ENV
-          fi
+      - uses: actions/checkout@v4
 
       - name: Setup Go
-        if: env.EXISTS == 'false'
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v4
         with:
           go-version: '1.21'
-          check-latest: true
-          cache: true
-
+          
       - name: Setup Node
-        if: env.EXISTS == 'false'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v3
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: '18'
 
       - name: Install Wails
-        if: env.EXISTS == 'false'
-        shell: bash
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
       - name: Build Windows App
-        if: env.EXISTS == 'false'
-        shell: bash
         run: |
-          export PATH=$PATH:$(go env GOPATH)/bin
-          wails build -platform windows/amd64
+          wails build -platform windows/amd64 -clean
+        env:
+          CGO_ENABLED: 1
 
-      - name: Generate Changelog
-        id: changelog
+      - name: Sign Binary
         shell: bash
+        env:
+          UPDATER_PRIVATE_KEY: ${{ secrets.UPDATER_PRIVATE_KEY }}
         run: |
-          echo "Extracting release notes for ${{ env.VERSION }} from CHANGELOG.md"
-          
-          # Extract content between the current version header and the next one
-          # pattern matches lines starting with "## [v1.2.17]"
-          awk "/^## \[${{ env.VERSION }}\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md > release_notes.md
-          
-          # Trim leading/trailing whitespace (optional but nice)
-          # check if empty
-          if [ ! -s release_notes.md ]; then
-             echo "No specific release notes found in CHANGELOG.md for ${{ env.VERSION }}." > release_notes.md
-             echo "See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for full history." >> release_notes.md
-          else
-             # Append full log link for reference at the bottom
-             echo "" >> release_notes.md
-             echo "**Full Changelog**: https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md" >> release_notes.md
-          fi
-          
-          cat release_notes.md
+          go run cmd/sign-update/main.go build/bin/yavam.exe
 
       - name: Create Release
-        if: env.EXISTS == 'false'
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ env.VERSION }}
-          name: YAVAM ${{ env.VERSION }}
-          body_path: release_notes.md
+          files: |
+            build/bin/yavam.exe
+            build/bin/yavam.exe.sig
           draft: false
           prerelease: false
-          files: |
-            build/bin/YAVAM.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

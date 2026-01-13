@@ -29,3 +29,7 @@ Thumbs.db
 
 # Local App Data
 user_preferences.json
+
+# Security Keys
+update.key
+update.pub
