@@ -241,6 +241,10 @@ func (m *Manager) CopyPackagesToLibrary(filePaths []string, destLibPath string, 
 
 // FinishSetup marks the application as configured
 func (m *Manager) FinishSetup() error {
+	// Ensure directory exists (fixes "Path not found" error)
+	if err := os.MkdirAll(m.DataPath, 0755); err != nil {
+		return err
+	}
 	marker := filepath.Join(m.DataPath, ".setup_complete")
 	return os.WriteFile(marker, []byte("done"), 0644)
 }

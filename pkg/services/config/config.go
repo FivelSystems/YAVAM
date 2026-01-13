@@ -20,6 +20,7 @@ type Config struct {
 	UseSymlinks   bool `json:"useSymlinks"` // Default true for efficiency
 	DeleteToTrash bool `json:"deleteToTrash"`
 	PublicAccess  bool `json:"publicAccess"`
+	ServerEnabled bool `json:"serverEnabled"`
 }
 
 // ConfigService handles configuration persistence
