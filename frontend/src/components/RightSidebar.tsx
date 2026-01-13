@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 
 // Ideally, App exports it. 
 // If App.tsx exports it, we need to import it.
-// The previous code had "import { VarPackage } from '../App';" but linter complained.
+// The previous code had "import { VarPackage } from '../types';" but linter complained.
 // Maybe circle dependency issue if App imports RightSidebar and RightSidebar imports App?
 // YES. Circular dependency.
 // Best practice: Move types to a separate file `src/types.ts`.

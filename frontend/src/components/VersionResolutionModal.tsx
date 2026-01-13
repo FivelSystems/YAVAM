@@ -1,5 +1,5 @@
 import { X, AlertTriangle, CheckCircle } from 'lucide-react';
-import { VarPackage } from '../App';
+import { VarPackage } from '../types';
 
 interface VersionResolutionModalProps {
     isOpen: boolean;

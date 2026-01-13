@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight, AlertTriangle, Copy, Layers, Package, Settings, CheckCircle2, CircleOff, Power, Sparkles, Trash2, GripVertical, Download } from 'lucide-react';
-import { VarPackage } from '../App';
+import { VarPackage } from '../types';
 import clsx from 'clsx';
 import { useMemo, useState, useEffect } from 'react';
 import { Reorder, useDragControls } from "framer-motion";

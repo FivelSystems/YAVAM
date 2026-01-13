@@ -3,6 +3,7 @@
 import {updater} from '../models';
 import {manager} from '../models';
 import {models} from '../models';
+import {auth} from '../models';
 
 export function AddConfiguredLibrary(arg1:string):Promise<void>;
 
@@ -54,6 +55,10 @@ export function InstallFiles(arg1:Array<string>,arg2:string):Promise<Array<strin
 
 export function IsConfigured():Promise<boolean>;
 
+export function ListSessions():Promise<Array<auth.User>>;
+
+export function Login(arg1:string,arg2:string):Promise<string>;
+
 export function OpenAppDataFolder():Promise<void>;
 
 export function OpenFolderInExplorer(arg1:string):Promise<void>;
@@ -65,6 +70,8 @@ export function ReorderConfiguredLibraries(arg1:Array<string>):Promise<void>;
 export function ResolveConflicts(arg1:string,arg2:Array<string>,arg3:string):Promise<models.ResolveConflictResult>;
 
 export function RestartApp():Promise<void>;
+
+export function RevokeSession(arg1:string):Promise<void>;
 
 export function ScanPackages(arg1:string):Promise<void>;
 
@@ -79,5 +86,7 @@ export function StartServer(arg1:string,arg2:string,arg3:Array<string>):Promise<
 export function StopServer():Promise<void>;
 
 export function TogglePackage(arg1:string,arg2:boolean,arg3:string,arg4:boolean):Promise<string>;
+
+export function UpdatePassword(arg1:string):Promise<void>;
 
 export function UpdateServerLibraries(arg1:Array<string>):Promise<void>;

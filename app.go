@@ -83,8 +83,17 @@ func (a *App) startup(ctx context.Context) {
 	}
 
 	// Initialize Auth Service
-	// TODO: Load admin password from secure config or generate
-	a.auth = auth.NewSimpleAuthService("admin")
+	// Initialize Auth Service
+	configDir, _ := os.UserConfigDir()
+	authConfigPath := filepath.Join(configDir, "YAVAM", "auth.json")
+	var authErr error
+	a.auth, authErr = auth.NewSimpleAuthService(authConfigPath)
+	if authErr != nil {
+		// Log or Panic? For now, we panic as auth is critical if it fails to init store
+		// But in prod we might just log and fallback to memory?
+		// Let's print for now
+		fmt.Printf("Failed to initialize auth service: %v\n", authErr)
+	}
 
 	a.server = server.NewServer(ctx, a.manager, a.auth, subAssets, a.GetAppVersion(), func() {
 		runtime.WindowShow(ctx)
@@ -191,7 +200,7 @@ func (a *App) Login(username, password string) (string, error) {
 	proof := hex.EncodeToString(proofRaw[:])
 
 	// 3. Complete Login
-	return a.auth.CompleteLogin(username, nonce, proof)
+	return a.auth.CompleteLogin(username, nonce, proof, "Desktop Client")
 }
 
 // GetAppVersion returns the current application version

@@ -17,10 +17,14 @@
 
 ### Feature: Authentication (Secure)
 - **Challenge-Response**: Implemented industry-standard "Challenge-Response" authentication. Passwords are never transmitted over the network.
+- **Dynamic Credentials**: Passwords are now manageable via the Settings UI (Desktop-only) and persisted securely.
+- **Session Management**: Added "Active Devices" list to Settings, allowing revocation of specific sessions.
+- **Brute Force Protection**: Added sliding-window rate limiting (5 attempts/min) to login endpoints.
 - **Middleware**: Added strict `AuthMiddleware` to internal server, protecting all sensitive routes (`upload`, `delete` etc).
 - **Security Audit**: Addressed and resolved "Unprotected Local Server" vulnerabilities.
 
 ### Security
+- **Defense in Depth:** Added `DeviceName` tracking and Browser/OS identification for better auditability.
 - **Critical:** Removed all dependencies on `powershell.exe` and `cmd.exe` for file operations to prevent Command Injection.
 - **Critical:** Implemented strict `PathValidator` and bound internal server to `127.0.0.1` to prevent Local Network exploits.
 - **Architecture:** Decoupled `Manager` from OS syscalls via new `FileSystem` interface (Dependency Injection).

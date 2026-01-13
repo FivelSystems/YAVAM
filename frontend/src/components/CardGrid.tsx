@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { VarPackage } from '../App';
+import { VarPackage } from '../types';
 import PackageCard from './PackageCard';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PackageSearch } from 'lucide-react';
