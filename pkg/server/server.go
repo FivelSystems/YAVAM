@@ -16,6 +16,7 @@ import (
 	"yavam/pkg/manager"
 	"yavam/pkg/models"
 	"yavam/pkg/services/auth"
+	"yavam/pkg/services/config"
 	"yavam/pkg/updater"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -41,7 +42,12 @@ type Server struct {
 	// Scan Management
 	scanMu     sync.Mutex
 	scanCancel context.CancelFunc
-	scanWg     sync.WaitGroup
+
+	scanWg sync.WaitGroup
+
+	SkipEvents bool // For testing
+
+	activePath string // Currently served library path
 }
 
 func NewServer(ctx context.Context, m *manager.Manager, authService auth.AuthService, assets fs.FS, version string, onRestore func()) *Server {
@@ -64,9 +70,23 @@ func (s *Server) UpdateLibraries(libraries []string) {
 	s.log(fmt.Sprintf("Updated allowed libraries: %d paths", len(libraries)))
 }
 
+func (s *Server) GetLibraries() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// Return copy to prevent race on slice underlying array?
+	// String slices are headers. Underlying array is shared?
+	// To be safe, copy.
+	libs := make([]string, len(s.libraries))
+	copy(libs, s.libraries)
+	return libs
+}
+
 func (s *Server) log(message string) {
 	s.logMutex.Lock()
 	defer s.logMutex.Unlock()
+	if s.SkipEvents {
+		return
+	}
 	// Emit log to frontend
 	runtime.EventsEmit(s.ctx, "server:log", fmt.Sprintf("[%s] %s", time.Now().Format("15:04:05"), message))
 }
@@ -84,6 +104,51 @@ func (s *Server) writeError(w http.ResponseWriter, message string, code int) {
 		"success": false,
 		"message": message,
 	})
+}
+
+// IsPathAllowed checks if the given path is within activePath or any of the allowed libraries.
+// It is thread-safe.
+func (s *Server) IsPathAllowed(path string) bool {
+	if path == "" {
+		return false
+	}
+	cleanTarget := strings.ToLower(filepath.Clean(path))
+
+	s.mu.Lock()
+	active := s.activePath
+	// Copy libraries to avoid holding lock during iteration if we wanted,
+	// but holding lock for string/prefix check is fast enough.
+	// Actually, let's use GetLibraries() or just hold lock?
+	// GetLibraries copies, which is safe.
+	// But since we are inside IsPathAllowed, we can just hold lock for the duration of checks?
+	// s.libraries access needs lock. s.activePath needs lock.
+	// Let's hold lock for the whole function.
+	defer s.mu.Unlock()
+
+	cleanActive := strings.ToLower(filepath.Clean(active))
+
+	if active != "" {
+		// Exact match
+		if cleanTarget == cleanActive {
+			return true
+		}
+		// Subdirectory match
+		if strings.HasPrefix(cleanTarget, cleanActive+string(os.PathSeparator)) {
+			return true
+		}
+	}
+
+	for _, lib := range s.libraries {
+		cleanLib := strings.ToLower(filepath.Clean(lib))
+		if cleanTarget == cleanLib {
+			return true
+		}
+		if strings.HasPrefix(cleanTarget, cleanLib+string(os.PathSeparator)) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
@@ -123,6 +188,10 @@ func (s *Server) Broadcast(eventType string, data interface{}) {
 	s.clientsMu.Lock()
 	defer s.clientsMu.Unlock()
 
+	if s.SkipEvents {
+		return
+	}
+
 	payload := map[string]interface{}{
 		"event": eventType,
 		"data":  data,
@@ -152,10 +221,12 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 	s.mu.Unlock()
 
 	// Check if path exists
-	if activePath == "" {
-		return fmt.Errorf("invalid path")
-	}
+	// Check if path exists
+	// if activePath == "" {
+	// 	return fmt.Errorf("invalid path")
+	// }
 
+	s.activePath = activePath
 	s.libraries = libraries
 
 	mux := http.NewServeMux()
@@ -269,6 +340,43 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		})
 	}))
 
+	// Auth: List Sessions
+	mux.Handle("/api/auth/sessions", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sessions, err := s.auth.ListSessions()
+		if err != nil {
+			s.writeError(w, err.Error(), 500)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(sessions)
+	})))
+
+	// Auth: Revoke Session
+	mux.Handle("/api/auth/revoke", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ID string `json:"id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.writeError(w, "Invalid request body", 400)
+			return
+		}
+
+		if err := s.auth.RevokeSession(req.ID); err != nil {
+			s.writeError(w, err.Error(), 500)
+			return
+		}
+
+		// Broadcast check event to force clients to re-validate
+		s.Broadcast("auth:check", nil)
+
+		json.NewEncoder(w).Encode(map[string]bool{"success": true})
+	})))
+
 	// API Endpoint
 	mux.Handle("/api/packages", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -279,27 +387,16 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 			targetPath = activePath
 		}
 
+		if targetPath == "" {
+			s.writeError(w, "No library path selected", 400)
+			return
+		}
+
 		s.log(fmt.Sprintf("Client requested packages for: %s", targetPath))
 
 		// Security: Ensure targetPath is in allowed libraries
-		// Normalize paths for comparison (handle slashes and case)
-		allowed := false
-		cleanTarget := strings.ToLower(filepath.Clean(targetPath))
-		cleanActive := strings.ToLower(filepath.Clean(activePath))
-
-		if cleanTarget == cleanActive {
-			allowed = true
-		} else {
-			for _, lib := range s.libraries {
-				if strings.ToLower(filepath.Clean(lib)) == cleanTarget {
-					allowed = true
-					break
-				}
-			}
-		}
-
-		if !allowed {
-			s.log(fmt.Sprintf("Access denied. Target: %s, Allowed: %v", cleanTarget, s.libraries))
+		if !s.IsPathAllowed(targetPath) {
+			s.log(fmt.Sprintf("Access denied. Target: %s", targetPath))
 			s.writeError(w, "Access denied to this library path", 403)
 			return
 		}
@@ -348,23 +445,13 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 			targetPath = activePath
 		}
 
-		// Security: Ensure targetPath is in allowed libraries
-		cleanTarget := strings.ToLower(filepath.Clean(targetPath))
-		cleanActive := strings.ToLower(filepath.Clean(activePath))
-		allowed := false
-
-		if cleanTarget == cleanActive {
-			allowed = true
-		} else {
-			for _, lib := range s.libraries {
-				if strings.ToLower(filepath.Clean(lib)) == cleanTarget {
-					allowed = true
-					break
-				}
-			}
+		if targetPath == "" {
+			s.writeError(w, "No library path selected", 400)
+			return
 		}
 
-		if !allowed {
+		// Security: Ensure targetPath is in allowed libraries
+		if !s.IsPathAllowed(targetPath) {
 			s.writeError(w, "Access denied", 403)
 			return
 		}
@@ -387,24 +474,13 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 			return
 		}
 
+		// If activePath is empty and filePath is not in libraries, this might fail blindly or allow if logic is flawed.
+		// If activePath is empty, strings.HasPrefix check for it might behave oddly?
+		// strings.HasPrefix("anything", "") is TRUE.
+		// So we MUST check if activePath is empty before allowing based on it.
+
 		// Security Check
-		cleanTarget := strings.ToLower(filepath.Clean(filePath))
-		cleanActive := strings.ToLower(filepath.Clean(activePath))
-		allowed := false
-
-		if strings.HasPrefix(cleanTarget, cleanActive) {
-			allowed = true
-		} else {
-			for _, lib := range s.libraries {
-				cleanLib := strings.ToLower(filepath.Clean(lib))
-				if strings.HasPrefix(cleanTarget, cleanLib) {
-					allowed = true
-					break
-				}
-			}
-		}
-
-		if !allowed {
+		if !s.IsPathAllowed(filePath) {
 			s.writeError(w, "Access denied", 403)
 			return
 		}
@@ -435,26 +511,8 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		}
 
 		// Security Check
-		cleanTarget := strings.ToLower(filepath.Clean(req.FilePath))
-		cleanActive := strings.ToLower(filepath.Clean(activePath))
-		allowed := false
-
-		if cleanTarget == cleanActive {
-			allowed = true // Should not happen for file, but path logic
-		} else if strings.HasPrefix(cleanTarget, cleanActive+string(os.PathSeparator)) {
-			allowed = true
-		} else {
-			for _, lib := range s.libraries {
-				cleanLib := strings.ToLower(filepath.Clean(lib))
-				if strings.HasPrefix(cleanTarget, cleanLib+string(os.PathSeparator)) {
-					allowed = true
-					break
-				}
-			}
-		}
-
-		if !allowed {
-			s.writeError(w, "Access denied: File not in allowed libraries", 403)
+		if !s.IsPathAllowed(req.FilePath) {
+			s.writeError(w, "Access denied", 403)
 			return
 		}
 
@@ -470,12 +528,42 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 
 	// Config Endpoint
 	mux.Handle("/api/config", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			// Update Config
+			var req map[string]interface{}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				s.writeError(w, err.Error(), 400)
+				return
+			}
+
+			err := s.manager.UpdateConfig(func(cfg *config.Config) {
+				// Update Public Access
+				if val, ok := req["publicAccess"]; ok {
+					if v, ok := val.(bool); ok {
+						cfg.PublicAccess = v
+					}
+				}
+			})
+
+			if err != nil {
+				s.writeError(w, "Failed to update config: "+err.Error(), 500)
+				return
+			}
+
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]bool{"success": true})
+			return
+		}
+
+		// GET Request
+		cfg := s.manager.GetConfig()
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"webMode":   true,
-			"path":      activePath,
-			"libraries": s.libraries,
-			"version":   s.version,
+			"webMode":      true,
+			"path":         activePath,
+			"libraries":    s.libraries,
+			"version":      s.version,
+			"publicAccess": cfg.PublicAccess,
 		})
 	})))
 
@@ -511,22 +599,7 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		}
 
 		// Security Check
-		cleanTarget := strings.ToLower(filepath.Clean(targetPath))
-		cleanActive := strings.ToLower(filepath.Clean(activePath))
-		allowed := false
-
-		if cleanTarget == cleanActive {
-			allowed = true
-		} else {
-			for _, lib := range s.libraries {
-				if strings.ToLower(filepath.Clean(lib)) == cleanTarget {
-					allowed = true
-					break
-				}
-			}
-		}
-
-		if !allowed {
+		if !s.IsPathAllowed(targetPath) {
 			s.writeError(w, "Access denied: Invalid library path", 403)
 			return
 		}
@@ -632,8 +705,14 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		}
 
 		// Security Check
-		rel, err := filepath.Rel(targetLib, req.FilePath)
-		if err != nil || strings.HasPrefix(rel, "..") {
+		// Ensure targetLib is allowed library
+		if !s.IsPathAllowed(targetLib) {
+			s.writeError(w, "Security violation: Invalid library", 403)
+			return
+		}
+
+		// Ensure file path is allowed (redundant if checking parent, but safer)
+		if !s.IsPathAllowed(req.FilePath) {
 			s.writeError(w, "Security violation: Invalid file path", 403)
 			return
 		}
@@ -713,19 +792,7 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		// CopyPackagesToLibrary reads from src.
 		// We should validate sources are in s.libraries OR activePath.
 		for _, src := range req.FilePaths {
-			cleanSrc := strings.ToLower(filepath.Clean(src))
-			allowed := false
-			if strings.HasPrefix(cleanSrc, strings.ToLower(activePath)) {
-				allowed = true
-			} else {
-				for _, lib := range s.libraries {
-					if strings.HasPrefix(cleanSrc, strings.ToLower(lib)) {
-						allowed = true
-						break
-					}
-				}
-			}
-			if !allowed {
+			if !s.IsPathAllowed(src) {
 				s.writeError(w, fmt.Sprintf("Access denied: Source file %s not in allowed libraries", src), 403)
 				return
 			}
@@ -779,22 +846,7 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		}
 
 		// Security Check
-		cleanTarget := strings.ToLower(filepath.Clean(targetPath))
-		cleanActive := strings.ToLower(filepath.Clean(activePath))
-		allowed := false
-
-		if cleanTarget == cleanActive {
-			allowed = true
-		} else {
-			for _, lib := range s.libraries {
-				if strings.ToLower(filepath.Clean(lib)) == cleanTarget {
-					allowed = true
-					break
-				}
-			}
-		}
-
-		if !allowed {
+		if !s.IsPathAllowed(targetPath) {
 			s.writeError(w, "Access denied: Invalid library path", 403)
 			return
 		}
@@ -856,22 +908,7 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		}
 
 		// Security Check: targetFile must be inside one of the libraries
-		allowed := false
-
-		// Check activePath first
-		if s.isSafePath(targetFile, activePath) {
-			allowed = true
-		} else {
-			// Check other libraries
-			for _, lib := range s.libraries {
-				if s.isSafePath(targetFile, lib) {
-					allowed = true
-					break
-				}
-			}
-		}
-
-		if !allowed {
+		if !s.IsPathAllowed(targetFile) {
 			s.writeError(w, "Access denied: File not in allowed libraries", 403)
 			return
 		}

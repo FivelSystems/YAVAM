@@ -25,6 +25,41 @@ export namespace auth {
 
 }
 
+export namespace config {
+	
+	export class Config {
+	    vamPath: string;
+	    libraries: string[];
+	    setupDone: boolean;
+	    theme: string;
+	    accentColor: string;
+	    autoScan: boolean;
+	    checkUpdates: boolean;
+	    useSymlinks: boolean;
+	    deleteToTrash: boolean;
+	    publicAccess: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Config(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.vamPath = source["vamPath"];
+	        this.libraries = source["libraries"];
+	        this.setupDone = source["setupDone"];
+	        this.theme = source["theme"];
+	        this.accentColor = source["accentColor"];
+	        this.autoScan = source["autoScan"];
+	        this.checkUpdates = source["checkUpdates"];
+	        this.useSymlinks = source["useSymlinks"];
+	        this.deleteToTrash = source["deleteToTrash"];
+	        this.publicAccess = source["publicAccess"];
+	    }
+	}
+
+}
+
 export namespace manager {
 	
 	export class DiskSpaceInfo {

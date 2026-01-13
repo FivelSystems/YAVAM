@@ -71,6 +71,8 @@ interface SettingsModalProps {
     logs: string[];
     setLogs: React.Dispatch<React.SetStateAction<string[]>>;
     isWeb: boolean;
+    publicAccess: boolean;
+    onTogglePublicAccess: () => void;
 }
 
 const SettingsModal = ({
@@ -94,6 +96,8 @@ const SettingsModal = ({
     logs,
     setLogs,
     isWeb,
+    publicAccess,
+    onTogglePublicAccess
 }: SettingsModalProps) => {
     // Password Change State
     const [newPassword, setNewPassword] = useState("");
@@ -471,6 +475,39 @@ const SettingsModal = ({
                                     )} />
                                 </button>
                             </div>
+
+                            {/* Public Access Toggle (Server Only) */}
+                            {serverEnabled && (
+                                <div className="bg-gray-700/20 border border-gray-700/50 rounded-xl p-4 mb-4">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <h4 className="text-sm font-medium text-white flex items-center gap-2">
+                                                Public Access
+                                                {publicAccess && <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded border border-red-500/30 uppercase font-bold">Insecure</span>}
+                                            </h4>
+                                            <p className="text-xs text-gray-500">Allow unauthenticated guests to view your library (Read Only).</p>
+                                        </div>
+                                        <button
+                                            onClick={onTogglePublicAccess}
+                                            className={clsx(
+                                                "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+                                                publicAccess ? "bg-red-500" : "bg-gray-700"
+                                            )}
+                                        >
+                                            <span className={clsx(
+                                                "inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200",
+                                                publicAccess ? "translate-x-6" : "translate-x-1"
+                                            )} />
+                                        </button>
+                                    </div>
+                                    {publicAccess && (
+                                        <div className="mt-3 text-xs bg-red-900/20 border border-red-900/30 text-red-300 p-2 rounded flex items-start gap-2">
+                                            <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                                            <p>ANYONE on your local network (Wi-Fi) can view your library without a password. Sensitive actions (Delete, Install, Settings) are still protected.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             {/* Password Change Section */}
                             <div className="bg-black/30 rounded-xl p-4 border border-gray-700/50 space-y-4">

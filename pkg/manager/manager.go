@@ -24,6 +24,14 @@ type Manager struct {
 	config   config.ConfigService
 }
 
+func (m *Manager) GetConfig() *config.Config {
+	return m.config.Get()
+}
+
+func (m *Manager) UpdateConfig(fn func(*config.Config)) error {
+	return m.config.Update(fn)
+}
+
 func NewManager(sys system.SystemService, lib library.LibraryService, cfg config.ConfigService) *Manager {
 	configDir, _ := os.UserConfigDir()
 	// Standard Location: %AppData%\YAVAM
