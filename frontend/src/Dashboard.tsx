@@ -603,7 +603,7 @@ function Dashboard(): JSX.Element {
     const [contextMenu, setContextMenu] = useState<{ open: boolean, x: number, y: number, pkg: VarPackage | null }>({ open: false, x: 0, y: 0, pkg: null });
 
     // Delete Confirmation State
-    const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean, pkg: VarPackage | null }>({ open: false, pkg: null });
+    const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean, pkg: VarPackage | null, pkgs?: VarPackage[], count?: number }>({ open: false, pkg: null });
 
     // Collision Confirmation State
     const [collisionData, setCollisionData] = useState<{ open: boolean, pkg: VarPackage | null }>({ open: false, pkg: null });
@@ -1437,7 +1437,13 @@ function Dashboard(): JSX.Element {
 
 
     const handleDeleteClick = (pkg: VarPackage) => {
-        setDeleteConfirm({ open: true, pkg });
+        // Multi-selection check
+        if (selectedIds.has(pkg.filePath) && selectedIds.size > 1) {
+            const targets = packages.filter(p => selectedIds.has(p.filePath));
+            setDeleteConfirm({ open: true, pkg, pkgs: targets, count: targets.length });
+        } else {
+            setDeleteConfirm({ open: true, pkg });
+        }
     };
 
     // ...
@@ -1445,26 +1451,41 @@ function Dashboard(): JSX.Element {
 
 
     const handleConfirmDelete = async () => {
-        if (deleteConfirm.pkg) {
-            try {
+        const targets = deleteConfirm.pkgs && deleteConfirm.pkgs.length > 0
+            ? deleteConfirm.pkgs
+            : (deleteConfirm.pkg ? [deleteConfirm.pkg] : []);
+
+        if (targets.length === 0) return;
+
+        try {
+            let deletedCount = 0;
+            for (const p of targets) {
                 // @ts-ignore
                 if (window.go) {
                     // @ts-ignore
-                    await window.go.main.App.DeleteFileToRecycleBin(deleteConfirm.pkg.filePath);
+                    await window.go.main.App.DeleteFileToRecycleBin(p.filePath);
                 } else {
                     const res = await fetch('/api/delete', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ filePath: deleteConfirm.pkg.filePath })
+                        body: JSON.stringify({ filePath: p.filePath, libraryPath: activeLibraryPath })
                     }).then(r => r.json());
-                    if (!res.success) throw new Error("Delete failed");
+                    if (!res.success) throw new Error("Delete failed for " + p.fileName);
                 }
-                setDeleteConfirm({ open: false, pkg: null });
-                scanPackages(); // Refresh list after delete
-            } catch (e) {
-                console.error(e);
-                alert("Failed to delete file: " + e); // Fallback alert for error
+                deletedCount++;
             }
+
+            if (deletedCount > 1) addToast(`Deleted ${deletedCount} packages`, 'success');
+            else addToast("Package deleted", 'success');
+
+            setDeleteConfirm({ open: false, pkg: null, pkgs: [] });
+            setSelectedIds(new Set()); // Clear selection
+            setSelectedPackage(null);
+            scanPackages(); // Refresh list after delete
+        } catch (e: any) {
+            console.error(e);
+            alert("Delete failed: " + e.message || e);
+            setDeleteConfirm({ open: false, pkg: null }); // Close anyway or keep open? Close is safer UI
         }
     };
 
@@ -2015,8 +2036,11 @@ function Dashboard(): JSX.Element {
                     isOpen={deleteConfirm.open}
                     onClose={() => setDeleteConfirm({ open: false, pkg: null })}
                     onConfirm={handleConfirmDelete}
-                    title="Delete Package"
-                    message={`Are you sure you want to delete "${deleteConfirm.pkg?.fileName}"? It will be moved to the Recycle Bin.`}
+                    title={deleteConfirm.count && deleteConfirm.count > 1 ? `Delete ${deleteConfirm.count} Packages?` : "Delete Package"}
+                    message={deleteConfirm.count && deleteConfirm.count > 1
+                        ? `Are you sure you want to delete these ${deleteConfirm.count} items? They will be moved to the Recycle Bin.`
+                        : `Are you sure you want to delete "${deleteConfirm.pkg?.fileName}"? It will be moved to the Recycle Bin.`
+                    }
                     confirmText="Delete"
                     confirmStyle="danger"
                 />
