@@ -3,27 +3,26 @@ import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { RefreshCw, Search, X, PanelLeft, LayoutGrid, List, Filter, WifiOff, ArrowUpDown, Calendar, ArrowUpAZ, ArrowDownZA, ArrowDownWideNarrow, ArrowUpNarrowWide } from 'lucide-react';
 import clsx from 'clsx';
-import { Toast, ToastItem, ToastType } from './components/Toast';
-import DragDropOverlay from './components/DragDropOverlay';
-import ContextMenu from './components/ContextMenu';
+import { Toast, ToastItem, ToastType } from './components/ui/Toast';
+import DragDropOverlay from './features/upload/DragDropOverlay';
+import ContextMenu from './components/ui/ContextMenu';
 
-import CardGrid from './components/CardGrid';
-import Sidebar from './components/Sidebar';
+import CardGrid from './features/library/CardGrid';
+import Sidebar from './features/library/Sidebar';
 
 
-import SettingsModal from './components/SettingsModal';
-import ConfirmationModal from './components/ConfirmationModal';
-import RightSidebar from './components/RightSidebar';
-import TitleBar from './components/TitleBar';
-import SetupWizard from './components/SetupWizard';
-import { UpgradeModal } from "./components/UpgradeModal";
-import { Pagination } from './components/Pagination';
-import { ScanProgressBar } from './components/ScanProgressBar';
-import { OptimizationModal, ManualPlan } from './components/OptimizationModal';
-import { OptimizationProgressModal } from './components/OptimizationProgressModal';
-import { InstallPackageModal } from './components/InstallPackageModal';
-import { UploadModal } from './components/UploadModal';
-// import { LoginModal } from './components/LoginModal';
+import SettingsModal from './features/settings/SettingsModal';
+import ConfirmationModal from './components/common/ConfirmationModal';
+import RightSidebar from './features/library/RightSidebar';
+import TitleBar from './components/layout/TitleBar';
+import SetupWizard from './features/setup/SetupWizard';
+import { UpgradeModal } from "./features/packages/UpgradeModal";
+import { Pagination } from './components/common/Pagination';
+import { ScanProgressBar } from './components/common/ScanProgressBar';
+import { OptimizationModal, ManualPlan } from './features/settings/OptimizationModal';
+import { OptimizationProgressModal } from './features/settings/OptimizationProgressModal';
+import { InstallPackageModal } from './features/packages/InstallPackageModal';
+import { UploadModal } from './features/upload/UploadModal';
 import { getStoredToken, logout } from './services/auth';
 
 // Define types based on our Go models

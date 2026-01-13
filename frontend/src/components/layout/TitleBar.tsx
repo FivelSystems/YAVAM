@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Minus, Square, X, Pin } from 'lucide-react';
-import { WindowMinimise, WindowToggleMaximise, Quit } from '../wailsjs/runtime/runtime';
+import { WindowMinimise, WindowToggleMaximise, Quit } from '../../wailsjs/runtime/runtime';
 
 const TitleBar = () => {
     const [isPinned, setIsPinned] = useState(false);
