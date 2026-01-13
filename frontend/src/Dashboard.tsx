@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+// import { useNavigate } from 'react-router-dom'; // Unused
 import { AnimatePresence, motion } from 'framer-motion';
 import { RefreshCw, Search, X, PanelLeft, LayoutGrid, List, Filter, WifiOff, ArrowUpDown, Calendar, ArrowUpAZ, ArrowDownZA, ArrowDownWideNarrow, ArrowUpNarrowWide } from 'lucide-react';
 import clsx from 'clsx';
@@ -11,7 +11,7 @@ import CardGrid from './features/library/CardGrid';
 import Sidebar from './features/library/Sidebar';
 
 
-import SettingsModal from './features/settings/SettingsModal';
+import SettingsDialog from './features/settings/SettingsDialog';
 import ConfirmationModal from './components/common/ConfirmationModal';
 import RightSidebar from './features/library/RightSidebar';
 import TitleBar from './components/layout/TitleBar';
@@ -29,7 +29,6 @@ import { getStoredToken, logout } from './services/auth';
 import { VarPackage } from './types';
 
 function Dashboard(): JSX.Element {
-    const navigate = useNavigate();
     // Setup State
     const [needsSetup, setNeedsSetup] = useState(false);
     const [isCancelling, setIsCancelling] = useState(false);
@@ -41,15 +40,7 @@ function Dashboard(): JSX.Element {
 
     // Auth State removed (handled by Router)
 
-    // Initial Auth Check & Logout Listener
-    useEffect(() => {
-        // Listen for logout events
-        const handleLogout = () => {
-            navigate('/login');
-        };
-        window.addEventListener('auth:logout', handleLogout);
-        return () => window.removeEventListener('auth:logout', handleLogout);
-    }, [navigate]);
+    // Initial Auth Check & Logout Listener removed - handled by AuthContext (LoginModal)
 
     const hasCheckedUpdates = useRef(false);
 
@@ -471,20 +462,29 @@ function Dashboard(): JSX.Element {
     const [selectedType, setSelectedType] = useState<string | null>(null);
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
     const [censorThumbnails, setCensorThumbnails] = useState(() => localStorage.getItem('censorThumbnails') === 'true');
+    const [blurAmount, setBlurAmount] = useState(() => parseInt(localStorage.getItem('blurAmount') || '10'));
+    const [hidePackageNames, setHidePackageNames] = useState(() => localStorage.getItem('hidePackageNames') === 'true');
+    const [hideCreatorNames, setHideCreatorNames] = useState(() => localStorage.getItem('hideCreatorNames') === 'true');
+
+    // Persist Privacy Settings
+    useEffect(() => {
+        localStorage.setItem('censorThumbnails', censorThumbnails.toString());
+        localStorage.setItem('blurAmount', blurAmount.toString());
+        localStorage.setItem('hidePackageNames', hidePackageNames.toString());
+        localStorage.setItem('hideCreatorNames', hideCreatorNames.toString());
+    }, [censorThumbnails, blurAmount, hidePackageNames, hideCreatorNames]);
+
+    // Network & System State (Lifted for SettingsDialog)
+
+
 
     // Keybinds State
-    const [keybinds, setKeybinds] = useState<{ [key: string]: string }>(() => {
+    const [keybinds] = useState<{ [key: string]: string }>(() => {
         const saved = localStorage.getItem('keybinds');
         return saved ? JSON.parse(saved) : { togglePrivacy: 'v' };
     });
 
-    const updateKeybind = (action: string, key: string) => {
-        setKeybinds(prev => {
-            const next = { ...prev, [action]: key };
-            localStorage.setItem('keybinds', JSON.stringify(next));
-            return next;
-        });
-    };
+
 
     // Hotkey Listener
     useEffect(() => {
@@ -546,7 +546,22 @@ function Dashboard(): JSX.Element {
         localStorage.setItem('itemsPerPage', val.toString());
     };
 
-    // Settings
+    // Server State Init
+
+
+
+
+    const handleClearData = async () => {
+        if (!confirm("Are you sure? This will reset all settings and cache.")) return;
+        // @ts-ignore
+        if (window.go) await window.go.main.App.ClearAppData();
+        window.location.reload();
+    };
+
+    // Settings State Wrapped
+
+    const [minimizeOnClose, setMinimizeOnClose] = useState(false); // Placeholder
+
     // Settings
     // (State moved to top)
     const [gridSize, setGridSize] = useState(parseInt(localStorage.getItem("gridSize") || "160"));
@@ -840,25 +855,18 @@ function Dashboard(): JSX.Element {
     }, []);
 
     const handleToggleServer = async () => {
-        // @ts-ignore
-        if (window.go) {
-            if (serverEnabled) {
-                // @ts-ignore
-                await window.go.main.App.StopServer();
-                setServerEnabled(false);
-                addToast("Server Stopped", "info");
-            } else {
-                try {
-                    // @ts-ignore
-                    await window.go.main.App.StartServer(serverPort, activeLibraryPath, libraries);
-                    setServerEnabled(true);
-                    addToast("Server Started", "success");
-                } catch (e: any) {
-                    addToast("Failed to start server: " + (e.message || e), "error");
-                }
-            }
+        const newState = !serverEnabled;
+        try {
+            // @ts-ignore
+            if (window.go) await window.go.main.App.ToggleServer(newState);
+            setServerEnabled(newState);
+            addToast(`Server ${newState ? 'Started' : 'Stopped'}`, 'success');
+        } catch (e) {
+            console.error(e);
+            addToast("Failed to toggle server", 'error');
         }
     };
+
 
 
     // Filters
@@ -2000,37 +2008,38 @@ function Dashboard(): JSX.Element {
 
 
 
-                <SettingsModal
+                <SettingsDialog
                     isOpen={isSettingsOpen}
                     onClose={() => setIsSettingsOpen(false)}
+                    isGuest={false} // Connect to AuthContext proper later
+                    isWeb={!window.go}
                     gridSize={gridSize}
-                    setGridSize={(size) => {
-                        setGridSize(size);
-                        localStorage.setItem("gridSize", size.toString());
-                    }}
+                    setGridSize={(v) => { setGridSize(v); localStorage.setItem('gridSize', v.toString()); }}
                     itemsPerPage={itemsPerPage}
                     setItemsPerPage={handleSetItemsPerPage}
-                    maxToasts={maxToasts}
-                    setMaxToasts={(val) => {
-                        setMaxToasts(val);
-                        localStorage.setItem('maxToasts', val.toString());
-                    }}
-                    // Server Props
+                    minimizeOnClose={minimizeOnClose}
+                    handleSetMinimize={setMinimizeOnClose}
+                    censorThumbnails={censorThumbnails}
+                    setCensorThumbnails={(v) => { setCensorThumbnails(v); localStorage.setItem('censorThumbnails', v.toString()); }}
+                    blurAmount={blurAmount}
+                    setBlurAmount={setBlurAmount}
+                    hidePackageNames={hidePackageNames}
+                    setHidePackageNames={setHidePackageNames}
+                    hideCreatorNames={hideCreatorNames}
+                    setHideCreatorNames={setHideCreatorNames}
                     serverEnabled={serverEnabled}
                     onToggleServer={handleToggleServer}
                     serverPort={serverPort}
                     setServerPort={setServerPort}
+                    publicAccess={publicAccess}
+                    onTogglePublicAccess={handleTogglePublicAccess}
                     localIP={localIP}
                     logs={serverLogs}
                     setLogs={setServerLogs}
-                    // @ts-ignore
-                    isWeb={!window.go}
-                    publicAccess={publicAccess}
-                    onTogglePublicAccess={handleTogglePublicAccess}
-                    censorThumbnails={censorThumbnails}
-                    setCensorThumbnails={setCensorThumbnails}
-                    keybinds={keybinds}
-                    onUpdateKeybind={updateKeybind}
+                    maxToasts={maxToasts}
+                    setMaxToasts={(v) => { setMaxToasts(v); localStorage.setItem('maxToasts', v.toString()); }}
+                    handleClearData={handleClearData}
+                    addToast={addToast}
                 />
                 <ConfirmationModal
                     isOpen={deleteConfirm.open}
@@ -2445,6 +2454,9 @@ function Dashboard(): JSX.Element {
                                     viewMode={viewMode}
                                     gridSize={gridSize}
                                     censorThumbnails={censorThumbnails}
+                                    blurAmount={blurAmount}
+                                    hidePackageNames={hidePackageNames}
+                                    hideCreatorNames={hideCreatorNames}
                                 />
                             </div>
 
@@ -2597,6 +2609,7 @@ function Dashboard(): JSX.Element {
         </div>
     );
 }
+
 
 
 export default Dashboard;

@@ -15,9 +15,12 @@ interface CardGridProps {
     viewMode: 'grid' | 'list';
     gridSize?: number;
     censorThumbnails?: boolean;
+    blurAmount?: number;
+    hidePackageNames?: boolean;
+    hideCreatorNames?: boolean;
 }
 
-const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, selectedPkgId, selectedIds, viewMode, gridSize = 150, censorThumbnails = false }: CardGridProps) => {
+const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, selectedPkgId, selectedIds, viewMode, gridSize = 150, censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false }: CardGridProps) => {
 
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -75,6 +78,9 @@ const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, 
                                 isSelected={selectedIds ? selectedIds.has(pkg.filePath) : pkg.filePath === selectedPkgId}
                                 viewMode={viewMode}
                                 censorThumbnails={censorThumbnails}
+                                blurAmount={blurAmount}
+                                hidePackageNames={hidePackageNames}
+                                hideCreatorNames={hideCreatorNames}
                             />
                         </motion.div>
                     ))}
