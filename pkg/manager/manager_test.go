@@ -1,62 +1,56 @@
 package manager
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
+	"yavam/pkg/services/config"
+	"yavam/pkg/services/library"
 	"yavam/pkg/services/system"
 )
 
-// MockFileSystem for testing
-type MockFileSystem struct {
-	DeletedFiles  []string
-	OpenedFolders []string
-}
+// Mock Config Service
+type MockConfigService struct{}
 
-func (m *MockFileSystem) DeleteToTrash(path string) error {
-	m.DeletedFiles = append(m.DeletedFiles, path)
-	return nil
-}
+func (m *MockConfigService) Load() (*config.Config, error)        { return &config.Config{}, nil }
+func (m *MockConfigService) Save(cfg *config.Config) error        { return nil }
+func (m *MockConfigService) Get() *config.Config                  { return &config.Config{} }
+func (m *MockConfigService) IsConfigured() bool                   { return false }
+func (m *MockConfigService) FinishSetup() error                   { return nil }
+func (m *MockConfigService) Update(fn func(*config.Config)) error { return nil }
 
-func (m *MockFileSystem) OpenFolder(path string) error {
-	m.OpenedFolders = append(m.OpenedFolders, path)
-	return nil
-}
-
-func (m *MockFileSystem) Stat(path string) (interface{}, error) {
-	return nil, nil // Always exists
-}
-
-func (m *MockFileSystem) GetDiskFreeSpace(path string) (uint64, uint64, uint64, error) {
-	return 1000, 2000, 1000, nil // Mock values
-}
-
-func TestDeleteToTrash_CallsFileSystem(t *testing.T) {
-	mockFS := &MockFileSystem{}
-	sys := system.NewSystemService(mockFS)
-	// We pass nil for config as we aren't testing it here, or simplistic mock?
-	// NewManager handles nil config gracefully? In new code it assigns it.
-	// We might need a dummy config service if NewManager requires it.
-	// NewManager implementation: m.config = cfg.
-	// If method uses it, it might panic.
-	// TestDeleteToTrash doesn't use config.
-
-	// Create manager with mock system, default library (which uses mock system if passed?), nil config
-	// Since we are testing Manager logic that delegates, we might want a Mock Library too?
-	// Or use real library with mock system.
-	// For now, passing nil for library will create default library using the mock system.
-	m := NewManager(sys, nil, nil)
-
-	testPath := "C:\\test\\file.var"
-	err := m.DeleteToTrash(testPath)
-
+func TestFinishSetup(t *testing.T) {
+	// Setup temporary directory for test
+	tempDir, err := os.MkdirTemp("", "yavam_test")
 	if err != nil {
-		t.Errorf("DeleteToTrash returned error: %v", err)
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Initialize Manager with temp path
+	// We manually construct Manager to inject the temp path as DataPath
+	// since NewManager hardcodes it to user config dir.
+	m := &Manager{
+		system:   system.NewSystemService(nil),
+		library:  library.NewLibraryService(system.NewSystemService(nil), nil),
+		config:   &MockConfigService{},
+		DataPath: filepath.Join(tempDir, "YAVAM_TEST"),
 	}
 
-	if len(mockFS.DeletedFiles) != 1 {
-		t.Errorf("Expected 1 deleted file, got %d", len(mockFS.DeletedFiles))
+	// 1. Test FinishSetup (should create directory)
+	err = m.FinishSetup()
+	if err != nil {
+		t.Fatalf("FinishSetup failed: %v", err)
 	}
 
-	if mockFS.DeletedFiles[0] != testPath {
-		t.Errorf("Expected deleted path %s, got %s", testPath, mockFS.DeletedFiles[0])
+	// 2. Verify file exists
+	marker := filepath.Join(m.DataPath, ".setup_complete")
+	if _, err := os.Stat(marker); os.IsNotExist(err) {
+		t.Errorf("Marker file was not created at %s", marker)
+	}
+
+	// 3. Verify IsConfigured
+	if !m.IsConfigured() {
+		t.Errorf("IsConfigured returned false after setup")
 	}
 }

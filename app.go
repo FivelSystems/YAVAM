@@ -99,6 +99,23 @@ func (a *App) startup(ctx context.Context) {
 	a.server = server.NewServer(ctx, a.manager, a.auth, subAssets, a.GetAppVersion(), func() {
 		runtime.WindowShow(ctx)
 	})
+
+	// Check Server Config
+	cfg := a.manager.GetConfig()
+	if cfg.ServerEnabled {
+		go func() {
+			// Small delay to ensure UI ready? Or just start.
+			// Start on default port 8080 or need config for port?
+			// Defaulting to 8080 for now as it's not in config yet.
+			// Path defaults to active (Vam) path.
+			// Config VamPath might be empty if just setup,
+			// but if ServerEnabled is true, VamPath should be set.
+			if cfg.VamPath != "" {
+				// We need to pass the libraries as well
+				a.server.Start("8080", cfg.VamPath, cfg.Libraries)
+			}
+		}()
+	}
 }
 
 func (a *App) GetPackageContents(pkgPath string) ([]models.PackageContent, error) {
@@ -540,6 +557,13 @@ func (a *App) ApplyUpdate(url string) error {
 func (a *App) SetPublicAccess(enabled bool) error {
 	return a.manager.UpdateConfig(func(cfg *config.Config) {
 		cfg.PublicAccess = enabled
+	})
+}
+
+// SetServerEnabled toggles the HTTP Server on startup
+func (a *App) SetServerEnabled(enabled bool) error {
+	return a.manager.UpdateConfig(func(cfg *config.Config) {
+		cfg.ServerEnabled = enabled
 	})
 }
 
