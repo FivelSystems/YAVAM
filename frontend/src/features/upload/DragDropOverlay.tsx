@@ -1,6 +1,6 @@
 import { Upload } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { OnFileDrop, OnFileDropOff } from '../wailsjs/runtime/runtime';
+import { OnFileDrop, OnFileDropOff } from '../../wailsjs/runtime/runtime';
 
 interface DragDropOverlayProps {
     onDrop: (files: string[]) => void;

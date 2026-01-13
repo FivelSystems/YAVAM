@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
-import { VarPackage } from '../types';
+import { VarPackage } from '../../types';
 import clsx from 'clsx';
 import { AlertCircle, Check, AlertTriangle, Power, Copy } from 'lucide-react';
 import { motion } from 'framer-motion';

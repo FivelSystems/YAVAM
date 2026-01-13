@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { X, Sparkles, Layers, AlertTriangle } from 'lucide-react';
 import clsx from 'clsx';
-import { VarPackage } from '../types';
+import { VarPackage } from '../../types';
 
 interface OptimizationModalProps {
     isOpen: boolean;

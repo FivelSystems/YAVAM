@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { X, Download, Library, CheckCircle, Loader2, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { clsx } from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
-import { VarPackage } from '../types';
+import { VarPackage } from '../../types';
 
 interface InstallPackageModalProps {
     isOpen: boolean;

@@ -28,6 +28,7 @@
 - **Critical:** Removed all dependencies on `powershell.exe` and `cmd.exe` for file operations to prevent Command Injection.
 - **Critical:** Implemented strict `PathValidator` and bound internal server to `127.0.0.1` to prevent Local Network exploits.
 - **Architecture:** Decoupled `Manager` from OS syscalls via new `FileSystem` interface (Dependency Injection).
+- **Frontend Refactor:** Reorganized source code into a Feature-based Architecture (`features/`, `components/`) for better maintainability.
 
 ## [v1.2.17] - 2026-01-12
 
