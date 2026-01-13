@@ -1,4 +1,8 @@
 ### Features
+- Redesign settings modal to improve categorization, find a new layout without breaking the existing mobile responsiveness.
+- Dedicated 'privacy' tab settings where censor/blur can be toggled on and off, and a slider to set the amount of blur.
+Additional toggles for enabling/disabling package name and package thumbnail when privacy mode is on.
+- (Queued for v1.4.0) Enhanced library management window with advanced settings and configs (See issue [#2](https://github.com/FivelSystems/YAVAM/issues/2))
 
 ### Bugs
 - The same client can trigger multiple login requests, causing the same device to appear multiple times in the active devices list

@@ -11,9 +11,12 @@ interface PackageCardProps {
     isSelected?: boolean;
     viewMode?: 'grid' | 'list';
     censorThumbnails?: boolean;
+    blurAmount?: number;
+    hidePackageNames?: boolean;
+    hideCreatorNames?: boolean;
 }
 
-const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'grid', censorThumbnails = false }: PackageCardProps) => {
+const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'grid', censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false }: PackageCardProps) => {
     const cardRef = useRef<HTMLDivElement>(null);
     const [thumbSrc, setThumbSrc] = useState<string | undefined>(
         pkg.thumbnailBase64 ? `data:image/jpeg;base64,${pkg.thumbnailBase64}` : undefined
@@ -116,8 +119,9 @@ const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'gri
                             loading="lazy"
                             className={clsx(
                                 "w-full h-full object-cover",
-                                censorThumbnails && "blur-[8px] scale-110" // Intensified Blur
+                                censorThumbnails && "scale-110" // Scale up to hide blur edges
                             )}
+                            style={censorThumbnails ? { filter: `blur(${blurAmount}px)` } : undefined}
                         />
                     ) : (
                         <div className="w-full h-full flex items-center justify-center text-gray-700 border border-gray-700">
@@ -129,14 +133,16 @@ const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'gri
                 {/* Info */}
                 <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-center mb-1">
-                        <h3 className="font-bold text-gray-200 text-sm truncate pr-2" title={pkg.fileName}>
+                        <h3 className={clsx("font-bold text-gray-200 text-sm truncate pr-2 transition-opacity", hidePackageNames && "opacity-0 select-none")} title={hidePackageNames ? "" : pkg.fileName}>
                             {pkg.meta.packageName || pkg.fileName}
                         </h3>
                         {/* Status Icon */}
                         <div className="shrink-0">{statusIcon}</div>
                     </div>
                     <div className="flex justify-between items-center text-xs text-gray-500">
-                        <span className="truncate">{pkg.meta.creator || "Unknown"}</span>
+                        <span className={clsx("truncate transition-opacity", hideCreatorNames && "opacity-0 select-none")}>
+                            {pkg.meta.creator || "Unknown"}
+                        </span>
                         <div className="flex gap-2">
                             <span>v{pkg.meta.version}</span>
                             <span>{(pkg.size / 1024 / 1024).toFixed(1)} MB</span>
@@ -172,8 +178,9 @@ const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'gri
                         loading="lazy"
                         className={clsx(
                             "w-full h-full object-cover transition-transform duration-500 group-hover:scale-110",
-                            censorThumbnails && "blur-[15px] scale-125" // Intense Blur
+                            censorThumbnails && "scale-125" // Scale up to hide blur edges
                         )}
+                        style={censorThumbnails ? { filter: `blur(${blurAmount}px)` } : undefined}
                     />
                 ) : (
                     <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
@@ -188,7 +195,7 @@ const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'gri
             {/* Content Overlay */}
             <div className="absolute inset-0 p-4 flex flex-col justify-end">
                 <div className="flex justify-between items-end gap-2 mb-1">
-                    <h3 className="font-bold text-white leading-tight line-clamp-2 drop-shadow-md text-sm sm:text-base">
+                    <h3 className={clsx("font-bold text-white leading-tight line-clamp-2 drop-shadow-md text-sm sm:text-base transition-all", hidePackageNames && "opacity-0 select-none")}>
                         {pkg.meta.packageName || pkg.fileName}
                     </h3>
                     {/* Status Icon Indicator */}
@@ -198,7 +205,9 @@ const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'gri
                 </div>
 
                 <div className="flex justify-between items-center text-xs text-gray-400 drop-shadow-sm">
-                    <span className="truncate max-w-[70%]">{pkg.meta.creator || "Unknown"}</span>
+                    <span className={clsx("truncate max-w-[70%] transition-opacity", hideCreatorNames && "opacity-0 select-none")}>
+                        {pkg.meta.creator || "Unknown"}
+                    </span>
                     <span>v{pkg.meta.version || "1"}</span>
                 </div>
 
