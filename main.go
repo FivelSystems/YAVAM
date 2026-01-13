@@ -4,8 +4,8 @@ import (
 	"embed"
 	"os"
 	"path/filepath"
-	"varmanager/pkg/manager"
-	"varmanager/pkg/services/config"
+	"yavam/pkg/manager"
+	"yavam/pkg/services/config"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"

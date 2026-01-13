@@ -1,6 +1,6 @@
 package manager
 
-import "varmanager/pkg/parser"
+import "yavam/pkg/parser"
 
 // GetThumbnail extracts the thumbnail from a package
 func (m *Manager) GetThumbnail(filePath string) ([]byte, error) {

@@ -1,9 +1,9 @@
 package library
 
 import (
-	"varmanager/pkg/fs"
-	"varmanager/pkg/scanner"
-	"varmanager/pkg/services/system"
+	"yavam/pkg/fs"
+	"yavam/pkg/scanner"
+	"yavam/pkg/services/system"
 )
 
 type defaultLibraryService struct {

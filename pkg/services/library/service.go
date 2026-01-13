@@ -2,7 +2,7 @@ package library
 
 import (
 	"context"
-	"varmanager/pkg/models"
+	"yavam/pkg/models"
 )
 
 // LibraryService defines the core operations for VAM Package Management

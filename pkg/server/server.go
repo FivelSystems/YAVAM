@@ -13,10 +13,10 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"varmanager/pkg/manager"
-	"varmanager/pkg/models"
-	"varmanager/pkg/services/auth"
-	"varmanager/pkg/updater"
+	"yavam/pkg/manager"
+	"yavam/pkg/models"
+	"yavam/pkg/services/auth"
+	"yavam/pkg/updater"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )

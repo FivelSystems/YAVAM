@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"unicode/utf8"
-	"varmanager/pkg/models"
+	"yavam/pkg/models"
 
 	"golang.org/x/text/encoding/japanese"
 	"golang.org/x/text/encoding/simplifiedchinese"

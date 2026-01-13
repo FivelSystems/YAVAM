@@ -2,7 +2,7 @@ package manager
 
 import (
 	"fmt"
-	"varmanager/pkg/services/config"
+	"yavam/pkg/services/config"
 )
 
 // Legacy wrappers to maintain API compatibility during refactor.

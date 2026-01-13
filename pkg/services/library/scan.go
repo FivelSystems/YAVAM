@@ -5,8 +5,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"varmanager/pkg/models"
-	"varmanager/pkg/parser"
+	"yavam/pkg/models"
+	"yavam/pkg/parser"
 )
 
 // Scan scans the directory and streams results via callbacks

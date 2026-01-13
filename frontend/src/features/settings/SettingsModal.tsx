@@ -226,7 +226,7 @@ const SettingsModal = ({
         }
 
         // @ts-ignore
-        if (window.runtime) window.runtime.Quit();
+        if (window.go) await window.go.main.App.RestartApp();
         else window.location.reload();
     };
 

@@ -2,7 +2,7 @@ package manager
 
 import (
 	"testing"
-	"varmanager/pkg/services/system"
+	"yavam/pkg/services/system"
 )
 
 // MockFileSystem for testing
