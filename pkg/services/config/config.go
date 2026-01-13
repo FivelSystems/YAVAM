@@ -19,6 +19,7 @@ type Config struct {
 	CheckUpdates  bool `json:"checkUpdates"`
 	UseSymlinks   bool `json:"useSymlinks"` // Default true for efficiency
 	DeleteToTrash bool `json:"deleteToTrash"`
+	PublicAccess  bool `json:"publicAccess"`
 }
 
 // ConfigService handles configuration persistence
@@ -43,8 +44,9 @@ func NewFileConfigService(configDir string) (ConfigService, error) {
 		path: configPath,
 		config: &Config{
 			Libraries:     []string{},
-			UseSymlinks:   true, // Default
-			DeleteToTrash: true, // Default
+			UseSymlinks:   true,  // Default
+			DeleteToTrash: true,  // Default
+			PublicAccess:  false, // Default Private
 		},
 	}
 	// Attempt load

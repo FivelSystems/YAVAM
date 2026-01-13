@@ -1,35 +1,43 @@
-import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { HashRouter, Routes, Route } from 'react-router-dom';
 import Dashboard from './Dashboard';
-import LoginPage from './pages/LoginPage';
-import { isAuthenticated } from './services/auth';
+import LoginModal from './features/auth/LoginModal';
+import { AuthProvider, useAuth } from './features/auth/AuthContext';
+import { Loader2 } from 'lucide-react';
 
-function RequireAuth({ children }: { children: JSX.Element }) {
-    let location = useLocation();
+function AppContent() {
+    const { isLoginModalOpen, closeLoginModal, isLoginForced, isLoading } = useAuth();
 
-    // @ts-ignore
-    if (window.go) {
-        return children;
+    // While checking auth, show a simple loader
+    if (isLoading) {
+        return (
+            <div className="h-screen w-screen bg-[#1b2636] flex items-center justify-center text-white">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+            </div>
+        );
     }
 
-    if (!isAuthenticated()) {
-        return <Navigate to="/login" state={{ from: location }} replace />;
-    }
+    return (
+        <HashRouter>
+            <Routes>
+                {/* Dashboard is always rendered. Access control is handled by AuthContext (Modal) and Backend (401s) */}
+                <Route path="/" element={<Dashboard />} />
+            </Routes>
 
-    return children;
+            {/* Global Login Modal */}
+            <LoginModal
+                isOpen={isLoginModalOpen}
+                onClose={closeLoginModal}
+                force={isLoginForced}
+            />
+        </HashRouter>
+    );
 }
 
 function App() {
     return (
-        <HashRouter>
-            <Routes>
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/" element={
-                    <RequireAuth>
-                        <Dashboard />
-                    </RequireAuth>
-                } />
-            </Routes>
-        </HashRouter>
+        <AuthProvider>
+            <AppContent />
+        </AuthProvider>
     );
 }
 

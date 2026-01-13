@@ -58,6 +58,10 @@ export function GetAppVersion() {
   return window['go']['main']['App']['GetAppVersion']();
 }
 
+export function GetConfig() {
+  return window['go']['main']['App']['GetConfig']();
+}
+
 export function GetConfiguredLibraries() {
   return window['go']['main']['App']['GetConfiguredLibraries']();
 }
@@ -152,6 +156,10 @@ export function SetAlwaysOnTop(arg1) {
 
 export function SetMinimizeOnClose(arg1) {
   return window['go']['main']['App']['SetMinimizeOnClose'](arg1);
+}
+
+export function SetPublicAccess(arg1) {
+  return window['go']['main']['App']['SetPublicAccess'](arg1);
 }
 
 export function StartServer(arg1, arg2, arg3) {

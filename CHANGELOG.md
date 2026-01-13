@@ -48,3 +48,10 @@
 - **Pagination Reset**: Refreshing the library view no longer resets the page number to 1.
 - **File Drop Error**: Fixed a crash on Desktop when dropping a file onto itself.
 - **"Failed to Fetch"**: Suppressed spurious error toast when cancelling scans during library switching.
+- **Access Denied**: Resolved "Access denied" errors for content loading by implementing strict, thread-safe path validation in the server.
+- **Login Redirect**: Fixed an issue where successful login via the modal would not redirect to the dashboard.
+- **De-authorization**: Fixed missing notification/logout when a session is revoked by the admin.
+
+### Security
+- **Strict Path Validation**: Refactored all file access endpoints to use a centralized `IsPathAllowed` check, preventing unauthorized access even with valid tokens if the path is outside allowed libraries.
+

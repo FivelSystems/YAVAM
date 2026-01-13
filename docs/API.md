@@ -34,6 +34,17 @@ Default: `http://<Local_IP>:<Port>` (e.g., `http://192.168.1.10:18888`)
 -   **Body**: `{"username": "admin", "nonce": "...", "proof": "...", "deviceName": "..."}`
 -   **Response**: `{"success": true, "token": "..."}`
 
+#### List Sessions
+-   **URL**: `/api/auth/sessions`
+-   **Method**: `GET`
+-   **Response**: JSON array of active sessions (User objects).
+
+#### Revoke Session
+-   **URL**: `/api/auth/revoke`
+-   **Method**: `POST`
+-   **Body**: `{"id": "<session_id>"}`
+-   **Response**: `{"success": true}`
+
 ### 2. Library Operations
 
 #### Get Packages

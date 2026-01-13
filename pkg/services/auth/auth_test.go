@@ -38,7 +38,7 @@ func TestChallengeResponseFlow(t *testing.T) {
 	proof := hex.EncodeToString(proofRaw[:])
 
 	// 3. Complete Login
-	token, err := svc.CompleteLogin("admin", nonce, proof)
+	token, err := svc.CompleteLogin("admin", nonce, proof, "test-device")
 	if err != nil {
 		t.Fatalf("CompleteLogin failed: %v", err)
 	}
@@ -72,13 +72,13 @@ func TestReplayAttack(t *testing.T) {
 	proof := hex.EncodeToString(proofRaw[:])
 
 	// First Login (Success)
-	_, err := svc.CompleteLogin("admin", nonce, proof)
+	_, err := svc.CompleteLogin("admin", nonce, proof, "test-device")
 	if err != nil {
 		t.Fatalf("First login failed: %v", err)
 	}
 
 	// Replay (Fail)
-	_, err = svc.CompleteLogin("admin", nonce, proof)
+	_, err = svc.CompleteLogin("admin", nonce, proof, "test-device")
 	if err == nil {
 		t.Fatal("Expected error on replay attack, got nil")
 	}
@@ -92,7 +92,7 @@ func TestInvalidProof(t *testing.T) {
 	svc.SetPassword("secret")
 	nonce, _ := svc.InitiateLogin("admin")
 
-	_, err := svc.CompleteLogin("admin", nonce, "badproof")
+	_, err := svc.CompleteLogin("admin", nonce, "badproof", "test-device")
 	if err == nil {
 		t.Fatal("Expected error for invalid proof")
 	}

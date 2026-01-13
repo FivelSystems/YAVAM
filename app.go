@@ -16,6 +16,7 @@ import (
 	"yavam/pkg/manager"
 	"yavam/pkg/models"
 	"yavam/pkg/services/auth"
+	"yavam/pkg/services/config"
 	"yavam/pkg/updater"
 
 	"yavam/pkg/server"
@@ -520,6 +521,11 @@ func (a *App) FinishSetup() error {
 	return a.manager.FinishSetup()
 }
 
+// GetConfig returns the current configuration
+func (a *App) GetConfig() *config.Config {
+	return a.manager.GetConfig()
+}
+
 // CheckForUpdates checks if a new version is available
 func (a *App) CheckForUpdates() (*updater.UpdateInfo, error) {
 	return updater.GetLatestVersion(a.GetAppVersion())
@@ -528,6 +534,13 @@ func (a *App) CheckForUpdates() (*updater.UpdateInfo, error) {
 // ApplyUpdate performs the update process
 func (a *App) ApplyUpdate(url string) error {
 	return updater.ApplyUpdate(url)
+}
+
+// SetPublicAccess toggles the Public Access mode
+func (a *App) SetPublicAccess(enabled bool) error {
+	return a.manager.UpdateConfig(func(cfg *config.Config) {
+		cfg.PublicAccess = enabled
+	})
 }
 
 // RestartApp restarts the application

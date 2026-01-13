@@ -80,6 +80,13 @@ function Dashboard(): JSX.Element {
                     console.error("Failed to check updates:", e);
                 }
             }, 3000);
+
+            // Listen for Global Auth Events (Wails)
+            // @ts-ignore
+            window.runtime.EventsOn("auth:check", () => {
+                window.dispatchEvent(new Event('auth:check'));
+            });
+
         } else {
             // Web Mode Update Check
             setTimeout(async () => {
@@ -301,6 +308,54 @@ function Dashboard(): JSX.Element {
             } catch (e) {
                 console.error(e);
             }
+        }
+    };
+
+    // Public Access State
+    const [publicAccess, setPublicAccess] = useState(false);
+
+    // Fetch Config on Mount
+    useEffect(() => {
+        const fetchConfig = async () => {
+            try {
+                // @ts-ignore
+                if (window.go && window.go.main && window.go.main.App) {
+                    // @ts-ignore
+                    const cfg = await window.go.main.App.GetConfig();
+                    if (cfg) setPublicAccess(cfg.publicAccess);
+                } else {
+                    const res = await fetch('/api/config');
+                    if (res.ok) {
+                        const cfg = await res.json();
+                        setPublicAccess(cfg.publicAccess);
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to fetch config:", e);
+            }
+        };
+        fetchConfig();
+    }, []);
+
+    const handleTogglePublicAccess = async () => {
+        const newState = !publicAccess;
+        try {
+            // @ts-ignore
+            if (window.go && window.go.main && window.go.main.App) {
+                // @ts-ignore
+                await window.go.main.App.SetPublicAccess(newState);
+            } else {
+                await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ publicAccess: newState })
+                });
+            }
+            setPublicAccess(newState);
+            addToast(`Public Access ${newState ? 'Enabled' : 'Disabled'}`, newState ? 'warning' : 'success');
+        } catch (e) {
+            console.error("Failed to toggle public access:", e);
+            addToast("Failed to update setting", 'error');
         }
     };
 
@@ -791,13 +846,15 @@ function Dashboard(): JSX.Element {
                 // @ts-ignore
                 await window.go.main.App.StopServer();
                 setServerEnabled(false);
+                addToast("Server Stopped", "info");
             } else {
                 try {
                     // @ts-ignore
                     await window.go.main.App.StartServer(serverPort, activeLibraryPath, libraries);
                     setServerEnabled(true);
-                } catch (e) {
-                    alert("Failed to start server: " + e);
+                    addToast("Server Started", "success");
+                } catch (e: any) {
+                    addToast("Failed to start server: " + (e.message || e), "error");
                 }
             }
         }
@@ -1947,6 +2004,8 @@ function Dashboard(): JSX.Element {
                     setLogs={setServerLogs}
                     // @ts-ignore
                     isWeb={!window.go}
+                    publicAccess={publicAccess}
+                    onTogglePublicAccess={handleTogglePublicAccess}
                     censorThumbnails={censorThumbnails}
                     setCensorThumbnails={setCensorThumbnails}
                     keybinds={keybinds}

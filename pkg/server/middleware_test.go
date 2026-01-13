@@ -4,7 +4,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"yavam/pkg/manager"
 	"yavam/pkg/services/auth"
+	"yavam/pkg/services/config"
 )
 
 type MockAuthService struct {
@@ -44,11 +46,43 @@ func (m *MockAuthService) RevokeSession(id string) error {
 	return nil
 }
 
+type MockConfigService struct {
+	config *config.Config
+}
+
+func (m *MockConfigService) Load() (*config.Config, error) { return m.config, nil }
+func (m *MockConfigService) Save(cfg *config.Config) error { return nil }
+func (m *MockConfigService) Get() *config.Config           { return m.config }
+func (m *MockConfigService) IsConfigured() bool            { return true }
+func (m *MockConfigService) FinishSetup() error            { return nil }
+func (m *MockConfigService) Update(fn func(*config.Config)) error {
+	fn(m.config)
+	return nil
+}
+
 func TestAuthMiddleware(t *testing.T) {
 	mockAuth := &MockAuthService{validToken: "valid-token"}
-	// Create a dummy server struct with the mock auth
+	mockConfig := &MockConfigService{config: &config.Config{PublicAccess: false}}
+
+	// Create partial manager with mock config
+	mgr := &manager.Manager{}
+	// We need to inject config into Manager.
+	// Since Manager struct fields are private/public mixed, and we don't have a constructor here
+	// that takes just config easily without other services, we might need to set it if accessible.
+	// Initializing Manager via NewManager is complex.
+	// But Manager.GetConfig() delegates to m.config.
+	// We can't set m.config directly if it's private (it is "config" field).
+	// We need to use NewManager or modify Manager to be more testable.
+	// OR: We mock Manager? No, Manager is a struct.
+	// Let's use unsafe/reflection or better: use NewManager with nil services but valid ConfigService.
+
+	// Assuming NewManager(sys, lib, cfg)
+	mgr = manager.NewManager(nil, nil, mockConfig)
+
+	// Create a dummy server struct with the mock auth and manager
 	srv := &Server{
-		auth: mockAuth,
+		auth:    mockAuth,
+		manager: mgr,
 	}
 
 	// Create a handler to wrap
