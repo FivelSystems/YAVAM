@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -13,6 +15,7 @@ import (
 	"syscall"
 	"varmanager/pkg/manager"
 	"varmanager/pkg/models"
+	"varmanager/pkg/services/auth"
 	"varmanager/pkg/updater"
 
 	"varmanager/pkg/server"
@@ -37,6 +40,7 @@ type App struct {
 	ctx             context.Context
 	manager         *manager.Manager
 	server          *server.Server
+	auth            auth.AuthService
 	minimizeOnClose bool
 	assets          fs.FS
 	isQuitting      bool
@@ -78,7 +82,11 @@ func (a *App) startup(ctx context.Context) {
 		subAssets = a.assets
 	}
 
-	a.server = server.NewServer(ctx, a.manager, subAssets, a.GetAppVersion(), func() {
+	// Initialize Auth Service
+	// TODO: Load admin password from secure config or generate
+	a.auth = auth.NewSimpleAuthService("admin")
+
+	a.server = server.NewServer(ctx, a.manager, a.auth, subAssets, a.GetAppVersion(), func() {
 		runtime.WindowShow(ctx)
 	})
 }
@@ -158,6 +166,32 @@ func (a *App) GetUserDownloadsDir() string {
 // Greet returns a greeting for the given name
 func (a *App) Greet(name string) string {
 	return fmt.Sprintf("Hello %s, It's show time!", name)
+}
+
+// Login validates credentials using secure Challenge-Response flow
+// This runs LOCALLY inside the Wails app, so it acts as the "Client"
+func (a *App) Login(username, password string) (string, error) {
+	if a.auth == nil {
+		return "", fmt.Errorf("auth service not initialized")
+	}
+
+	// 1. Initiate Login (Get Nonce)
+	nonce, err := a.auth.InitiateLogin(username)
+	if err != nil {
+		return "", err
+	}
+
+	// 2. Calculate Proof (Verify knowledge of password without sending it)
+	// H1 = SHA256(password)
+	h1 := sha256.Sum256([]byte(password))
+	h1Str := hex.EncodeToString(h1[:])
+
+	// Proof = SHA256(H1 + Nonce)
+	proofRaw := sha256.Sum256([]byte(h1Str + nonce))
+	proof := hex.EncodeToString(proofRaw[:])
+
+	// 3. Complete Login
+	return a.auth.CompleteLogin(username, nonce, proof)
 }
 
 // GetAppVersion returns the current application version

@@ -15,6 +15,11 @@
 - **Refactor**: Updated `pkg/manager` to use `pkg/fs` for all filesystem interactions.
 - **Testing**: Added comprehensive unit tests for `LibraryService` covering installation, toggling and collision detection.
 
+### Feature: Authentication (Secure)
+- **Challenge-Response**: Implemented industry-standard "Challenge-Response" authentication. Passwords are never transmitted over the network.
+- **Middleware**: Added strict `AuthMiddleware` to internal server, protecting all sensitive routes (`upload`, `delete` etc).
+- **Security Audit**: Addressed and resolved "Unprotected Local Server" vulnerabilities.
+
 ### Security
 - **Critical:** Removed all dependencies on `powershell.exe` and `cmd.exe` for file operations to prevent Command Injection.
 - **Critical:** Implemented strict `PathValidator` and bound internal server to `127.0.0.1` to prevent Local Network exploits.

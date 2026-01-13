@@ -45,19 +45,15 @@ An attacker requests `/files/..\..\Windows\System32\drivers\etc\hosts`. If the c
 2.  **Strict Prefix Check:** Ensure `Clean(RequestPath)` strictly starts with `Clean(RootPath) + Separator`.
 3.  **Use `http.Dir` wrapper:** Go's `http.Dir` has some built-in protections, but manual verification is safer for multi-root setups.
 
-### 3. Unprotected Local Server (Local Network Exposure)
-**Severity:** **HIGH** (CVSS 8.1)
-**CWE:** [CWE-306: Missing Authentication for Critical Function](https://cwe.mitre.org/data/definitions/306.html)
-
+### 3. Unprotected Local Server (Local Network Exposure) -> **RESOLVED**
 **Description:**
-The internal web server (`pkg/server`) binds to a port (likely `0.0.0.0` or `:port` implies all interfaces). Since there is no authentication mechanism, **anyone** on the same local network (Wi-Fi) can connect to your IP and trigger:
--   `/api/delete` (Delete your files)
--   `/api/upload` (Upload malware)
--   `/api/resolve` (Mess with your library)
+The internal web server previously bound to all interfaces without authentication.
 
-**Remediation:**
-1.  **Bind to Loopback:** Force the server to listen *only* on `127.0.0.1:PORT` unless remote usage is explicitly enabled by the user.
-2.  **Token Authentication:** If remote access is needed, generate a random Session Token on startup. Display it in the Desktop App. Require this token in the `Authorization` header for all requests.
+**Remediation Applied:**
+1.  **Bind to Loopback:** Server now binds strictly to `127.0.0.1` by default.
+2.  **Auth Service:** Added `AuthMiddleware` requiring a Bearer token or query parameter.
+3.  **Challenge-Response Protocol:** Implemented secure authentication where the password is **never** sent over the network (not even to localhost). The client sends a cryptographic proof (`SHA256(SHA256(Pass) + Nonce)`).
+4.  **Strict Path Validation:** Implemented strictly validated file serving logic.
 
 ---
 
