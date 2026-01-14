@@ -1,8 +1,8 @@
 package server
 
 import (
+	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 )
@@ -79,15 +79,11 @@ func (rl *RateLimiter) cleanup() {
 // Middleware returns a handler that enforces the rate limit
 func (rl *RateLimiter) Middleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// simple IP extraction
+		// Extract IP without port
 		ip := r.RemoteAddr
-		// If behind proxy (rare for this app), use X-Forwarded-For?
-		// Given it's a local app mostly, RemoteAddr is fine. port removal might be needed.
-		if strings.Contains(ip, ":") {
-			// Handle IPv6 brackets or just strip port
-			// simplest is to split buy last colon if it's ipv4 port
-			// net.SplitHostPort is better but lets just cache by full RemoteAddr for now
-			// actually SplitHostPort is safer
+		host, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err == nil {
+			ip = host
 		}
 
 		if !rl.Allow(ip) {

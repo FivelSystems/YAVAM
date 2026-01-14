@@ -22,7 +22,7 @@ const sizeClasses: Record<ModalSize, string> = {
     md: 'max-w-md',
     lg: 'max-w-2xl',
     xl: 'max-w-4xl',
-    full: 'w-[95vw] h-[90vh] max-w-7xl max-h-[900px] rounded-2xl', // Fixed large box instead of auto-sizing inset
+    full: 'w-screen h-[100dvh] rounded-none md:w-[95vw] md:h-[90vh] md:max-w-7xl md:max-h-[900px] md:rounded-2xl', // Mobile: Fullscreen, Desktop: Large Modal
 };
 
 const Modal = ({
@@ -62,7 +62,10 @@ const Modal = ({
     return createPortal(
         <AnimatePresence>
             {isOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <div className={clsx(
+                    "fixed inset-0 z-50 flex items-center justify-center",
+                    size === 'full' ? "p-0 md:p-4" : "p-4"
+                )}>
                     {/* Backdrop */}
                     <motion.div
                         initial={{ opacity: 0 }}
@@ -78,23 +81,25 @@ const Modal = ({
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
                         className={clsx(
-                            "bg-gray-800 border border-gray-700 shadow-2xl overflow-hidden flex flex-col relative z-50 w-full max-h-[90vh]",
-                            size === 'full' ? sizeClasses.full : `rounded-xl ${sizeClasses[size]}`,
+                            "bg-gray-800 border border-gray-700 shadow-2xl overflow-hidden flex flex-col relative z-50 w-full",
+                            size === 'full' ? sizeClasses.full : `rounded-xl max-h-[90vh] ${sizeClasses[size]}`,
                             className
                         )}
                         {...props}
                     >
                         {/* Header */}
                         {(title || showCloseButton) && (
-                            <div className="flex items-start justify-between p-4 sm:p-6 border-b border-gray-700/50 shrink-0">
-                                <div>
-                                    {title && <h2 className="text-xl font-semibold text-white tracking-tight">{title}</h2>}
-                                    {description && <p className="text-sm text-gray-400 mt-1">{description}</p>}
-                                </div>
+                            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-700/50 shrink-0">
+                                {title && (
+                                    <div>
+                                        <h2 className="text-xl font-semibold text-white tracking-tight">{title}</h2>
+                                        {description && <p className="text-sm text-gray-400 mt-1">{description}</p>}
+                                    </div>
+                                )}
                                 {showCloseButton && (
                                     <button
                                         onClick={onClose}
-                                        className="p-1 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors -mr-2 -mt-2"
+                                        className="p-1 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors -mr-2"
                                     >
                                         <X size={20} />
                                     </button>
@@ -103,7 +108,10 @@ const Modal = ({
                         )}
 
                         {/* Scrollable Content */}
-                        <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+                        <div className={clsx(
+                            "flex-1 overflow-y-auto custom-scrollbar",
+                            size === 'full' ? "p-0" : "p-6"
+                        )}>
                             {children}
                         </div>
 

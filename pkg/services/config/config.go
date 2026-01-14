@@ -9,18 +9,19 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	VamPath     string   `json:"vamPath"`
 	Libraries   []string `json:"libraries"`
 	SetupDone   bool     `json:"setupDone"`
 	Theme       string   `json:"theme"`
 	AccentColor string   `json:"accentColor"`
 	// Advanced Settings
-	AutoScan      bool `json:"autoScan"`
-	CheckUpdates  bool `json:"checkUpdates"`
-	UseSymlinks   bool `json:"useSymlinks"` // Default true for efficiency
-	DeleteToTrash bool `json:"deleteToTrash"`
-	PublicAccess  bool `json:"publicAccess"`
-	ServerEnabled bool `json:"serverEnabled"`
+	AutoScan         bool   `json:"autoScan"`
+	CheckUpdates     bool   `json:"checkUpdates"`
+	UseSymlinks      bool   `json:"useSymlinks"` // Default true for efficiency
+	DeleteToTrash    bool   `json:"deleteToTrash"`
+	PublicAccess     bool   `json:"publicAccess"`
+	ServerEnabled    bool   `json:"serverEnabled"`
+	ServerPort       string `json:"serverPort"`
+	AuthPollInterval int    `json:"authPollInterval"`
 }
 
 // ConfigService handles configuration persistence
@@ -44,10 +45,12 @@ func NewFileConfigService(configDir string) (ConfigService, error) {
 	svc := &fileConfigService{
 		path: configPath,
 		config: &Config{
-			Libraries:     []string{},
-			UseSymlinks:   true,  // Default
-			DeleteToTrash: true,  // Default
-			PublicAccess:  false, // Default Private
+			Libraries:        []string{},
+			UseSymlinks:      true,  // Default
+			DeleteToTrash:    true,  // Default
+			PublicAccess:     false, // Default Private
+			ServerPort:       "18888",
+			AuthPollInterval: 15,
 		},
 	}
 	// Attempt load
@@ -95,7 +98,7 @@ func (s *fileConfigService) Get() *Config {
 func (s *fileConfigService) IsConfigured() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.config.SetupDone && s.config.VamPath != ""
+	return s.config.SetupDone && len(s.config.Libraries) > 0
 }
 
 func (s *fileConfigService) FinishSetup() error {

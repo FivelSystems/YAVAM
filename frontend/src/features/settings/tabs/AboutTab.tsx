@@ -1,4 +1,20 @@
 import { Github } from 'lucide-react';
+import { motion } from 'framer-motion';
+
+const container = {
+    hidden: { opacity: 0 },
+    show: {
+        opacity: 1,
+        transition: {
+            staggerChildren: 0.1
+        }
+    }
+};
+
+const item = {
+    hidden: { opacity: 0, scale: 0.95 },
+    show: { opacity: 1, scale: 1 }
+};
 
 interface AboutTabProps {
     appVersion: string;
@@ -6,11 +22,19 @@ interface AboutTabProps {
 
 const AboutTab = ({ appVersion }: AboutTabProps) => {
     return (
-        <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300 h-full flex flex-col justify-center">
-            <div className="flex flex-col items-center justify-center pt-8 h-full">
-                <div className="bg-gray-800/50 border border-gray-700/50 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row items-center gap-6 md:gap-8 shadow-2xl max-w-xl w-full mx-4">
-                    <div className="w-24 h-24 md:w-32 md:h-32 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center shrink-0 shadow-lg shadow-blue-900/30">
-                        <span className="text-4xl md:text-6xl font-bold text-white select-none">Y</span>
+        <motion.div
+            className="space-y-8 h-full flex flex-col justify-center"
+            variants={container}
+            initial="hidden"
+            animate="show"
+        >
+            <div className="flex flex-col items-center justify-center h-full">
+                <motion.div
+                    variants={item}
+                    className="bg-gray-800/50 border border-gray-700/50 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row items-center gap-6 md:gap-8 shadow-2xl max-w-xl w-full"
+                >
+                    <div className="w-24 h-24 md:w-32 md:h-32 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center shrink-0 shadow-lg shadow-blue-900/30 overflow-hidden">
+                        <img src="/favicon.png" alt="YAVAM Logo" className="w-full h-full object-cover" />
                     </div>
                     <div className="flex-1 text-center md:text-left space-y-4 w-full">
                         <div>
@@ -35,13 +59,13 @@ const AboutTab = ({ appVersion }: AboutTabProps) => {
                             </button>
                         </div>
                     </div>
-                </div>
-                <div className="mt-8 md:mt-12 text-center space-y-1">
+                </motion.div>
+                <motion.div variants={item} className="mt-8 md:mt-12 text-center space-y-1">
                     <p className="text-gray-500 text-sm">Designed & Developed by <span className="text-gray-300 font-medium">FivelSystems</span></p>
                     <p className="text-[10px] text-gray-600 uppercase tracking-widest">Copyright © 2026</p>
-                </div>
+                </motion.div>
             </div>
-        </div>
+        </motion.div>
     );
 };
 

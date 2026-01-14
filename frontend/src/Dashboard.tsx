@@ -24,6 +24,8 @@ import { OptimizationProgressModal } from './features/settings/OptimizationProgr
 import { InstallPackageModal } from './features/packages/InstallPackageModal';
 import { UploadModal } from './features/upload/UploadModal';
 import { getStoredToken, logout } from './services/auth';
+import { fetchWithAuth } from './services/api';
+import { useAuth } from './features/auth/AuthContext';
 
 // Define types based on our Go models
 import { VarPackage } from './types';
@@ -38,7 +40,9 @@ function Dashboard(): JSX.Element {
     const [showUpdateModal, setShowUpdateModal] = useState(false);
     const [isUpdating, setIsUpdating] = useState(false);
 
-    // Auth State removed (handled by Router)
+
+    // Auth State
+    const { isGuest } = useAuth();
 
     // Initial Auth Check & Logout Listener removed - handled by AuthContext (LoginModal)
 
@@ -76,6 +80,13 @@ function Dashboard(): JSX.Element {
             // @ts-ignore
             window.runtime.EventsOn("auth:check", () => {
                 window.dispatchEvent(new Event('auth:check'));
+            });
+
+            // Server Status Notifications
+            // @ts-ignore
+            window.runtime.EventsOn("server:status:changed", (running: boolean) => {
+                addToast(`Server ${running ? 'Started' : 'Stopped'}`, "info");
+                // Refresh local state if network tab is open (it polls, so it's fine)
             });
 
         } else {
@@ -120,10 +131,10 @@ function Dashboard(): JSX.Element {
             const newConfig = { ...config };
             newConfig.headers = new Headers(newConfig.headers || {});
 
-            // Attach Token
+            // Attach Token if not present
             const token = getStoredToken();
-            if (token) {
-                newConfig.headers.append("Authorization", `Bearer ${token}`);
+            if (token && !newConfig.headers.has("Authorization")) {
+                newConfig.headers.set("Authorization", `Bearer ${token}`);
             }
 
             const response = await originalFetch(resource, newConfig);
@@ -161,30 +172,9 @@ function Dashboard(): JSX.Element {
         }
     };
 
-    // SSE Listener
-    useEffect(() => {
-        // @ts-ignore
-        if (!window.go) {
-            const evtSource = new EventSource('/api/events');
-            evtSource.onmessage = (e) => {
-                if (!e.data) return;
-                try {
-                    const payload = JSON.parse(e.data);
-                    if (payload.event) {
-                        // Dispatch as custom event for components to listen to
-                        window.dispatchEvent(new CustomEvent(payload.event, { detail: payload.data }));
+    // SSE Listener (Legacy removed - merged with Web Mode Listener below)
+    // The previous duplicate listener was causing double connections.
 
-                        if (payload.event === 'server:log') {
-                            setServerLogs(prev => [...prev, payload.data].slice(-100));
-                        }
-                    }
-                } catch (err) {
-                    console.error("SSE Parse Error", err);
-                }
-            };
-            return () => evtSource.close();
-        }
-    }, []);
 
     // New Handler for Sidebar Selection
 
@@ -313,12 +303,16 @@ function Dashboard(): JSX.Element {
                 if (window.go && window.go.main && window.go.main.App) {
                     // @ts-ignore
                     const cfg = await window.go.main.App.GetConfig();
-                    if (cfg) setPublicAccess(cfg.publicAccess);
+                    if (cfg) {
+                        setPublicAccess(cfg.publicAccess);
+                        if (cfg.authPollInterval) setAuthPollInterval(cfg.authPollInterval);
+                    }
                 } else {
                     const res = await fetch('/api/config');
                     if (res.ok) {
                         const cfg = await res.json();
                         setPublicAccess(cfg.publicAccess);
+                        if (cfg.authPollInterval) setAuthPollInterval(cfg.authPollInterval);
                     }
                 }
             } catch (e) {
@@ -346,6 +340,26 @@ function Dashboard(): JSX.Element {
             addToast(`Public Access ${newState ? 'Enabled' : 'Disabled'}`, newState ? 'warning' : 'success');
         } catch (e) {
             console.error("Failed to toggle public access:", e);
+            addToast("Failed to update setting", 'error');
+        }
+    };
+
+    const handleSetAuthPollInterval = async (val: number) => {
+        try {
+            // @ts-ignore
+            if (window.go && window.go.main && window.go.main.App) {
+                // @ts-ignore
+                await window.go.main.App.SetAuthPollInterval(val);
+            } else {
+                await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ authPollInterval: val })
+                });
+            }
+            setAuthPollInterval(val);
+        } catch (e) {
+            console.error("Failed to set auth poll interval:", e);
             addToast("Failed to update setting", 'error');
         }
     };
@@ -465,6 +479,8 @@ function Dashboard(): JSX.Element {
     const [blurAmount, setBlurAmount] = useState(() => parseInt(localStorage.getItem('blurAmount') || '10'));
     const [hidePackageNames, setHidePackageNames] = useState(() => localStorage.getItem('hidePackageNames') === 'true');
     const [hideCreatorNames, setHideCreatorNames] = useState(() => localStorage.getItem('hideCreatorNames') === 'true');
+    // Auth Polling Interval
+    const [authPollInterval, setAuthPollInterval] = useState(15);
 
     // Persist Privacy Settings
     useEffect(() => {
@@ -479,7 +495,7 @@ function Dashboard(): JSX.Element {
 
 
     // Keybinds State
-    const [keybinds] = useState<{ [key: string]: string }>(() => {
+    const [keybinds, setKeybinds] = useState<{ [key: string]: string }>(() => {
         const saved = localStorage.getItem('keybinds');
         return saved ? JSON.parse(saved) : { togglePrivacy: 'v' };
     });
@@ -551,12 +567,7 @@ function Dashboard(): JSX.Element {
 
 
 
-    const handleClearData = async () => {
-        if (!confirm("Are you sure? This will reset all settings and cache.")) return;
-        // @ts-ignore
-        if (window.go) await window.go.main.App.ClearAppData();
-        window.location.reload();
-    };
+
 
     // Settings State Wrapped
 
@@ -565,6 +576,17 @@ function Dashboard(): JSX.Element {
     // Settings
     // (State moved to top)
     const [gridSize, setGridSize] = useState(parseInt(localStorage.getItem("gridSize") || "160"));
+
+
+    const handleSetMinimize = (val: boolean) => {
+        setMinimizeOnClose(val);
+        localStorage.setItem('minimizeOnClose', val.toString());
+        // @ts-ignore
+        if (window.go && window.go.main && window.go.main.App) {
+            // @ts-ignore
+            window.go.main.App.SetMinimizeOnClose(val);
+        }
+    };
 
     useEffect(() => {
         const handleResize = () => {
@@ -616,6 +638,21 @@ function Dashboard(): JSX.Element {
 
     // Context Menu State
     const [contextMenu, setContextMenu] = useState<{ open: boolean, x: number, y: number, pkg: VarPackage | null }>({ open: false, x: 0, y: 0, pkg: null });
+
+    // Generic Confirmation State
+    const [confirmationState, setConfirmationState] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => void;
+        confirmText?: string;
+        confirmStyle?: 'danger' | 'primary' | 'warning' | 'purple';
+    }>({
+        isOpen: false,
+        title: "",
+        message: "",
+        onConfirm: () => { }
+    });
 
     // Delete Confirmation State
     const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean, pkg: VarPackage | null, pkgs?: VarPackage[], count?: number }>({ open: false, pkg: null });
@@ -703,6 +740,36 @@ function Dashboard(): JSX.Element {
     const [serverPort, setServerPort] = useState("18888");
     const [localIP, setLocalIP] = useState("Loading...");
     const [serverLogs, setServerLogs] = useState<string[]>([]);
+    const [isTogglingServer, setIsTogglingServer] = useState(false);
+
+    const handleStartServer = async () => {
+        // @ts-ignore
+        if (window.go && window.go.main && window.go.main.App) {
+            try {
+                // @ts-ignore
+                await window.go.main.App.StartServer();
+                // addToast removed: handled by event listener
+            } catch (e) {
+                console.error(e);
+                addToast("Failed to start server: " + e, 'error');
+            }
+        }
+    };
+
+    const handleStopServer = async () => {
+        // @ts-ignore
+        if (window.go && window.go.main && window.go.main.App) {
+            try {
+                // @ts-ignore
+                await window.go.main.App.StopServer();
+                // addToast removed: handled by event listener
+            } catch (e) {
+                console.error(e);
+            }
+        }
+    };
+
+
 
     useEffect(() => {
         // @ts-ignore
@@ -715,22 +782,45 @@ function Dashboard(): JSX.Element {
             // @ts-ignore
             window.go.main.App.SetMinimizeOnClose(storedMinimize);
 
+            // Fetch Config to sync Server State
+            // @ts-ignore
+            window.go.main.App.GetConfig().then((cfg: any) => {
+                if (cfg) {
+                    setServerEnabled(cfg.serverEnabled);
+                    if (cfg.serverPort) setServerPort(cfg.serverPort);
+                    setPublicAccess(cfg.publicAccess);
+                }
+            });
+
             // @ts-ignore
             window.runtime.EventsOn("server:log", (msg: string) => {
                 setServerLogs(prev => [...prev, msg].slice(-100));
             });
         } else {
             // Web Mode: Fetch config
-            fetch('/api/config')
-                .then(res => res.json())
+            fetchWithAuth('/api/config')
+                .then(res => {
+                    if (!res.ok) throw new Error("Status " + res.status);
+                    return res.json();
+                })
                 .then(data => {
+                    if (data && data.error) {
+                        console.error("Config fetch error:", data.error);
+                        return;
+                    }
+
                     setLocalIP("Remote/Web Mode");
+
+                    // Hydrate Settings
                     if (data.libraries && Array.isArray(data.libraries)) {
                         setLibraries(data.libraries);
                     }
+                    if (data.publicAccess !== undefined) setPublicAccess(data.publicAccess);
+                    if (data.serverEnabled !== undefined) setServerEnabled(data.serverEnabled);
+                    if (data.serverPort) setServerPort(data.serverPort);
 
+                    // Handle Active Library Path
                     const savedPath = localStorage.getItem("activeLibraryPath");
-
                     const normalize = (p: string) => p.toLowerCase().replace(/[\\/]/g, '/');
                     let foundLib: string | undefined;
 
@@ -740,12 +830,9 @@ function Dashboard(): JSX.Element {
                     }
 
                     if (foundLib) {
-                        // Use the matched library path from server list (canonical)
                         setActiveLibraryPath(foundLib);
-                        // Update storage to match canonical if needed
                         if (foundLib !== savedPath) localStorage.setItem('activeLibraryPath', foundLib);
                     } else if (data.path) {
-                        // Fallback to server active path
                         setActiveLibraryPath(data.path);
                         localStorage.setItem('activeLibraryPath', data.path);
                     }
@@ -758,6 +845,10 @@ function Dashboard(): JSX.Element {
             if (window.runtime) {
                 // @ts-ignore
                 window.runtime.EventsOff("server:log");
+                // @ts-ignore
+                window.runtime.EventsOff("auth:check");
+                // @ts-ignore
+                window.runtime.EventsOff("server:status:changed");
             }
         };
     }, []);
@@ -766,8 +857,8 @@ function Dashboard(): JSX.Element {
     useEffect(() => {
         // @ts-ignore
         if (!window.go) {
-            console.log("Connecting to EventSource...");
-            const es = new EventSource('/api/events');
+            const token = getStoredToken();
+            const es = new EventSource(`/api/events?token=${token || ''}`);
 
             // Batching for Web Mode
             let pkgBuffer: any[] = [];
@@ -855,15 +946,22 @@ function Dashboard(): JSX.Element {
     }, []);
 
     const handleToggleServer = async () => {
-        const newState = !serverEnabled;
-        try {
-            // @ts-ignore
-            if (window.go) await window.go.main.App.ToggleServer(newState);
-            setServerEnabled(newState);
-            addToast(`Server ${newState ? 'Started' : 'Stopped'}`, 'success');
-        } catch (e) {
-            console.error(e);
-            addToast("Failed to toggle server", 'error');
+        if (isTogglingServer) return;
+        setIsTogglingServer(true);
+        // @ts-ignore
+        if (window.go && window.go.main && window.go.main.App) {
+            try {
+                // @ts-ignore
+                await window.go.main.App.SetServerEnabled(!serverEnabled);
+                // Update local state is handled by Polling (GetConfig)
+                // But we can optimistically flip it for UI snappiness
+                setServerEnabled(!serverEnabled);
+            } catch (e) {
+                console.error(e);
+                addToast("Failed to toggle server: " + e, 'error');
+            } finally {
+                setIsTogglingServer(false);
+            }
         }
     };
 
@@ -885,17 +983,18 @@ function Dashboard(): JSX.Element {
     useEffect(() => {
         // @ts-ignore
         if (!window.go) {
-            fetch('/api/config')
-                .then(r => r.json())
+            fetchWithAuth('/api/config')
+                .then(async r => {
+                    if (!r.ok) throw new Error("Failed to fetch config");
+                    return r.json();
+                })
                 .then(cfg => {
-                    if (cfg.path) {
-                        // Only set if we don't have a local preference, OR if local pref is invalid?
-                        // Actually, we trust local storage if present. 
-                        const saved = localStorage.getItem('activeLibraryPath');
-                        if (!saved) {
-                            setActiveLibraryPath(cfg.path);
-                            localStorage.setItem('activeLibraryPath', cfg.path);
-                        }
+                    const saved = localStorage.getItem('activeLibraryPath');
+                    // Fallback to first library if no saved path, or if saved path is invalid? 
+                    // For now, just ensure we have a selection.
+                    if (!saved && cfg.libraries && cfg.libraries.length > 0) {
+                        setActiveLibraryPath(cfg.libraries[0]);
+                        localStorage.setItem('activeLibraryPath', cfg.libraries[0]);
                     }
                 })
                 .catch(() => console.log("Not in web mode or server offline"));
@@ -2011,16 +2110,16 @@ function Dashboard(): JSX.Element {
                 <SettingsDialog
                     isOpen={isSettingsOpen}
                     onClose={() => setIsSettingsOpen(false)}
-                    isGuest={false} // Connect to AuthContext proper later
+                    isGuest={isGuest}
                     isWeb={!window.go}
                     gridSize={gridSize}
-                    setGridSize={(v) => { setGridSize(v); localStorage.setItem('gridSize', v.toString()); }}
+                    setGridSize={setGridSize}
                     itemsPerPage={itemsPerPage}
                     setItemsPerPage={handleSetItemsPerPage}
                     minimizeOnClose={minimizeOnClose}
-                    handleSetMinimize={setMinimizeOnClose}
+                    handleSetMinimize={handleSetMinimize}
                     censorThumbnails={censorThumbnails}
-                    setCensorThumbnails={(v) => { setCensorThumbnails(v); localStorage.setItem('censorThumbnails', v.toString()); }}
+                    setCensorThumbnails={setCensorThumbnails}
                     blurAmount={blurAmount}
                     setBlurAmount={setBlurAmount}
                     hidePackageNames={hidePackageNames}
@@ -2031,14 +2130,31 @@ function Dashboard(): JSX.Element {
                     onToggleServer={handleToggleServer}
                     serverPort={serverPort}
                     setServerPort={setServerPort}
+                    onStartServer={handleStartServer}
+                    onStopServer={handleStopServer}
                     publicAccess={publicAccess}
                     onTogglePublicAccess={handleTogglePublicAccess}
                     localIP={localIP}
                     logs={serverLogs}
                     setLogs={setServerLogs}
                     maxToasts={maxToasts}
-                    setMaxToasts={(v) => { setMaxToasts(v); localStorage.setItem('maxToasts', v.toString()); }}
-                    handleClearData={handleClearData}
+                    setMaxToasts={(val) => { setMaxToasts(val); localStorage.setItem('maxToasts', val.toString()); }}
+                    authPollInterval={authPollInterval}
+                    setAuthPollInterval={handleSetAuthPollInterval}
+                    keybinds={keybinds}
+                    setKeybinds={setKeybinds}
+                    handleClearData={() => setConfirmationState({
+                        isOpen: true,
+                        title: "Reset Database",
+                        message: "Are you sure you want to clear all data? This will trigger a full re-scan.",
+                        confirmText: "Reset Everything",
+                        confirmStyle: "danger",
+                        onConfirm: async () => {
+                            // @ts-ignore
+                            if (window.go) await window.go.main.App.ClearAppData();
+                            window.location.reload();
+                        }
+                    })}
                     addToast={addToast}
                 />
                 <ConfirmationModal
@@ -2062,6 +2178,16 @@ function Dashboard(): JSX.Element {
                     message={`A package with the same name already exists in the destination. Since versions match, would you like to merge/overwrite it?`}
                     confirmText="Merge & Overwrite"
                     confirmStyle="primary"
+                />
+
+                <ConfirmationModal
+                    isOpen={confirmationState.isOpen}
+                    onClose={() => setConfirmationState(prev => ({ ...prev, isOpen: false }))}
+                    onConfirm={confirmationState.onConfirm}
+                    title={confirmationState.title}
+                    message={confirmationState.message}
+                    confirmText={confirmationState.confirmText || "Confirm"}
+                    confirmStyle={confirmationState.confirmStyle || "primary"}
                 />
 
                 <OptimizationModal
@@ -2543,6 +2669,9 @@ function Dashboard(): JSX.Element {
                         </motion.div>
                     )}
                 </AnimatePresence>
+
+
+
 
 
 

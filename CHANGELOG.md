@@ -6,7 +6,7 @@
 
 # Changelog
 
-## [v1.3.0] - 2026-01-13
+## [v1.3.0] - Unreleased
 
 ### Added
 - **User Interface**: Redesigned settings into a unified, tabbed dialog (Application, Privacy, Network, Security).
@@ -14,14 +14,21 @@
 - **Privacy Controls**: Added "Hide Metadata" (Invisible text) and "Hide Creator Names" for privacy, plus Blur Intensity slider.
 - **Session Management**: Added "Active Devices" list to Settings, allowing revocation of specific sessions.
 - **Authentication**: Implemented industry-standard "Challenge-Response" authentication.
+- **Configuration**: Added "Auth Polling Interval" setting (Network Tab), allowing custom revocation check frequency (5s-60s).
 - **Testing**: Added comprehensive unit tests for `LibraryService` and `pkg/manager`.
+- **Session Persistence**: Active sessions are now persisted to disk (`auth_config.json`) and restored on restart, preventing logout loops.
+- **Keybinds**: Restored the "Keybinds" tab and functionality, allowing users to rebind the "Toggle Privacy" shortcut.
 
 ### Changed
+- **Breaking Change**: Removed `VamPath` (Main Library) concept from backend. Server now treats all libraries equally.
+- **Breaking Change**: API endpoints (`/api/packages`, `/api/scan/collisions`, etc.) now **strictly require** a `path` parameter.
 - **Architecture**: Decoupled `Manager` into `LibraryService`, `SystemService`, and `ConfigService`.
 - **Compliance**: Removed all hardcoded references to "AddonPackages" logic to support arbitrary library folders.
 - **Refactor**: Updated `pkg/manager` to use `pkg/fs` for all filesystem interactions.
 - **Refactor**: Reorganized frontend source into a Feature-based Architecture.
 - **Branding**: Renamed Go module and internal references from `varmanager` to `yavam`.
+- **Animations**: Implemented "Cascading" entrance animations for settings tabs for a smoother / premium feel.
+- **Dependencies**: Updated `AnimatePresence` logic to support collapsible tabs on mobile.
 
 ### Fixed
 - **Setup Crash**: Fixed "Path not found" error during initial setup (missing directory creation).
@@ -29,7 +36,11 @@
 - **Duplicates**: Fixed duplicate file uploads on drag-and-drop.
 - **Ghost Library**: Fixed an issue where clearing the library list would cause scanning of the installation directory.
 - **Access Denied**: Resolved access errors by implementing strict, thread-safe path validation in the server.
-- **Login Redirect**: Fixed issue where successful login via modal would not redirect to dashboard.
+- **Login Redirect**: Fixed issue where successful login via modal would not redirect to the dashboard.
+- **Modal Layout**: Fixed modal title crowding by moving titles to top-left and increasing spacing from the close button.
+- **Factory Reset**: Fixed "Reset Database" confirmation not appearing (implemented generic confirmation handler).
+- **Z-Index**: Fixed confirmation modals appearing behind the settings menu (upcoming fix).
+- **Linting**: Resolved unused variable warnings in Settings and Dashboard components.
 
 ### Security
 - **Authentication**: Passwords are never transmitted over the network (Challenge-Response).

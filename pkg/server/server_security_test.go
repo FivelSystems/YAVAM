@@ -16,8 +16,7 @@ func TestIsPathAllowed(t *testing.T) {
 	lib2 := strings.ToLower(wd) + "_2"
 
 	s := &Server{
-		libraries:  []string{lib1, lib2},
-		activePath: lib1,
+		libraries: []string{lib1, lib2},
 	}
 
 	tests := []struct {

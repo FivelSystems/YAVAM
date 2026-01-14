@@ -8,9 +8,10 @@ interface LoginModalProps {
     isOpen: boolean;
     onClose: () => void;
     force?: boolean; // If true, cannot close
+    message?: string;
 }
 
-export default function LoginModal({ isOpen, onClose, force = false }: LoginModalProps) {
+export default function LoginModal({ isOpen, onClose, force = false, message }: LoginModalProps) {
     const navigate = useNavigate();
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
@@ -96,9 +97,9 @@ export default function LoginModal({ isOpen, onClose, force = false }: LoginModa
                                     {force ? "Authentication Required" : "Unlock Admin Access"}
                                 </h2>
                                 <p className="text-gray-400 text-sm">
-                                    {force
+                                    {message || (force
                                         ? "This server is private. Please authenticate to continue."
-                                        : "Enter password to perform this action."}
+                                        : "Enter password to perform this action.")}
                                 </p>
                             </div>
 

@@ -1,14 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
 
 import Modal from '../../components/ui/Modal';
-import SettingsSidebar from './components/SettingsSidebar';
+import SettingsSidebar, { SETTINGS_TABS } from './components/SettingsSidebar';
+import { AnimatePresence, motion } from 'framer-motion';
+import { ChevronDown } from 'lucide-react';
+import clsx from 'clsx';
 import ApplicationTab from './tabs/ApplicationTab';
 import PrivacyTab from './tabs/PrivacyTab';
 import NetworkTab from './tabs/NetworkTab';
 import SecurityTab from './tabs/SecurityTab';
 import AboutTab from './tabs/AboutTab';
+import KeybindsTab from './tabs/KeybindsTab';
 
-export type SettingsTab = 'application' | 'privacy' | 'network' | 'security' | 'about';
+export type SettingsTab = 'application' | 'privacy' | 'network' | 'security' | 'keybinds' | 'about';
 
 interface SettingsDialogProps {
     isOpen: boolean;
@@ -41,6 +45,8 @@ interface SettingsDialogProps {
     onToggleServer: () => void;
     serverPort: string;
     setServerPort: (val: string) => void;
+    onStartServer: () => void;
+    onStopServer: () => void;
     publicAccess: boolean;
     onTogglePublicAccess: () => void;
     localIP: string;
@@ -48,6 +54,14 @@ interface SettingsDialogProps {
     setLogs: React.Dispatch<React.SetStateAction<string[]>>;
     maxToasts: number;
     setMaxToasts: (val: number) => void;
+
+    // Auth
+    authPollInterval: number;
+    setAuthPollInterval: (val: number) => void;
+
+    // Keybinds
+    keybinds: { [key: string]: string };
+    setKeybinds: (binds: { [key: string]: string }) => void;
 
     // Actions
     handleClearData: () => void;
@@ -77,6 +91,8 @@ const SettingsDialog = ({
     onToggleServer,
     serverPort,
     setServerPort,
+    onStartServer,
+    onStopServer,
     publicAccess,
     onTogglePublicAccess,
     localIP,
@@ -84,11 +100,15 @@ const SettingsDialog = ({
     setLogs,
     maxToasts,
     setMaxToasts,
+    authPollInterval,
+    setAuthPollInterval,
+    keybinds,
+    setKeybinds,
     handleClearData,
     addToast
 }: SettingsDialogProps) => {
 
-    const [activeTab, setActiveTab] = useState<SettingsTab>('application');
+    const [activeTab, setActiveTab] = useState<SettingsTab | null>('application');
     const [appVersion, setAppVersion] = useState("");
 
     // Snapshot for Cancel/Revert
@@ -96,12 +116,14 @@ const SettingsDialog = ({
         gridSize: number;
         itemsPerPage: number;
         minimizeOnClose: boolean;
-        censorThumbnails,
-        blurAmount,
-        hidePackageNames,
-        hideCreatorNames,
+        censorThumbnails: boolean;
+        blurAmount: number;
+        hidePackageNames: boolean;
+        hideCreatorNames: boolean;
         maxToasts: number;
         serverPort: string;
+        authPollInterval: number;
+        keybinds: string; // Store as JSON string for easy compare
     } | null>(null);
 
     // Capture Snapshot on Open
@@ -116,7 +138,9 @@ const SettingsDialog = ({
                 hidePackageNames,
                 hideCreatorNames,
                 maxToasts,
-                serverPort
+                serverPort,
+                authPollInterval,
+                keybinds: JSON.stringify(keybinds)
             };
         }
     }, [isOpen]);
@@ -133,6 +157,8 @@ const SettingsDialog = ({
             setHideCreatorNames(s.hideCreatorNames);
             setMaxToasts(s.maxToasts);
             setServerPort(s.serverPort);
+            setAuthPollInterval(s.authPollInterval);
+            setKeybinds(JSON.parse(s.keybinds));
         }
         onClose();
     };
@@ -146,7 +172,9 @@ const SettingsDialog = ({
         snapshotRef.current.hidePackageNames !== hidePackageNames ||
         snapshotRef.current.hideCreatorNames !== hideCreatorNames ||
         snapshotRef.current.maxToasts !== maxToasts ||
-        snapshotRef.current.serverPort !== serverPort
+        snapshotRef.current.serverPort !== serverPort ||
+        snapshotRef.current.authPollInterval !== authPollInterval ||
+        snapshotRef.current.keybinds !== JSON.stringify(keybinds)
     ) : false;
 
     // Version Fetch
@@ -165,15 +193,81 @@ const SettingsDialog = ({
         }
     }, [isOpen]);
 
+
+    const renderTabContent = (tabId: SettingsTab | null) => {
+        switch (tabId) {
+            case 'application':
+                return (
+                    <ApplicationTab
+                        gridSize={gridSize}
+                        setGridSize={setGridSize}
+                        itemsPerPage={itemsPerPage}
+                        setItemsPerPage={setItemsPerPage}
+                        minimizeOnClose={minimizeOnClose}
+                        setMinimizeOnClose={handleSetMinimize}
+                        isWeb={isWeb}
+                        maxToasts={maxToasts}
+                        setMaxToasts={setMaxToasts}
+                    />
+                );
+            case 'privacy':
+                return (
+                    <PrivacyTab
+                        censorThumbnails={censorThumbnails}
+                        setCensorThumbnails={setCensorThumbnails}
+                        blurAmount={blurAmount}
+                        setBlurAmount={setBlurAmount}
+                        hidePackageNames={hidePackageNames}
+                        setHidePackageNames={setHidePackageNames}
+                        hideCreatorNames={hideCreatorNames}
+                        setHideCreatorNames={setHideCreatorNames}
+                    />
+                );
+            case 'network':
+                return (
+                    <NetworkTab
+                        serverEnabled={serverEnabled}
+                        onToggleServer={onToggleServer}
+                        serverPort={serverPort}
+                        setServerPort={setServerPort}
+                        onStartServer={onStartServer}
+                        onStopServer={onStopServer}
+                        publicAccess={publicAccess}
+                        onTogglePublicAccess={onTogglePublicAccess}
+                        localIP={localIP}
+                        logs={logs}
+                        setLogs={setLogs}
+                        isWeb={isWeb}
+                        authPollInterval={authPollInterval}
+                        setAuthPollInterval={setAuthPollInterval}
+                    />
+                );
+            case 'security':
+                return (
+                    <SecurityTab
+                        handleClearData={handleClearData}
+                        addToast={addToast}
+                    />
+                );
+            case 'keybinds':
+                return (
+                    <KeybindsTab
+                        keybinds={keybinds}
+                        setKeybinds={setKeybinds}
+                    />
+                );
+            case 'about':
+                return <AboutTab appVersion={appVersion} />;
+            default:
+                return null;
+        }
+    };
+
     return (
         <Modal
             isOpen={isOpen}
-            onClose={onClose} // Clicking X behaves like "Save/Close" (Retention) or Cancel? usually X = Cancel.
-            // Let's make X = HandleCancel for consistency if we strictly want revert.
-            // But standard behavior for "Instant Apply" modals (like macOS system settings) is X = Keep changes.
-            // If we have explicit "Cancel" button, X usually means "Close" (Keep).
-            // Let's keep X as onClose (Keep).
-            title={null}
+            onClose={onClose}
+            title="Settings"
             size="full"
             className="p-0 overflow-hidden bg-gray-900 border-gray-800"
             showCloseButton={true}
@@ -200,7 +294,7 @@ const SettingsDialog = ({
         >
             <div className="flex h-full">
                 {/* Sidebar (Desktop) */}
-                <div className="hidden md:block shrink-0">
+                <div className="hidden md:block shrink-0 h-full">
                     <SettingsSidebar
                         activeTab={activeTab}
                         setActiveTab={setActiveTab}
@@ -211,75 +305,71 @@ const SettingsDialog = ({
 
                 {/* Content Area */}
                 <div className="flex-1 h-full overflow-hidden flex flex-col bg-gray-900/50">
-                    {/* Mobile Tab Select (If we need it, or we rely on Sidebar becoming a drawer? 
-                        For now, simple top-nav/pill list for mobile if not using sidebar) */}
-                    <div className="md:hidden p-4 overflow-x-auto whitespace-nowrap border-b border-gray-800">
-                        {/* Simple Mobile Nav Implementation */}
-                        <div className="flex gap-2">
-                            {(['application', 'privacy', 'network', 'security', 'about'] as SettingsTab[]).map(t => {
-                                if ((t === 'network' || t === 'security') && isGuest) return null;
-                                return (
+
+                    {/* Mobile Accordion View */}
+                    <div className="md:hidden flex flex-col h-full overflow-y-auto overflow-x-hidden">
+                        {SETTINGS_TABS.map(tab => {
+                            if (isGuest && tab.admin) return null;
+                            const isOpen = activeTab === tab.id;
+
+                            return (
+                                <div key={tab.id} className="border-b border-gray-800 last:border-0">
                                     <button
-                                        key={t}
-                                        onClick={() => setActiveTab(t)}
-                                        className={`px-3 py-1.5 rounded-full text-xs font-medium border ${activeTab === t ? 'bg-blue-600 border-blue-500 text-white' : 'border-gray-700 text-gray-400'}`}
+                                        onClick={() => setActiveTab(activeTab === tab.id ? null : tab.id as SettingsTab)}
+                                        className={clsx(
+                                            "w-full flex items-center justify-between p-4 text-left font-medium transition-colors",
+                                            isOpen ? "bg-gray-800/50 text-white" : "text-gray-400 hover:text-gray-200"
+                                        )}
                                     >
-                                        {t.charAt(0).toUpperCase() + t.slice(1)}
+                                        <div className="flex items-center gap-3">
+                                            <tab.icon size={20} />
+                                            <span>{tab.label}</span>
+                                        </div>
+                                        <ChevronDown
+                                            size={16}
+                                            className={clsx("transition-transform duration-200", isOpen ? "rotate-180" : "")}
+                                        />
                                     </button>
-                                )
-                            })}
-                        </div>
+
+                                    {/* Content (Expanded) */}
+                                    <AnimatePresence>
+                                        {isOpen && (
+                                            <motion.div
+                                                initial={{ height: 0, opacity: 0 }}
+                                                animate={{ height: "auto", opacity: 1 }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                transition={{ duration: 0.2 }}
+                                                className="overflow-hidden"
+                                            >
+                                                <div className="p-4 bg-gray-900/30 border-t border-gray-800">
+                                                    {renderTabContent(tab.id as SettingsTab)}
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+                            );
+                        })}
                     </div>
 
-                    <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-8">
-                        {activeTab === 'application' && (
-                            <ApplicationTab
-                                gridSize={gridSize}
-                                setGridSize={setGridSize}
-                                itemsPerPage={itemsPerPage}
-                                setItemsPerPage={setItemsPerPage}
-                                minimizeOnClose={minimizeOnClose}
-                                setMinimizeOnClose={handleSetMinimize}
-                                isWeb={isWeb}
-                                maxToasts={maxToasts}
-                                setMaxToasts={setMaxToasts}
-                            />
-                        )}
-                        {activeTab === 'privacy' && (
-                            <PrivacyTab
-                                censorThumbnails={censorThumbnails}
-                                setCensorThumbnails={setCensorThumbnails}
-                                blurAmount={blurAmount}
-                                setBlurAmount={setBlurAmount}
-                                hidePackageNames={hidePackageNames}
-                                setHidePackageNames={setHidePackageNames}
-                                hideCreatorNames={hideCreatorNames}
-                                setHideCreatorNames={setHideCreatorNames}
-                            />
-                        )}
-                        {activeTab === 'network' && (
-                            <NetworkTab
-                                serverEnabled={serverEnabled}
-                                onToggleServer={onToggleServer}
-                                serverPort={serverPort}
-                                setServerPort={setServerPort}
-                                publicAccess={publicAccess}
-                                onTogglePublicAccess={onTogglePublicAccess}
-                                localIP={localIP}
-                                logs={logs}
-                                setLogs={setLogs}
-                                isWeb={isWeb}
-                            />
-                        )}
-                        {activeTab === 'security' && (
-                            <SecurityTab
-                                handleClearData={handleClearData}
-                                addToast={addToast}
-                            />
-                        )}
-                        {activeTab === 'about' && (
-                            <AboutTab appVersion={appVersion} />
-                        )}
+                    {/* Desktop Content View */}
+                    <div className="hidden md:block flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar p-8">
+                        <AnimatePresence mode="wait">
+                            <motion.div
+                                key={activeTab || "empty"}
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                transition={{ duration: 0.2 }}
+                                className="h-full"
+                            >
+                                {activeTab ? renderTabContent(activeTab) : (
+                                    <div className="flex items-center justify-center h-full text-gray-500">
+                                        Select a tab to view settings
+                                    </div>
+                                )}
+                            </motion.div>
+                        </AnimatePresence>
                     </div>
                 </div>
             </div>

@@ -46,8 +46,6 @@ type Server struct {
 	scanWg sync.WaitGroup
 
 	SkipEvents bool // For testing
-
-	activePath string // Currently served library path
 }
 
 func NewServer(ctx context.Context, m *manager.Manager, authService auth.AuthService, assets fs.FS, version string, onRestore func()) *Server {
@@ -115,28 +113,7 @@ func (s *Server) IsPathAllowed(path string) bool {
 	cleanTarget := strings.ToLower(filepath.Clean(path))
 
 	s.mu.Lock()
-	active := s.activePath
-	// Copy libraries to avoid holding lock during iteration if we wanted,
-	// but holding lock for string/prefix check is fast enough.
-	// Actually, let's use GetLibraries() or just hold lock?
-	// GetLibraries copies, which is safe.
-	// But since we are inside IsPathAllowed, we can just hold lock for the duration of checks?
-	// s.libraries access needs lock. s.activePath needs lock.
-	// Let's hold lock for the whole function.
 	defer s.mu.Unlock()
-
-	cleanActive := strings.ToLower(filepath.Clean(active))
-
-	if active != "" {
-		// Exact match
-		if cleanTarget == cleanActive {
-			return true
-		}
-		// Subdirectory match
-		if strings.HasPrefix(cleanTarget, cleanActive+string(os.PathSeparator)) {
-			return true
-		}
-	}
 
 	for _, lib := range s.libraries {
 		cleanLib := strings.ToLower(filepath.Clean(lib))
@@ -171,8 +148,8 @@ func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin")
 
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
@@ -212,7 +189,7 @@ func (s *Server) Broadcast(eventType string, data interface{}) {
 	}
 }
 
-func (s *Server) Start(port string, activePath string, libraries []string) error {
+func (s *Server) Start(port string, libraries []string) error {
 	s.mu.Lock()
 	if s.running {
 		s.mu.Unlock()
@@ -220,13 +197,6 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 	}
 	s.mu.Unlock()
 
-	// Check if path exists
-	// Check if path exists
-	// if activePath == "" {
-	// 	return fmt.Errorf("invalid path")
-	// }
-
-	s.activePath = activePath
 	s.libraries = libraries
 
 	mux := http.NewServeMux()
@@ -251,12 +221,21 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		}()
 
 		notify := r.Context().Done()
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+
 		for {
 			select {
 			case <-notify:
 				return
 			case msg := <-clientChan:
 				fmt.Fprint(w, msg)
+				if flusher, ok := w.(http.Flusher); ok {
+					flusher.Flush()
+				}
+			case <-ticker.C:
+				// Send a comment to keep the connection alive
+				fmt.Fprint(w, ": keep-alive\n\n")
 				if flusher, ok := w.(http.Flusher); ok {
 					flusher.Flush()
 				}
@@ -295,6 +274,11 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 			return
 		}
 
+		if s.auth == nil {
+			s.writeError(w, "Auth service not initialized", 500)
+			return
+		}
+
 		nonce, err := s.auth.InitiateLogin(req.Username)
 		if err != nil {
 			// Don't leak user existence? Actually for simple auth it's fine.
@@ -327,6 +311,11 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 			return
 		}
 
+		if s.auth == nil {
+			s.writeError(w, "Auth service not initialized", 500)
+			return
+		}
+
 		token, err := s.auth.CompleteLogin(req.Username, req.Nonce, req.Proof, req.DeviceName)
 		if err != nil {
 			s.writeError(w, "Invalid credentials or expired nonce", 401)
@@ -352,6 +341,14 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		json.NewEncoder(w).Encode(sessions)
 	})))
 
+	// Verify Endpoint
+	mux.Handle("/api/auth/verify", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+		w.Header().Set("Pragma", "no-cache")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]bool{"success": true})
+	})))
+
 	// Auth: Revoke Session
 	mux.Handle("/api/auth/revoke", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
@@ -371,8 +368,8 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 			return
 		}
 
-		// Broadcast check event to force clients to re-validate
-		s.Broadcast("auth:check", nil)
+		// Broadcast revoked event to force clients to logout immediately
+		s.Broadcast("auth:revoked", map[string]string{"id": req.ID})
 
 		json.NewEncoder(w).Encode(map[string]bool{"success": true})
 	})))
@@ -383,8 +380,10 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 
 		// Allow client to request a specific library, default to activePath
 		targetPath := r.URL.Query().Get("path")
+
 		if targetPath == "" {
-			targetPath = activePath
+			s.writeError(w, "No library path selected", 400)
+			return
 		}
 
 		if targetPath == "" {
@@ -441,8 +440,10 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 	// Disk Space Endpoint
 	mux.Handle("/api/disk-space", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		targetPath := r.URL.Query().Get("path")
+
 		if targetPath == "" {
-			targetPath = activePath
+			s.writeError(w, "No library path selected", 400)
+			return
 		}
 
 		if targetPath == "" {
@@ -560,7 +561,6 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"webMode":      true,
-			"path":         activePath,
 			"libraries":    s.libraries,
 			"version":      s.version,
 			"publicAccess": cfg.PublicAccess,
@@ -595,7 +595,8 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		// User requested path (or default to active)
 		targetPath := r.FormValue("path")
 		if targetPath == "" {
-			targetPath = activePath
+			s.writeError(w, "Target path is required", 400)
+			return
 		}
 
 		// Security Check
@@ -663,9 +664,10 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 			return
 		}
 
-		targetLib := activePath
-		if req.LibraryPath != "" {
-			targetLib = req.LibraryPath
+		targetLib := req.LibraryPath
+		if targetLib == "" {
+			s.writeError(w, "Library path is required", 400)
+			return
 		}
 
 		newPath, err := s.manager.TogglePackage(nil, req.FilePath, req.Enable, targetLib, req.Merge)
@@ -699,9 +701,10 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 			return
 		}
 
-		targetLib := activePath
-		if req.LibraryPath != "" {
-			targetLib = req.LibraryPath
+		targetLib := req.LibraryPath
+		if targetLib == "" {
+			s.writeError(w, "Library path is required", 400)
+			return
 		}
 
 		// Security Check
@@ -751,7 +754,8 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 		// But LibraryPath might be dynamic.
 		// For now, assume Manager logic is robust or add basic check:
 		if req.LibraryPath == "" {
-			req.LibraryPath = activePath
+			s.writeError(w, "Library path is required", 400)
+			return
 		}
 
 		// Call Manager
@@ -785,7 +789,8 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 
 		destPath := req.DestLib
 		if destPath == "" {
-			destPath = activePath // Default to active library if not specified
+			s.writeError(w, "Destination path is required", 400)
+			return
 		}
 
 		// Security check: ensure source files are in allowed libraries?
@@ -842,7 +847,8 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 
 		targetPath := req.Path
 		if targetPath == "" {
-			targetPath = activePath
+			s.writeError(w, "Target path is required", 400)
+			return
 		}
 
 		// Security Check
@@ -918,8 +924,8 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 
 	mux.Handle("/", distFs)
 
-	// Default to binding to localhost only for security
-	bindAddr := "127.0.0.1:" + port
+	// Bind to all interfaces to allow remote access
+	bindAddr := "0.0.0.0:" + port
 
 	s.httpSrv = &http.Server{
 		Addr:    bindAddr,
@@ -937,7 +943,7 @@ func (s *Server) Start(port string, activePath string, libraries []string) error
 	s.mu.Unlock()
 
 	s.log(fmt.Sprintf("Starting server on port %s...", port))
-	s.log(fmt.Sprintf("Serving library from: %s", activePath))
+	s.log(fmt.Sprintf("Serving %d libraries.", len(libraries)))
 	s.log("Web interface available at root URL.")
 
 	go func() {

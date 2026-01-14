@@ -5,7 +5,7 @@ import { AuthProvider, useAuth } from './features/auth/AuthContext';
 import { Loader2 } from 'lucide-react';
 
 function AppContent() {
-    const { isLoginModalOpen, closeLoginModal, isLoginForced, isLoading } = useAuth();
+    const { isLoginModalOpen, closeLoginModal, isLoginForced, isLoading, isAuthenticated, isGuest, loginMessage } = useAuth();
 
     // While checking auth, show a simple loader
     if (isLoading) {
@@ -20,7 +20,9 @@ function AppContent() {
         <HashRouter>
             <Routes>
                 {/* Dashboard is always rendered. Access control is handled by AuthContext (Modal) and Backend (401s) */}
-                <Route path="/" element={<Dashboard />} />
+                {/* Only render Dashboard if authenticated or guest, or on Desktop (setup/wails) */}
+                {/* @ts-ignore */}
+                <Route path="/" element={(isAuthenticated || isGuest || window.go) ? <Dashboard /> : <div className="h-screen w-screen bg-[#0b111a]" />} />
             </Routes>
 
             {/* Global Login Modal */}
@@ -28,6 +30,7 @@ function AppContent() {
                 isOpen={isLoginModalOpen}
                 onClose={closeLoginModal}
                 force={isLoginForced}
+                message={loginMessage}
             />
         </HashRouter>
     );

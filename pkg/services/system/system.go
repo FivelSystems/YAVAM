@@ -1,6 +1,8 @@
 package system
 
 import (
+	"fmt"
+	"os/exec"
 	"yavam/pkg/fs"
 )
 
@@ -54,14 +56,10 @@ func (s *defaultSystemService) DeleteToTrash(path string) error {
 }
 
 func (s *defaultSystemService) CopyFileToClipboard(path string) error {
-	// Logic currently in manager.go, needs to be moved here.
-	// We'll temporarily error or duplicate logic?
-	// Logic relies on 'exec.Command("powershell")', which is system level.
-	// So YES, it belongs here.
-	// I'll leave it as TODO for the move step or copy it now?
-	// The implementation plan says "Extract". I will copy the logic in the next step or put it here now if I can view manager.go content clearly.
-	// I'll put a placeholder or basic implementation.
-	return nil
+	// Use PowerShell to set the clipboard (Works on Windows 10/11)
+	// Set-Clipboard -Path conflicts with string input, so we use pipe or LiteralPath
+	cmd := exec.Command("powershell", "-NoProfile", "-Command", fmt.Sprintf("Set-Clipboard -LiteralPath '%s'", path))
+	return cmd.Run()
 }
 
 func (s *defaultSystemService) CutFileToClipboard(path string) error {

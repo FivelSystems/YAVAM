@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { getStoredToken, logout as serviceLogout } from '../../services/auth';
+import { fetchWithAuth } from '../../services/api';
 
 interface AuthContextType {
     isAuthenticated: boolean; // Has valid Admin Token
@@ -9,7 +10,8 @@ interface AuthContextType {
     // Modal Control
     isLoginModalOpen: boolean;
     isLoginForced: boolean;
-    openLoginModal: (force?: boolean) => void;
+    loginMessage?: string;
+    openLoginModal: (force?: boolean, message?: string) => void;
     closeLoginModal: () => void;
 
     // Actions
@@ -26,10 +28,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
     const [isLoginForced, setIsLoginForced] = useState(false);
+    const [loginMessage, setLoginMessage] = useState<string | undefined>(undefined);
 
-    // Initial Check
+    // Verify Token or Public Access
     const checkAuth = async () => {
-        setIsLoading(true);
         try {
             // @ts-ignore
             if (window.go) {
@@ -37,7 +39,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setIsAuthenticated(true);
                 setIsGuest(false);
                 setIsLoginModalOpen(false);
-                setIsLoading(false);
                 isLoginForced && setIsLoginForced(false); // Reset force if previously set
                 return;
             }
@@ -46,18 +47,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const token = getStoredToken();
             if (token) {
                 // Validate token with server to ensure it is still valid/not revoked
-                const res = await fetch('/api/config'); // Protected endpoint
+                // We must use a strictly protected endpoint that is NOT allowed for guests
+                const res = await fetchWithAuth('/api/auth/verify');
                 if (res.ok) {
                     setIsAuthenticated(true);
                     setIsGuest(false);
                     setIsLoginModalOpen(false);
                     setIsLoginForced(false);
                 } else if (res.status === 401) {
-                    // Token invalid/expired
+                    // Token invalid/expired/revoked
+                    serviceLogout(); // Clear from storage
                     setIsAuthenticated(false);
                     setIsGuest(false);
                     // If we have a token but it failed, it might be revoked. Open modal.
-                    openLoginModal(true);
+                    openLoginModal(true, "Your session has been revoked by the server.");
                 } else {
                     // Server error, keep authenticated if token exists? Or risk it?
                     // Better to assume valid unless 401.
@@ -69,7 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setIsAuthenticated(false);
 
                 // 2. Check Public Access
-                const res = await fetch('/api/config');
+                const res = await fetchWithAuth('/api/config');
                 if (res.ok) {
                     const cfg = await res.json();
                     if (cfg.publicAccess) {
@@ -92,36 +95,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setIsAuthenticated(false);
             setIsGuest(false);
             openLoginModal(true);
-        } finally {
-            setIsLoading(false);
         }
     };
 
+    const [pollInterval, setPollInterval] = useState(15000); // Default 15s
+
+    // 1. Initial Check & Event Listeners
     useEffect(() => {
         // Run check on mount
-        checkAuth();
+        const init = async () => {
+            // Fetch Config for Polling Interval
+            try {
+                const res = await fetch('/api/config');
+                if (res.ok) {
+                    const cfg = await res.json();
+                    if (cfg.authPollInterval && cfg.authPollInterval > 0) {
+                        setPollInterval(cfg.authPollInterval * 1000);
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to fetch auth config", e);
+            }
 
-        // Listen for 401 events or Logout events
+            await checkAuth();
+            setIsLoading(false);
+        };
+        init();
+
+        // Listen for local logout events
         const handleLogout = () => {
             setIsAuthenticated(false);
-            checkAuth(); // Re-evaluate (might fall back to guest)
+            checkAuth();
         };
-
-        // Custom event disaptched by auth service on specific failures?
-        // Or we can intercept fetch globally? 
-        // For now, services/auth.ts dispatches 'auth:logout'
         window.addEventListener('auth:logout', handleLogout);
-        // Listen for server revocation check
-        window.addEventListener('auth:check', () => checkAuth());
 
         return () => {
             window.removeEventListener('auth:logout', handleLogout);
-            window.removeEventListener('auth:check', () => checkAuth());
         };
     }, []);
 
-    const openLoginModal = (force = false) => {
+    // 2. Polling for Revocation (Only when active)
+    useEffect(() => {
+        if (!isAuthenticated && !isGuest) return;
+
+        const interval = setInterval(() => {
+            checkAuth();
+        }, pollInterval);
+
+        return () => clearInterval(interval);
+    }, [isAuthenticated, isGuest, pollInterval]);
+
+    const openLoginModal = (force = false, message?: string) => {
+        if (isLoginModalOpen) return;
         setIsLoginForced(force);
+        setLoginMessage(message);
         setIsLoginModalOpen(true);
     };
 
@@ -146,6 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             isLoading,
             isLoginModalOpen,
             isLoginForced,
+            loginMessage,
             openLoginModal,
             closeLoginModal,
             logout,

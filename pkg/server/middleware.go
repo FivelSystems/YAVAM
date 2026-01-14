@@ -30,6 +30,10 @@ func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
+			// Strict Mode: If a token is provided but invalid, Fail immediately.
+			// Do NOT fallback to Guest. This ensures clients know their session is dead.
+			s.writeError(w, "Invalid or Expired Token", http.StatusUnauthorized)
+			return
 		}
 
 		// 3. Fallback: Check Public Access
@@ -59,6 +63,10 @@ func (s *Server) isGuestAllowed(r *http.Request) bool {
 			"/api/config",
 			"/api/thumbnail",
 			"/api/events":
+			return true
+		}
+
+		if strings.HasPrefix(path, "/files/") {
 			return true
 		}
 	}

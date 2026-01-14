@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Folder, Check, KeyRound, Globe, ArrowRight, ArrowLeft, ShieldCheck } from 'lucide-react';
+import { Folder, Check, KeyRound, Globe, ArrowRight, ArrowLeft, X } from 'lucide-react';
 import clsx from 'clsx';
 
 interface SetupWizardProps {
@@ -17,6 +17,7 @@ const SetupWizard = ({ onComplete }: SetupWizardProps) => {
 
     // Step 3: Network
     const [enableServer, setEnableServer] = useState(false);
+    const [serverPort, setServerPort] = useState("18888");
 
     const [loading, setLoading] = useState(false);
 
@@ -46,16 +47,32 @@ const SetupWizard = ({ onComplete }: SetupWizardProps) => {
 
                 // Save Server Config
                 if (enableServer) {
+                    console.log("[Setup] Enabling Server on Startup...");
                     // @ts-ignore
                     await window.go.main.App.SetServerEnabled(true);
+
+                    console.log("[Setup] Setting Server Port:", serverPort);
+                    // @ts-ignore
+                    await window.go.main.App.SetServerPort(serverPort);
+
+                    console.log("[Setup] Starting Server immediately...");
+                    // @ts-ignore
+                    await window.go.main.App.StartServer();
                 }
 
+                console.log("[Setup] Marking Setup as Complete...");
                 // @ts-ignore
                 await window.go.main.App.FinishSetup();
             }
             onComplete(libraryPath);
         } catch (e) {
             console.error("Setup failed:", e);
+            // Don't alert "already running" error if it happens on start logic
+            if (e && e.toString().includes("already running")) {
+                // Ignore, proceed
+                onComplete(libraryPath);
+                return;
+            }
             alert("Failed to complete setup: " + e);
         }
         setLoading(false);
@@ -114,13 +131,20 @@ const SetupWizard = ({ onComplete }: SetupWizardProps) => {
                                     </div>
                                 </div>
 
-                                <div className="flex justify-end pt-4">
+                                <div className="flex justify-between pt-4">
+                                    {/* Allow Skip by just not disabling Next. 
+                                         Ideally add a "Skip" label if empty? 
+                                         Or just "Next" is fine, user can see it's empty. 
+                                         Adding a specific "Skip" button or just enabling Next.
+                                         The Logic already handles empty path (just doesn't save it).
+                                         Let's just remove the disabled attribute.
+                                     */}
+                                    <div className="flex-1"></div> {/* Spacer */}
                                     <button
                                         onClick={() => setStep(2)}
-                                        disabled={!libraryPath}
-                                        className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 flex items-center gap-2 transition-all"
+                                        className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 flex items-center gap-2 transition-all"
                                     >
-                                        Next <ArrowRight size={18} />
+                                        {libraryPath ? "Next" : "Skip"} <ArrowRight size={18} />
                                     </button>
                                 </div>
                             </motion.div>
@@ -155,19 +179,47 @@ const SetupWizard = ({ onComplete }: SetupWizardProps) => {
                                             type="password"
                                             value={password}
                                             onChange={(e) => setPassword(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' && password === confirmPassword) {
+                                                    setStep(3);
+                                                }
+                                            }}
                                             className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors"
                                             placeholder="Enter password"
                                         />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-xs font-bold text-gray-500 uppercase">Confirm Password</label>
-                                        <input
-                                            type="password"
-                                            value={confirmPassword}
-                                            onChange={(e) => setConfirmPassword(e.target.value)}
-                                            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors"
-                                            placeholder="Repeat password"
-                                        />
+                                        <div className="relative">
+                                            <input
+                                                type="password"
+                                                value={confirmPassword}
+                                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' && password === confirmPassword) {
+                                                        setStep(3);
+                                                    }
+                                                }}
+                                                className={clsx(
+                                                    "w-full bg-gray-900 border rounded-lg px-4 py-3 text-sm text-white focus:outline-none transition-colors",
+                                                    !confirmPassword ? "border-gray-700 focus:border-blue-500" :
+                                                        password === confirmPassword ? "border-green-500 focus:border-green-500" : "border-red-500 focus:border-red-500"
+                                                )}
+                                                placeholder="Repeat password"
+                                            />
+                                            {confirmPassword && (
+                                                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                                                    {password === confirmPassword ? (
+                                                        <Check size={18} className="text-green-500" />
+                                                    ) : (
+                                                        <X size={18} className="text-red-500" />
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                        {confirmPassword && password !== confirmPassword && (
+                                            <p className="text-xs text-red-500 mt-1 font-medium animate-in slide-in-from-top-1">Passwords do not match</p>
+                                        )}
                                     </div>
                                 </div>
 
@@ -214,7 +266,7 @@ const SetupWizard = ({ onComplete }: SetupWizardProps) => {
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <h4 className="text-base font-medium text-white">Enable Web Server</h4>
-                                            <p className="text-xs text-gray-500">Run HTTP server on startup (Port 8080)</p>
+                                            <p className="text-xs text-gray-500">Run HTTP server on startup</p>
                                         </div>
                                         <button
                                             onClick={() => setEnableServer(!enableServer)}
@@ -231,12 +283,26 @@ const SetupWizard = ({ onComplete }: SetupWizardProps) => {
                                     </div>
 
                                     {enableServer && (
-                                        <div className="mt-4 pt-4 border-t border-gray-700/50">
-                                            <div className="flex items-start gap-3 text-orange-400 bg-orange-500/10 p-3 rounded-lg text-xs">
-                                                <ShieldCheck size={16} className="shrink-0 mt-0.5" />
+                                        <div className="mt-4 pt-4 border-t border-gray-700/50 space-y-4 animate-in slide-in-from-top-2">
+                                            {/* Port Configuration */}
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <label className="text-xs font-bold text-gray-500 uppercase block mb-1">Server Port</label>
+                                                    <div className="text-xs text-gray-400">Default is 18888</div>
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    value={serverPort}
+                                                    onChange={(e) => setServerPort(e.target.value)}
+                                                    className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white w-24 text-center focus:outline-none focus:border-blue-500 font-mono"
+                                                />
+                                            </div>
+
+                                            {/* Warning */}
+                                            <div className="flex items-start gap-3 text-blue-400 bg-blue-500/10 p-3 rounded-lg text-xs">
+                                                <Globe size={16} className="shrink-0 mt-0.5" />
                                                 <p>
-                                                    Remote access requires the password set in the previous step.
-                                                    {!password && <strong className="block mt-1 text-orange-300">Warning: No password set! Anyone on your network can access your files. Go back and set a password.</strong>}
+                                                    Enabling this will start the web server automatically when the app launches.
                                                 </p>
                                             </div>
                                         </div>

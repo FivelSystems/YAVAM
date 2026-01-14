@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { Terminal, Eraser } from "lucide-react";
 import clsx from "clsx";
 
@@ -7,7 +7,6 @@ interface ConsoleProps {
     onClear?: () => void;
     className?: string;
     maxHeight?: string;
-    autoScroll?: boolean;
     title?: string;
 }
 
@@ -16,16 +15,32 @@ const Console = ({
     onClear,
     className,
     maxHeight = "h-48",
-    autoScroll = true,
     title = "System Logs"
 }: ConsoleProps) => {
-    const endRef = useRef<HTMLDivElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [userScrolled, setUserScrolled] = useState(false);
 
+    // Smart Auto-scroll
     useEffect(() => {
-        if (autoScroll && endRef.current) {
-            endRef.current.scrollIntoView({ behavior: "smooth" });
+        const container = containerRef.current;
+        if (logs.length > 0 && !userScrolled && container) {
+            // Use scrollTop to avoid scrolling the main window
+            container.scrollTop = container.scrollHeight;
         }
-    }, [logs, autoScroll]);
+    }, [logs, userScrolled]);
+
+    const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+        const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+        // Tolerance of 20px
+        const isAtBottom = Math.abs(scrollHeight - scrollTop - clientHeight) < 20;
+
+        // Only update state if it changes to avoid thrashing
+        if (isAtBottom && userScrolled) {
+            setUserScrolled(false);
+        } else if (!isAtBottom && !userScrolled) {
+            setUserScrolled(true);
+        }
+    };
 
     return (
         <div className={clsx("flex flex-col", className)}>
@@ -42,10 +57,13 @@ const Console = ({
                     </button>
                 )}
             </div>
-            <div className={clsx(
-                "bg-black rounded-lg border border-gray-800 p-3 overflow-y-auto font-mono text-xs text-gray-400 custom-scrollbar shadow-inner",
-                maxHeight
-            )}>
+            <div
+                ref={containerRef}
+                onScroll={handleScroll}
+                className={clsx(
+                    "bg-black rounded-lg border border-gray-800 p-3 overflow-y-auto font-mono text-xs text-gray-400 custom-scrollbar shadow-inner",
+                    maxHeight
+                )}>
                 {logs.length === 0 && (
                     <div className="text-gray-600 italic select-none">Waiting for output...</div>
                 )}
@@ -57,7 +75,6 @@ const Console = ({
                         </div>
                     ))}
                 </div>
-                <div ref={endRef} />
             </div>
         </div>
     );

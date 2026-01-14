@@ -106,6 +106,10 @@ export function IsConfigured() {
   return window['go']['main']['App']['IsConfigured']();
 }
 
+export function IsServerRunning() {
+  return window['go']['main']['App']['IsServerRunning']();
+}
+
 export function ListSessions() {
   return window['go']['main']['App']['ListSessions']();
 }
@@ -154,16 +158,32 @@ export function SetAlwaysOnTop(arg1) {
   return window['go']['main']['App']['SetAlwaysOnTop'](arg1);
 }
 
+export function SetAuthPollInterval(arg1) {
+  return window['go']['main']['App']['SetAuthPollInterval'](arg1);
+}
+
 export function SetMinimizeOnClose(arg1) {
   return window['go']['main']['App']['SetMinimizeOnClose'](arg1);
+}
+
+export function SetPassword(arg1) {
+  return window['go']['main']['App']['SetPassword'](arg1);
 }
 
 export function SetPublicAccess(arg1) {
   return window['go']['main']['App']['SetPublicAccess'](arg1);
 }
 
-export function StartServer(arg1, arg2, arg3) {
-  return window['go']['main']['App']['StartServer'](arg1, arg2, arg3);
+export function SetServerEnabled(arg1) {
+  return window['go']['main']['App']['SetServerEnabled'](arg1);
+}
+
+export function SetServerPort(arg1) {
+  return window['go']['main']['App']['SetServerPort'](arg1);
+}
+
+export function StartServer() {
+  return window['go']['main']['App']['StartServer']();
 }
 
 export function StopServer() {

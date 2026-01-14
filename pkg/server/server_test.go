@@ -23,8 +23,8 @@ func TestStartServer(t *testing.T) {
 	s := NewServer(context.Background(), nil, mockAuth, mockAssets, "1.0.0", func() {})
 	s.SkipEvents = true
 
-	// Test 1: Start with valid path
-	err := s.Start("0", "C:/tmp", []string{"C:/tmp"}) // Port 0 for random free port
+	// Test 1: Start with valid path (Port 0 = Random Free Port)
+	err := s.Start("0", []string{"C:/tmp"})
 	if err != nil {
 		t.Fatalf("Start() failed with valid path: %v", err)
 	}
@@ -32,13 +32,26 @@ func TestStartServer(t *testing.T) {
 		t.Error("Server should be running")
 	}
 
-	// Stop it (simulate) - generic Server doesn't have Stop?
-	// Wails App wrapper handles lifecycle usually?
-	// server.go has Shutdown? I need to check.
-	// Assuming for this test we might need a fresh server or check if Start fails if running.
-	err = s.Start("0", "C:/tmp", nil)
+	// Test 2: Start again should fail
+	err = s.Start("0", nil)
 	if err == nil || err.Error() != "server is already running" {
 		t.Error("Start() should fail if already running")
+	}
+
+	// Test 3: Stop
+	err = s.Stop()
+	if err != nil {
+		t.Fatalf("Stop() failed: %v", err)
+	}
+
+	if s.IsRunning() {
+		t.Error("Server should not be running after Stop()")
+	}
+
+	// Test 4: Stop again (should be safe)
+	err = s.Stop()
+	if err != nil {
+		t.Errorf("Stop() repeated should not error: %v", err)
 	}
 }
 
@@ -48,7 +61,7 @@ func TestStartServer_EmptyPath(t *testing.T) {
 	s.SkipEvents = true
 
 	// Test 2: Start with empty path (Should succeed now)
-	err := s.Start("0", "", []string{})
+	err := s.Start("0", []string{})
 	if err != nil {
 		t.Fatalf("Start() failed with empty path: %v", err)
 	}
@@ -63,7 +76,7 @@ func TestAPI_EmptyPathSecurity(t *testing.T) {
 	s.SkipEvents = true
 
 	// Start with empty path
-	s.Start("0", "", []string{})
+	s.Start("0", []string{})
 
 	// Construct Request to /api/packages
 	req := httptest.NewRequest("GET", "/api/packages", nil)
@@ -105,7 +118,7 @@ func TestAPI_ExplicitPathSecurity(t *testing.T) {
 	s.SkipEvents = true
 
 	// Start with empty path
-	s.Start("0", "", []string{"C:/Allowed"})
+	s.Start("0", []string{"C:/Allowed"})
 
 	// Request with explicit path parameter that IS allowed
 	// But we have nil manager, so if it passes security, it will crash.
