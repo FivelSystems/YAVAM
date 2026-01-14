@@ -1,25 +1,26 @@
 import clsx from 'clsx';
-import { AppWindow, Shield, Network, FolderLock, Info } from 'lucide-react';
+import { AppWindow, Shield, Network, FolderLock, Info, Keyboard } from 'lucide-react';
 import { SettingsTab } from '../SettingsDialog';
 
 interface SettingsSidebarProps {
-    activeTab: SettingsTab;
+    activeTab: SettingsTab | null;
     setActiveTab: (tab: SettingsTab) => void;
     isGuest: boolean;
     isMobile: boolean;
 }
 
+export const SETTINGS_TABS = [
+    { id: 'application', label: 'Application', icon: AppWindow, admin: false },
+    { id: 'privacy', label: 'Privacy', icon: Shield, admin: false },
+    { id: 'network', label: 'Network', icon: Network, admin: true },
+    { id: 'security', label: 'Security', icon: FolderLock, admin: true },
+    { id: 'keybinds', label: 'Keybinds', icon: Keyboard, admin: false },
+    { id: 'about', label: 'About', icon: Info, admin: false },
+] as const;
+
 const SettingsSidebar = ({ activeTab, setActiveTab, isGuest, isMobile }: SettingsSidebarProps) => {
 
-    const tabs = [
-        { id: 'application', label: 'Application', icon: AppWindow, admin: false },
-        { id: 'privacy', label: 'Privacy', icon: Shield, admin: false },
-        { id: 'network', label: 'Network', icon: Network, admin: true },
-        { id: 'security', label: 'Security', icon: FolderLock, admin: true },
-        { id: 'about', label: 'About', icon: Info, admin: false },
-    ] as const;
-
-    const visibleTabs = tabs.filter(t => !isGuest || !t.admin);
+    const visibleTabs = SETTINGS_TABS.filter(t => !isGuest || !t.admin);
 
     if (isMobile) {
         // Mobile behavior handled by Parent or different layout?
@@ -32,7 +33,6 @@ const SettingsSidebar = ({ activeTab, setActiveTab, isGuest, isMobile }: Setting
 
     return (
         <div className="w-64 bg-gray-800/30 border-r border-gray-700/50 p-4 space-y-1 h-full overflow-y-auto">
-            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4 px-3">Settings</h3>
             {visibleTabs.map(tab => (
                 <button
                     key={tab.id}

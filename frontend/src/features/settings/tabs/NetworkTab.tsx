@@ -1,19 +1,44 @@
 import { useState, useEffect } from 'react';
-import { Network, AlertTriangle, ExternalLink } from 'lucide-react';
+import { Network, AlertTriangle, ExternalLink, Play, Square } from 'lucide-react';
 import clsx from 'clsx';
 import Console from '../../../components/ui/Console';
+// Generic Components
+import { SettingGroup } from '../components/SettingGroup';
+import { SettingItem } from '../components/SettingItem';
+import { Toggle } from '../../../components/ui/Toggle';
+import { Input } from '../../../components/ui/Input';
+import { motion } from 'framer-motion';
+
+const container = {
+    hidden: { opacity: 0 },
+    show: {
+        opacity: 1,
+        transition: {
+            staggerChildren: 0.05
+        }
+    }
+};
+
+const item = {
+    hidden: { opacity: 0, y: 10 },
+    show: { opacity: 1, y: 0 }
+};
 
 interface NetworkTabProps {
     serverEnabled: boolean;
     onToggleServer: () => void;
     serverPort: string;
     setServerPort: (port: string) => void;
+    onStartServer: () => void;
+    onStopServer: () => void;
     publicAccess: boolean;
     onTogglePublicAccess: () => void;
     localIP: string;
     logs: string[];
     setLogs: React.Dispatch<React.SetStateAction<string[]>>;
     isWeb: boolean;
+    authPollInterval: number;
+    setAuthPollInterval: (val: number) => void;
 }
 
 const NetworkTab = ({
@@ -21,23 +46,32 @@ const NetworkTab = ({
     onToggleServer,
     serverPort,
     setServerPort,
+    onStartServer,
+    onStopServer,
     publicAccess,
     onTogglePublicAccess,
     localIP,
     logs,
     setLogs,
-    isWeb
+    isWeb,
+    authPollInterval,
+    setAuthPollInterval
 }: NetworkTabProps) => {
 
     // Session State (Local to this tab as it polls)
     const [sessions, setSessions] = useState<any[]>([]);
+    const [isRunning, setIsRunning] = useState(false);
 
-    const fetchSessions = async () => {
+    const fetchData = async () => {
         // @ts-ignore
         if (window.go && window.go.main && window.go.main.App) {
             // @ts-ignore
             const list = await window.go.main.App.ListSessions();
             setSessions(list || []);
+
+            // @ts-ignore
+            const running = await window.go.main.App.IsServerRunning();
+            setIsRunning(running);
         }
     };
 
@@ -46,55 +80,132 @@ const NetworkTab = ({
         try {
             // @ts-ignore
             await window.go.main.App.RevokeSession(id);
-            fetchSessions();
+            fetchData();
         } catch (e) {
             console.error("Failed to revoke session", e);
         }
     };
 
+    const handleStart = async () => {
+        onStartServer();
+        // Optimistic / Poll will catch up
+        setTimeout(fetchData, 500);
+    }
+
+    const handleStop = async () => {
+        onStopServer();
+        setTimeout(fetchData, 500);
+    }
+
     useEffect(() => {
         if (!isWeb) {
-            fetchSessions();
-            const interval = setInterval(fetchSessions, 5000);
+            fetchData();
+            const interval = setInterval(fetchData, 2000); // Faster poll for responsiveness
             return () => clearInterval(interval);
         }
     }, [isWeb]);
 
     return (
-        <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
+        <motion.div
+            className="space-y-6"
+            variants={container}
+            initial="hidden"
+            animate="show"
+        >
             <div>
                 <h4 className="text-lg font-medium text-white mb-1">Network & Server</h4>
-                <p className="text-sm text-gray-500 mb-4">Manage remote access and connectivity.</p>
+                <p className="text-sm text-gray-500 mb-6">Manage remote access and connectivity.</p>
 
                 <div className="space-y-6">
-                    {/* Server Toggle */}
-                    <div className="bg-gray-700/20 rounded-xl p-4 border border-gray-700/50 flex items-center justify-between">
+                    {/* Manual Control (Start/Stop) - Custom Group */}
+                    <motion.div
+                        variants={item}
+                        className="bg-gray-800 rounded-xl p-4 border border-gray-700 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-0"
+                    >
                         <div>
-                            <h4 className="text-sm font-medium text-white">HTTP Server</h4>
-                            <p className="text-xs text-gray-500">Enable local network access to your library.</p>
+                            <div className="flex items-center gap-2 mb-1">
+                                <h4 className="text-sm font-medium text-white">Server Status</h4>
+                                <div className={clsx(
+                                    "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
+                                    isRunning ? "bg-green-500/20 text-green-400 border border-green-500/30" : "bg-gray-700 text-gray-400"
+                                )}>
+                                    {isRunning ? "Running" : "Stopped"}
+                                </div>
+                            </div>
+                            <p className="text-xs text-gray-500">Manually start or stop the web server.</p>
                         </div>
-                        <button
-                            onClick={onToggleServer}
-                            className={clsx(
-                                "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
-                                serverEnabled ? "bg-green-500" : "bg-gray-700"
+                        <div className="flex gap-2">
+                            {!isRunning ? (
+                                <button
+                                    onClick={handleStart}
+                                    className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-xs font-bold uppercase transition-colors flex items-center gap-2"
+                                >
+                                    <Play size={14} fill="currentColor" /> Start Server
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={handleStop}
+                                    className="px-4 py-2 bg-red-900/40 hover:bg-red-900/60 border border-red-900 text-red-100 rounded-lg text-xs font-bold uppercase transition-colors flex items-center gap-2"
+                                >
+                                    <Square size={14} fill="currentColor" /> Stop Server
+                                </button>
                             )}
+                        </div>
+                    </motion.div>
+
+                    {/* Configuration Group */}
+                    <SettingGroup title="Configuration" tooltip="Server startup and port settings." variants={item}>
+                        <SettingItem
+                            title="Run on Startup"
+                            tooltip="Automatically start server when app launches."
                         >
-                            <span className={clsx(
-                                "inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200",
-                                serverEnabled ? "translate-x-6" : "translate-x-1"
-                            )} />
-                        </button>
-                    </div>
+                            <Toggle checked={serverEnabled} onChange={onToggleServer} size="md" />
+                        </SettingItem>
+
+                        <SettingItem
+                            title="Server Port"
+                            tooltip="Port to listen on (Default: 18888)."
+                        >
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-500 font-mono">TCP</span>
+                                <Input
+                                    value={serverPort}
+                                    onChange={(e) => setServerPort(e.target.value)}
+                                    disabled={isRunning}
+                                    className="w-24 text-center font-mono"
+                                />
+                            </div>
+                        </SettingItem>
+                        {isRunning && (
+                            <p className="text-[10px] text-orange-400 italic text-right pr-2">
+                                Stop server to change port.
+                            </p>
+                        )}
+
+                        <SettingItem
+                            title="Auth Polling Interval"
+                            tooltip="Frequency of session revocation checks (Seconds)."
+                        >
+                            <Input
+                                type="number"
+                                min={1}
+                                max={60}
+                                value={authPollInterval}
+                                onChange={(e) => setAuthPollInterval(parseInt(e.target.value) || 2)}
+                                rightLabel="Sec"
+                                className="w-24 text-center font-mono"
+                            />
+                        </SettingItem>
+                    </SettingGroup>
 
                     {/* Connection Info */}
-                    <div className="bg-black/30 rounded-xl p-4 border border-gray-700/50 space-y-4">
+                    <SettingGroup variants={item}>
                         <div className="flex items-center gap-4">
                             <div className="flex-1 space-y-1">
-                                <label className="text-xs uppercase font-bold text-gray-500">Local IP Address</label>
+                                <label className="text-xs uppercase font-bold text-gray-500">Local Address</label>
                                 <div className="flex items-center gap-2">
-                                    <div className="font-mono text-blue-400 font-medium">{localIP}</div>
-                                    {serverEnabled && !isWeb && (
+                                    <div className="font-mono text-blue-400 font-medium select-all">http://{localIP}:{serverPort}</div>
+                                    {isRunning && !isWeb && (
                                         <button
                                             onClick={() => {
                                                 // @ts-ignore
@@ -108,64 +219,46 @@ const NetworkTab = ({
                                     )}
                                 </div>
                             </div>
-                            <div className="w-px h-8 bg-gray-700"></div>
-                            <div className="flex-1 space-y-1">
-                                <label className="text-xs uppercase font-bold text-gray-500">Port</label>
-                                <input
-                                    type="text"
-                                    value={serverPort}
-                                    onChange={(e) => setServerPort(e.target.value)}
-                                    disabled={serverEnabled}
-                                    className={clsx(
-                                        "bg-transparent font-mono text-white w-full outline-none focus:border-b border-blue-500 transition-colors",
-                                        serverEnabled && "opacity-50 cursor-not-allowed"
-                                    )}
-                                />
-                            </div>
                         </div>
-                    </div>
+                    </SettingGroup>
 
                     {/* Public Access */}
                     {serverEnabled && (
-                        <div className="bg-gray-700/20 border border-gray-700/50 rounded-xl p-4">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <h4 className="text-sm font-medium text-white flex items-center gap-2">
-                                        Public Access
-                                        {publicAccess && <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded border border-red-500/30 uppercase font-bold">Insecure</span>}
-                                    </h4>
-                                    <p className="text-xs text-gray-500">Allow unauthenticated guests to view your library (Read Only).</p>
-                                </div>
-                                <button
-                                    onClick={onTogglePublicAccess}
-                                    className={clsx(
-                                        "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
-                                        publicAccess ? "bg-red-500" : "bg-gray-700"
-                                    )}
-                                >
-                                    <span className={clsx(
-                                        "inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200",
-                                        publicAccess ? "translate-x-6" : "translate-x-1"
-                                    )} />
-                                </button>
-                            </div>
+                        <SettingGroup
+                            title={
+                                <span className="flex items-center gap-2">
+                                    Public Access
+                                    {publicAccess && <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded border border-red-500/30 uppercase font-bold">Insecure</span>}
+                                </span>
+                            }
+                            tooltip="Allow unauthenticated guests to view your library (Read Only)."
+                            variant={publicAccess ? "danger" : "default"}
+                            variants={item}
+                            action={
+                                <Toggle
+                                    checked={publicAccess}
+                                    onChange={onTogglePublicAccess}
+                                    variant="danger" // Use Danger Red for risky toggle
+                                />
+                            }
+                        >
                             {publicAccess && (
-                                <div className="mt-3 text-xs bg-red-900/20 border border-red-900/30 text-red-300 p-2 rounded flex items-start gap-2">
+                                <div className="text-xs bg-red-900/20 border border-red-900/30 text-red-300 p-2 rounded flex items-start gap-2">
                                     <AlertTriangle size={14} className="shrink-0 mt-0.5" />
                                     <p>ANYONE on your local network (Wi-Fi) can view your library without a password. Sensitive actions are still protected.</p>
                                 </div>
                             )}
-                        </div>
+                        </SettingGroup>
                     )}
 
                     {/* Console */}
-                    <div className="mt-6">
+                    <SettingGroup title="Server Logs" className="bg-black/30" variants={item}>
                         <Console logs={logs} onClear={() => setLogs([])} maxHeight="h-32" />
-                    </div>
+                    </SettingGroup>
 
                     {/* Active Sessions */}
                     {!isWeb && (
-                        <div className="mt-6 border-t border-gray-700 pt-6">
+                        <motion.div variants={item} className="mt-6 border-t border-gray-700 pt-6">
                             <h4 className="text-sm font-medium text-white mb-3 flex items-center gap-2">
                                 <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
                                 Active Devices ({sessions.length})
@@ -202,11 +295,11 @@ const NetworkTab = ({
                                     ))
                                 )}
                             </div>
-                        </div>
+                        </motion.div>
                     )}
                 </div>
             </div>
-        </div>
+        </motion.div>
     );
 };
 

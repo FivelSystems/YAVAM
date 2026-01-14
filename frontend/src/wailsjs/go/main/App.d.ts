@@ -58,6 +58,8 @@ export function InstallFiles(arg1:Array<string>,arg2:string):Promise<Array<strin
 
 export function IsConfigured():Promise<boolean>;
 
+export function IsServerRunning():Promise<boolean>;
+
 export function ListSessions():Promise<Array<auth.User>>;
 
 export function Login(arg1:string,arg2:string):Promise<string>;
@@ -82,11 +84,19 @@ export function SelectDirectory():Promise<string>;
 
 export function SetAlwaysOnTop(arg1:boolean):Promise<void>;
 
+export function SetAuthPollInterval(arg1:number):Promise<void>;
+
 export function SetMinimizeOnClose(arg1:boolean):Promise<void>;
+
+export function SetPassword(arg1:string):Promise<void>;
 
 export function SetPublicAccess(arg1:boolean):Promise<void>;
 
-export function StartServer(arg1:string,arg2:string,arg3:Array<string>):Promise<void>;
+export function SetServerEnabled(arg1:boolean):Promise<void>;
+
+export function SetServerPort(arg1:string):Promise<void>;
+
+export function StartServer():Promise<void>;
 
 export function StopServer():Promise<void>;
 

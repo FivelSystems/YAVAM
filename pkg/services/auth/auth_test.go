@@ -108,3 +108,69 @@ func TestUnknownUser(t *testing.T) {
 		t.Fatal("Expected error for unknown user")
 	}
 }
+
+func TestPersistence(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "auth.json")
+
+	// 1. Create Service & Login
+	svc1, _ := NewSimpleAuthService(configPath)
+	svc1.SetPassword("secret")
+	nonce, _ := svc1.InitiateLogin("admin")
+
+	h1 := sha256.Sum256([]byte("secret"))
+	h1Str := hex.EncodeToString(h1[:])
+	proofRaw := sha256.Sum256([]byte(h1Str + nonce))
+	proof := hex.EncodeToString(proofRaw[:])
+
+	token, _ := svc1.CompleteLogin("admin", nonce, proof, "persist-device")
+
+	// 2. Re-create Service (Simulate Restart)
+	svc2, err := NewSimpleAuthService(configPath)
+	if err != nil {
+		t.Fatalf("Failed to restart service: %v", err)
+	}
+
+	// 3. Verify Session exists
+	user, err := svc2.ValidateToken(token)
+	if err != nil {
+		t.Fatalf("Session lost after restart: %v", err)
+	}
+	if user.DeviceName != "persist-device" {
+		t.Errorf("Expected device persist-device, got %s", user.DeviceName)
+	}
+	if user.Token != token {
+		t.Errorf("User.Token not restored. Expected %s, got %s", token, user.Token)
+	}
+}
+
+func TestRevocationPersistence(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "auth.json")
+
+	svc1, _ := NewSimpleAuthService(configPath)
+	svc1.SetPassword("secret")
+
+	// Login
+	nonce, _ := svc1.InitiateLogin("admin")
+	h1 := sha256.Sum256([]byte("secret"))
+	h1Str := hex.EncodeToString(h1[:])
+	proofRaw := sha256.Sum256([]byte(h1Str + nonce))
+	proof := hex.EncodeToString(proofRaw[:])
+	token, _ := svc1.CompleteLogin("admin", nonce, proof, "revoke-device")
+
+	// Revoke
+	svc1.RevokeToken(token)
+
+	// Restart
+	svc2, err := NewSimpleAuthService(configPath)
+	if err != nil {
+		t.Fatalf("Failed to restart service: %v", err)
+	}
+
+	// Verify Session is GONE
+	_, err = svc2.ValidateToken(token)
+	if err != ErrInvalidToken {
+		t.Fatal("Session should remain revoked after restart")
+	}
+}

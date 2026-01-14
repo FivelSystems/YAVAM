@@ -8,7 +8,8 @@ import (
 )
 
 type AuthConfig struct {
-	AdminHash string `json:"admin_hash"`
+	AdminHash string           `json:"admin_hash"`
+	Sessions  map[string]*User `json:"sessions,omitempty"` // Persistence
 }
 
 type FileAuthStore struct {

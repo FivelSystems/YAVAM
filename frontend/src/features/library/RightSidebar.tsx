@@ -77,7 +77,8 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                         })
                         .catch((e: any) => console.error(e));
                 } else {
-                    setThumbSrc(`/api/thumbnail?filePath=${encodeURIComponent(pkg.filePath)}`);
+                    const token = localStorage.getItem('yavam_auth_token');
+                    setThumbSrc(`/api/thumbnail?filePath=${encodeURIComponent(pkg.filePath)}&token=${token || ''}`);
                 }
             } else {
                 setThumbSrc(undefined);

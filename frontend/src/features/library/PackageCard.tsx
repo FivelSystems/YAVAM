@@ -42,7 +42,8 @@ const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'gri
         if (!window.go) {
             // Web Mode: Use API URL directly
             if (pkg.hasThumbnail && !pkg.thumbnailBase64) {
-                setThumbSrc(`/api/thumbnail?filePath=${encodeURIComponent(pkg.filePath)}`);
+                const token = localStorage.getItem('yavam_auth_token');
+                setThumbSrc(`/api/thumbnail?filePath=${encodeURIComponent(pkg.filePath)}&token=${token || ''}`);
             }
             return;
         }

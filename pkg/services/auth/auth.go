@@ -3,6 +3,7 @@ package auth
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"sync"
@@ -36,8 +37,20 @@ func NewSimpleAuthService(configPath string) (*SimpleTokenAuthService, error) {
 		store.Save(&AuthConfig{AdminHash: hashStr})
 	}
 
+	// Load sessions if present
+	validTokens := make(map[string]*User)
+	if config != nil && config.Sessions != nil {
+		validTokens = config.Sessions
+		// Restore Token field since it's not persisted
+		for token, user := range validTokens {
+			if user.Token == "" {
+				user.Token = token
+			}
+		}
+	}
+
 	s := &SimpleTokenAuthService{
-		validTokens: make(map[string]*User),
+		validTokens: validTokens,
 		nonces:      make(map[string]time.Time),
 		adminHash:   hashStr,
 		store:       store,
@@ -49,6 +62,14 @@ func NewSimpleAuthService(configPath string) (*SimpleTokenAuthService, error) {
 	return s, nil
 }
 
+// Helper to save current state
+func (s *SimpleTokenAuthService) persistState() error {
+	return s.store.Save(&AuthConfig{
+		AdminHash: s.adminHash,
+		Sessions:  s.validTokens,
+	})
+}
+
 func (s *SimpleTokenAuthService) SetPassword(newPassword string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -57,7 +78,7 @@ func (s *SimpleTokenAuthService) SetPassword(newPassword string) error {
 	hashStr := hex.EncodeToString(hash[:])
 
 	s.adminHash = hashStr
-	return s.store.Save(&AuthConfig{AdminHash: hashStr})
+	return s.persistState()
 }
 
 func (s *SimpleTokenAuthService) InitiateLogin(username string) (string, error) {
@@ -107,7 +128,7 @@ func (s *SimpleTokenAuthService) CompleteLogin(username, nonce, proof, deviceNam
 	hash := sha256.Sum256([]byte(data))
 	expectedProof := hex.EncodeToString(hash[:])
 
-	if proof != expectedProof {
+	if subtle.ConstantTimeCompare([]byte(proof), []byte(expectedProof)) != 1 {
 		return "", fmt.Errorf("invalid proof")
 	}
 
@@ -127,6 +148,13 @@ func (s *SimpleTokenAuthService) CompleteLogin(username, nonce, proof, deviceNam
 		deviceName = "Unknown Device"
 	}
 
+	// Deduplicate: Remove any existing session for this device
+	for oldToken, user := range s.validTokens {
+		if user.DeviceName == deviceName && user.Username == username {
+			delete(s.validTokens, oldToken)
+		}
+	}
+
 	s.validTokens[token] = &User{
 		ID:         sessionID,
 		Username:   username,
@@ -134,6 +162,10 @@ func (s *SimpleTokenAuthService) CompleteLogin(username, nonce, proof, deviceNam
 		DeviceName: deviceName,
 		CreatedAt:  time.Now().Format(time.RFC3339),
 		Token:      token,
+	}
+
+	if err := s.persistState(); err != nil {
+		fmt.Printf("Failed to persist session: %v\n", err)
 	}
 
 	return token, nil
@@ -175,6 +207,7 @@ func (s *SimpleTokenAuthService) GenerateToken() (string, error) {
 		CreatedAt:  time.Now().Format(time.RFC3339),
 		Token:      token,
 	}
+	s.persistState()
 	return token, nil
 }
 
@@ -203,7 +236,7 @@ func (s *SimpleTokenAuthService) RevokeSession(id string) error {
 
 	if tokenToRevoke != "" {
 		delete(s.validTokens, tokenToRevoke)
-		return nil
+		return s.persistState()
 	}
 	return fmt.Errorf("session not found")
 }
@@ -213,6 +246,7 @@ func (s *SimpleTokenAuthService) RevokeToken(token string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.validTokens, token)
+	s.persistState()
 }
 
 func (s *SimpleTokenAuthService) cleanupNonces() {

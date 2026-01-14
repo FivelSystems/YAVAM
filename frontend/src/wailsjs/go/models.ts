@@ -28,7 +28,6 @@ export namespace auth {
 export namespace config {
 	
 	export class Config {
-	    vamPath: string;
 	    libraries: string[];
 	    setupDone: boolean;
 	    theme: string;
@@ -38,6 +37,9 @@ export namespace config {
 	    useSymlinks: boolean;
 	    deleteToTrash: boolean;
 	    publicAccess: boolean;
+	    serverEnabled: boolean;
+	    serverPort: string;
+	    authPollInterval: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -45,7 +47,6 @@ export namespace config {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.vamPath = source["vamPath"];
 	        this.libraries = source["libraries"];
 	        this.setupDone = source["setupDone"];
 	        this.theme = source["theme"];
@@ -55,6 +56,9 @@ export namespace config {
 	        this.useSymlinks = source["useSymlinks"];
 	        this.deleteToTrash = source["deleteToTrash"];
 	        this.publicAccess = source["publicAccess"];
+	        this.serverEnabled = source["serverEnabled"];
+	        this.serverPort = source["serverPort"];
+	        this.authPollInterval = source["authPollInterval"];
 	    }
 	}
 

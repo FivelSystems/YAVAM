@@ -110,9 +110,15 @@ func (a *App) startup(ctx context.Context) {
 			// Path defaults to active (Vam) path.
 			// Config VamPath might be empty if just setup,
 			// but if ServerEnabled is true, VamPath should be set.
-			if cfg.VamPath != "" {
+			if len(cfg.Libraries) > 0 {
+				port := cfg.ServerPort
+				if port == "" {
+					port = "18888"
+				}
 				// We need to pass the libraries as well
-				a.server.Start("8080", cfg.VamPath, cfg.Libraries)
+				if err := a.server.Start(port, cfg.Libraries); err == nil {
+					runtime.EventsEmit(a.ctx, "server:status:changed", true)
+				}
 			}
 		}()
 	}
@@ -219,6 +225,14 @@ func (a *App) Login(username, password string) (string, error) {
 
 	// 3. Complete Login
 	return a.auth.CompleteLogin(username, nonce, proof, "Desktop Client")
+}
+
+// SetPassword updates the admin password
+func (a *App) SetPassword(password string) error {
+	if a.auth == nil {
+		return fmt.Errorf("auth service not initialized")
+	}
+	return a.auth.SetPassword(password)
 }
 
 // GetAppVersion returns the current application version
@@ -360,7 +374,11 @@ func (a *App) GetConfiguredLibraries() []string {
 }
 
 func (a *App) AddConfiguredLibrary(path string) error {
-	return a.manager.AddLibrary(path)
+	err := a.manager.AddLibrary(path)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (a *App) RemoveConfiguredLibrary(path string) error {
@@ -372,20 +390,6 @@ func (a *App) ReorderConfiguredLibraries(paths []string) error {
 }
 
 // Server Methods
-
-func (a *App) StartServer(port string, path string, libraries []string) error {
-	if a.server == nil {
-		return fmt.Errorf("server not initialized")
-	}
-	return a.server.Start(port, path, libraries)
-}
-
-func (a *App) StopServer() error {
-	if a.server == nil {
-		return nil
-	}
-	return a.server.Stop()
-}
 
 func (a *App) UpdateServerLibraries(libraries []string) {
 	if a.server != nil {
@@ -565,6 +569,52 @@ func (a *App) SetServerEnabled(enabled bool) error {
 	return a.manager.UpdateConfig(func(cfg *config.Config) {
 		cfg.ServerEnabled = enabled
 	})
+}
+
+// SetServerPort Sets the HTTP Server Port
+func (a *App) SetServerPort(port string) error {
+	return a.manager.UpdateConfig(func(cfg *config.Config) {
+		cfg.ServerPort = port
+	})
+}
+
+// SetAuthPollInterval sets the polling interval for auth revocation check
+func (a *App) SetAuthPollInterval(seconds int) error {
+	return a.manager.UpdateConfig(func(cfg *config.Config) {
+		cfg.AuthPollInterval = seconds
+	})
+}
+
+// StartServer manually starts the HTTP Server
+func (a *App) StartServer() error {
+	cfg := a.manager.GetConfig()
+	port := cfg.ServerPort
+	if port == "" {
+		port = "18888"
+	}
+
+	err := a.server.Start(port, cfg.Libraries)
+	if err == nil {
+		runtime.EventsEmit(a.ctx, "server:status:changed", true)
+	}
+	return err
+}
+
+// StopServer manually stops the HTTP Server
+func (a *App) StopServer() error {
+	err := a.server.Stop()
+	if err == nil {
+		runtime.EventsEmit(a.ctx, "server:status:changed", false)
+	}
+	return err
+}
+
+// IsServerRunning returns true if the HTTP server is active
+func (a *App) IsServerRunning() bool {
+	if a.server == nil {
+		return false
+	}
+	return a.server.IsRunning()
 }
 
 // RestartApp restarts the application
