@@ -68,9 +68,8 @@ const PrivacyTab = ({
                             <SettingItem
                                 title="Blur Strength"
                                 tooltip="Intensity of the blur effect."
-                                layout="col"
                             >
-                                <div className="pt-2">
+                                <div className="w-48">
                                     <Slider
                                         min={1}
                                         max={20}

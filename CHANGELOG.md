@@ -29,7 +29,7 @@
 - **Refactor**: Updated `pkg/manager` to use `pkg/fs` for all filesystem interactions.
 - **Refactor**: Reorganized frontend source into a Feature-based Architecture.
 - **Refactor**: Migrated `LastSeenVersion` from `localStorage` to `config.json` for reliable persistence across backups.
-- **UI Consistency**: Standardized Button components and moved Backup controls to the Security Tab.
+- **UI Consistency**: Standardized Button components and moved Backup controls to the Security Tab. Fixed "Blur Strength" slider layout.
 - **Branding**: Renamed Go module and internal references from `varmanager` to `yavam`.
 - **Animations**: Implemented "Cascading" entrance animations for settings tabs for a smoother / premium feel.
 - **Dependencies**: Updated `AnimatePresence` logic to support collapsible tabs on mobile.
