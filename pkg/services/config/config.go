@@ -22,6 +22,7 @@ type Config struct {
 	ServerEnabled    bool   `json:"serverEnabled"`
 	ServerPort       string `json:"serverPort"`
 	AuthPollInterval int    `json:"authPollInterval"`
+	LastSeenVersion  string `json:"lastSeenVersion"`
 }
 
 // ConfigService handles configuration persistence

@@ -40,6 +40,7 @@ export namespace config {
 	    serverEnabled: boolean;
 	    serverPort: string;
 	    authPollInterval: number;
+	    lastSeenVersion: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -59,6 +60,7 @@ export namespace config {
 	        this.serverEnabled = source["serverEnabled"];
 	        this.serverPort = source["serverPort"];
 	        this.authPollInterval = source["authPollInterval"];
+	        this.lastSeenVersion = source["lastSeenVersion"];
 	    }
 	}
 

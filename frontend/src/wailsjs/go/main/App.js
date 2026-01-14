@@ -50,12 +50,20 @@ export function DownloadPackage(arg1, arg2) {
   return window['go']['main']['App']['DownloadPackage'](arg1, arg2);
 }
 
+export function ExportSettings() {
+  return window['go']['main']['App']['ExportSettings']();
+}
+
 export function FinishSetup() {
   return window['go']['main']['App']['FinishSetup']();
 }
 
 export function GetAppVersion() {
   return window['go']['main']['App']['GetAppVersion']();
+}
+
+export function GetChangelog() {
+  return window['go']['main']['App']['GetChangelog']();
 }
 
 export function GetConfig() {
@@ -96,6 +104,10 @@ export function GetUserDownloadsDir() {
 
 export function Greet(arg1) {
   return window['go']['main']['App']['Greet'](arg1);
+}
+
+export function ImportSettings() {
+  return window['go']['main']['App']['ImportSettings']();
 }
 
 export function InstallFiles(arg1, arg2) {
@@ -160,6 +172,10 @@ export function SetAlwaysOnTop(arg1) {
 
 export function SetAuthPollInterval(arg1) {
   return window['go']['main']['App']['SetAuthPollInterval'](arg1);
+}
+
+export function SetLastSeenVersion(arg1) {
+  return window['go']['main']['App']['SetLastSeenVersion'](arg1);
 }
 
 export function SetMinimizeOnClose(arg1) {

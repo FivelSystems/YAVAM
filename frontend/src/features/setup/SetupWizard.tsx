@@ -168,7 +168,7 @@ const SetupWizard = ({ onComplete }: SetupWizardProps) => {
                                     </div>
                                     <p className="text-gray-400 text-sm leading-relaxed">
                                         Set a password to protect your library and remote connections.
-                                        <br /><span className="text-xs text-gray-500 italic">(Leave empty to skip - Not Recommended)</span>
+                                        <br /><span className="text-xs text-red-400 font-medium">(Required)</span>
                                     </p>
                                 </div>
 
@@ -180,7 +180,7 @@ const SetupWizard = ({ onComplete }: SetupWizardProps) => {
                                             value={password}
                                             onChange={(e) => setPassword(e.target.value)}
                                             onKeyDown={(e) => {
-                                                if (e.key === 'Enter' && password === confirmPassword) {
+                                                if (e.key === 'Enter' && password && password === confirmPassword) {
                                                     setStep(3);
                                                 }
                                             }}
@@ -196,7 +196,7 @@ const SetupWizard = ({ onComplete }: SetupWizardProps) => {
                                                 value={confirmPassword}
                                                 onChange={(e) => setConfirmPassword(e.target.value)}
                                                 onKeyDown={(e) => {
-                                                    if (e.key === 'Enter' && password === confirmPassword) {
+                                                    if (e.key === 'Enter' && password && password === confirmPassword) {
                                                         setStep(3);
                                                     }
                                                 }}
@@ -232,7 +232,7 @@ const SetupWizard = ({ onComplete }: SetupWizardProps) => {
                                     </button>
                                     <button
                                         onClick={() => setStep(3)}
-                                        disabled={password !== confirmPassword}
+                                        disabled={!password || password !== confirmPassword}
                                         className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 flex items-center gap-2 transition-all"
                                     >
                                         Next <ArrowRight size={18} />

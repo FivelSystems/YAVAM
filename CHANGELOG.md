@@ -12,10 +12,12 @@
 - **User Interface**: Redesigned settings into a unified, tabbed dialog (Application, Privacy, Network, Security).
 - **Setup Wizard**: Enhanced 3-step setup (Library, Password, Network) with "Run on Startup" option.
 - **Privacy Controls**: Added "Hide Metadata" (Invisible text) and "Hide Creator Names" for privacy, plus Blur Intensity slider.
+- **Backup & Restore**: Added comprehensive system to Export/Import application settings (zipped `AppData`) with Zip Slip protection.
+- **What's New**: Added a "What's New" modal that automatically displays this changelog after an update (persistent version tracking).
 - **Session Management**: Added "Active Devices" list to Settings, allowing revocation of specific sessions.
 - **Authentication**: Implemented industry-standard "Challenge-Response" authentication.
 - **Configuration**: Added "Auth Polling Interval" setting (Network Tab), allowing custom revocation check frequency (5s-60s).
-- **Testing**: Added comprehensive unit tests for `LibraryService` and `pkg/manager`.
+- **Testing**: Added comprehensive unit tests for `LibraryService`, `pkg/manager`, and Zip utilities.
 - **Session Persistence**: Active sessions are now persisted to disk (`auth_config.json`) and restored on restart, preventing logout loops.
 - **Keybinds**: Restored the "Keybinds" tab and functionality, allowing users to rebind the "Toggle Privacy" shortcut.
 
@@ -26,6 +28,8 @@
 - **Compliance**: Removed all hardcoded references to "AddonPackages" logic to support arbitrary library folders.
 - **Refactor**: Updated `pkg/manager` to use `pkg/fs` for all filesystem interactions.
 - **Refactor**: Reorganized frontend source into a Feature-based Architecture.
+- **Refactor**: Migrated `LastSeenVersion` from `localStorage` to `config.json` for reliable persistence across backups.
+- **UI Consistency**: Standardized Button components and moved Backup controls to the Security Tab.
 - **Branding**: Renamed Go module and internal references from `varmanager` to `yavam`.
 - **Animations**: Implemented "Cascading" entrance animations for settings tabs for a smoother / premium feel.
 - **Dependencies**: Updated `AnimatePresence` logic to support collapsible tabs on mobile.
@@ -41,6 +45,7 @@
 - **Factory Reset**: Fixed "Reset Database" confirmation not appearing (implemented generic confirmation handler).
 - **Z-Index**: Fixed confirmation modals appearing behind the settings menu (upcoming fix).
 - **Linting**: Resolved unused variable warnings in Settings and Dashboard components.
+- **Open App Data**: Fixed the button logic to explicitly enter the directory instead of just selecting it in the parent folder.
 
 ### Security
 - **Authentication**: Passwords are never transmitted over the network (Challenge-Response).
