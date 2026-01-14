@@ -300,6 +300,7 @@ const SettingsDialog = ({
                         setActiveTab={setActiveTab}
                         isGuest={isGuest}
                         isMobile={false}
+                        isWeb={isWeb}
                     />
                 </div>
 
@@ -309,7 +310,7 @@ const SettingsDialog = ({
                     {/* Mobile Accordion View */}
                     <div className="md:hidden flex flex-col h-full overflow-y-auto overflow-x-hidden">
                         {SETTINGS_TABS.map(tab => {
-                            if (isGuest && tab.admin) return null;
+                            if ((isGuest && tab.admin) || (isWeb && tab.webRestricted)) return null;
                             const isOpen = activeTab === tab.id;
 
                             return (

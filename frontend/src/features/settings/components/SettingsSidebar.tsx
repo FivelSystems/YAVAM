@@ -7,20 +7,21 @@ interface SettingsSidebarProps {
     setActiveTab: (tab: SettingsTab) => void;
     isGuest: boolean;
     isMobile: boolean;
+    isWeb: boolean;
 }
 
 export const SETTINGS_TABS = [
-    { id: 'application', label: 'Application', icon: AppWindow, admin: false },
-    { id: 'privacy', label: 'Privacy', icon: Shield, admin: false },
-    { id: 'network', label: 'Network', icon: Network, admin: true },
-    { id: 'security', label: 'Security', icon: FolderLock, admin: true },
-    { id: 'keybinds', label: 'Keybinds', icon: Keyboard, admin: false },
-    { id: 'about', label: 'About', icon: Info, admin: false },
+    { id: 'application', label: 'Application', icon: AppWindow, admin: false, webRestricted: false },
+    { id: 'privacy', label: 'Privacy', icon: Shield, admin: false, webRestricted: false },
+    { id: 'network', label: 'Network', icon: Network, admin: true, webRestricted: true },
+    { id: 'security', label: 'Security', icon: FolderLock, admin: true, webRestricted: true },
+    { id: 'keybinds', label: 'Keybinds', icon: Keyboard, admin: false, webRestricted: true },
+    { id: 'about', label: 'About', icon: Info, admin: false, webRestricted: false },
 ] as const;
 
-const SettingsSidebar = ({ activeTab, setActiveTab, isGuest, isMobile }: SettingsSidebarProps) => {
+const SettingsSidebar = ({ activeTab, setActiveTab, isGuest, isMobile, isWeb }: SettingsSidebarProps) => {
 
-    const visibleTabs = SETTINGS_TABS.filter(t => !isGuest || !t.admin);
+    const visibleTabs = SETTINGS_TABS.filter(t => (!isGuest || !t.admin) && (!isWeb || !t.webRestricted));
 
     if (isMobile) {
         // Mobile behavior handled by Parent or different layout?
