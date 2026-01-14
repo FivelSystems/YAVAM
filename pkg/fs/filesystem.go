@@ -2,6 +2,7 @@ package fs
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"syscall"
@@ -89,12 +90,13 @@ func (w *WindowsFileSystem) DeleteToTrash(path string) error {
 }
 
 func (w *WindowsFileSystem) OpenFolder(path string) error {
-	// "explorer /select,path"
-	// filepath.Clean should be called by caller or here. Use caller provided path.
-	// Exec is standard library, so we are still depending on OS, but this IS the OS implementation layer.
-	// Using exec.Command here is appropriate for the Windows implementation.
+	// If it's a directory, open INSIDE it.
+	info, err := os.Stat(path)
+	if err == nil && info.IsDir() {
+		return exec.Command("explorer", path).Start()
+	}
 
-	// We do NOT use cmd /C. Direct explorer call.
+	// Otherwise, select the file in its parent
 	cmd := exec.Command("explorer", "/select,", path)
 	return cmd.Start()
 }

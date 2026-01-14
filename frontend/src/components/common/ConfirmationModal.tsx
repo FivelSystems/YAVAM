@@ -1,4 +1,5 @@
 import { AlertTriangle, Trash2, LucideIcon } from 'lucide-react';
+import { createPortal } from 'react-dom';
 
 interface ConfirmationModalProps {
     isOpen: boolean;
@@ -17,8 +18,8 @@ const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message, confirm
     // Default icons if none provided
     const DefaultIcon = Icon || AlertTriangle;
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    return createPortal(
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm">
             <div className="bg-gray-800 border border-gray-700 rounded-xl shadow-2xl p-6 w-full max-w-sm animate-in fade-in zoom-in duration-200">
                 <div className="flex items-center gap-3 mb-4 text-white">
                     {confirmStyle === 'danger' && (
@@ -58,9 +59,9 @@ const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message, confirm
                     <button
                         onClick={onConfirm}
                         className={`px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2 transition-colors ${confirmStyle === 'danger' ? 'bg-red-600 hover:bg-red-500' :
-                                confirmStyle === 'warning' ? 'bg-yellow-600 hover:bg-yellow-500 text-black' :
-                                    confirmStyle === 'purple' ? 'bg-purple-600 hover:bg-purple-500' :
-                                        'bg-blue-600 hover:bg-blue-500'
+                            confirmStyle === 'warning' ? 'bg-yellow-600 hover:bg-yellow-500 text-black' :
+                                confirmStyle === 'purple' ? 'bg-purple-600 hover:bg-purple-500' :
+                                    'bg-blue-600 hover:bg-blue-500'
                             }`}
                     >
                         {confirmStyle === 'danger' && <Trash2 size={18} />}
@@ -68,7 +69,8 @@ const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message, confirm
                     </button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
 

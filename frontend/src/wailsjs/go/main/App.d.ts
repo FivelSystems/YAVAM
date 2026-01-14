@@ -30,9 +30,13 @@ export function DisableOldVersions(arg1:string,arg2:string,arg3:string):Promise<
 
 export function DownloadPackage(arg1:string,arg2:string):Promise<void>;
 
+export function ExportSettings():Promise<string>;
+
 export function FinishSetup():Promise<void>;
 
 export function GetAppVersion():Promise<string>;
+
+export function GetChangelog():Promise<string>;
 
 export function GetConfig():Promise<config.Config>;
 
@@ -53,6 +57,8 @@ export function GetPackageThumbnail(arg1:string):Promise<string>;
 export function GetUserDownloadsDir():Promise<string>;
 
 export function Greet(arg1:string):Promise<string>;
+
+export function ImportSettings():Promise<void>;
 
 export function InstallFiles(arg1:Array<string>,arg2:string):Promise<Array<string>>;
 
@@ -85,6 +91,8 @@ export function SelectDirectory():Promise<string>;
 export function SetAlwaysOnTop(arg1:boolean):Promise<void>;
 
 export function SetAuthPollInterval(arg1:number):Promise<void>;
+
+export function SetLastSeenVersion(arg1:string):Promise<void>;
 
 export function SetMinimizeOnClose(arg1:boolean):Promise<void>;
 

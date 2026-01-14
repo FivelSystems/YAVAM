@@ -23,6 +23,8 @@ import { OptimizationModal, ManualPlan } from './features/settings/OptimizationM
 import { OptimizationProgressModal } from './features/settings/OptimizationProgressModal';
 import { InstallPackageModal } from './features/packages/InstallPackageModal';
 import { UploadModal } from './features/upload/UploadModal';
+import { WhatsNewModal } from './components/modals/WhatsNewModal';
+
 import { getStoredToken, logout } from './services/auth';
 import { fetchWithAuth } from './services/api';
 import { useAuth } from './features/auth/AuthContext';
@@ -39,6 +41,8 @@ function Dashboard(): JSX.Element {
     const [updateInfo, setUpdateInfo] = useState<any>(null);
     const [showUpdateModal, setShowUpdateModal] = useState(false);
     const [isUpdating, setIsUpdating] = useState(false);
+    const [whatsNew, setWhatsNew] = useState({ open: false, content: '', version: '' });
+
 
 
     // Auth State
@@ -57,7 +61,37 @@ function Dashboard(): JSX.Element {
         if (window.go && window.go.main && window.go.main.App) {
             // @ts-ignore
             window.go.main.App.IsConfigured().then((configured: boolean) => {
-                if (!configured) setNeedsSetup(true);
+                if (!configured) {
+                    setNeedsSetup(true);
+                } else {
+                    // Check Changelog for Configured Users
+                    // We check if LastSeen < Version
+                    // @ts-ignore
+                    Promise.all([
+                        // @ts-ignore
+                        window.go.main.App.GetAppVersion(),
+                        // @ts-ignore
+                        window.go.main.App.GetConfig()
+                    ]).then(async ([version, config]) => {
+                        const lastSeen = config.lastSeenVersion;
+
+                        // If logic:
+                        // 1. lastSeen missing & Configured -> UPGRADE -> Show.
+                        // 2. lastSeen < Version -> UPDATE -> Show.
+                        // 3. lastSeen == Version -> Skip.
+
+                        if (version === lastSeen) return;
+
+                        // Fetch Content
+                        try {
+                            // @ts-ignore
+                            const content = await window.go.main.App.GetChangelog();
+                            if (content && content.length > 0) {
+                                setWhatsNew({ open: true, content, version: version });
+                            }
+                        } catch (e) { console.error("Changelog fetch failed", e); }
+                    });
+                }
             });
 
             // Auto Update Check
@@ -2053,6 +2087,29 @@ function Dashboard(): JSX.Element {
         scanPackages();
     };
 
+    // Render Setup Wizard if needed
+    if (needsSetup) {
+        return (
+            <>
+                {/* @ts-ignore */}
+                {window.go && <TitleBar />}
+                {/* @ts-ignore */}
+                <SetupWizard onComplete={(libPath?: string) => {
+                    setNeedsSetup(false);
+                    if (libPath) {
+                        handleAddLibrary(libPath);
+                    }
+                    // Fresh Install completed: Mark version as seen to skip What's New
+                    // @ts-ignore
+                    if (window.go) {
+                        // @ts-ignore
+                        window.go.main.App.GetAppVersion().then((v: string) => window.go.main.App.SetLastSeenVersion(v));
+                    }
+                }} />
+            </>
+        );
+    }
+
     if (!activeLibraryPath) {
         // @ts-ignore
         if (!window.go) {
@@ -2092,6 +2149,12 @@ function Dashboard(): JSX.Element {
                     setNeedsSetup(false);
                     if (libPath) {
                         handleAddLibrary(libPath);
+                    }
+                    // Fresh Install completed: Mark version as seen to skip What's New
+                    // @ts-ignore
+                    if (window.go) {
+                        // @ts-ignore
+                        window.go.main.App.GetAppVersion().then(v => localStorage.setItem('lastSeenVersion', v));
                     }
                 }} />
             </>
@@ -2698,6 +2761,17 @@ function Dashboard(): JSX.Element {
                             if (idx !== -1) handleSwitchLibrary(idx);
                         }
                     }}
+                />
+
+                <WhatsNewModal
+                    isOpen={whatsNew.open}
+                    onClose={() => {
+                        setWhatsNew(prev => ({ ...prev, open: false }));
+                        // @ts-ignore
+                        if (window.go) window.go.main.App.SetLastSeenVersion(whatsNew.version);
+                    }}
+                    content={whatsNew.content}
+                    version={whatsNew.version}
                 />
 
                 <UpgradeModal

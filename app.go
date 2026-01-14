@@ -18,6 +18,7 @@ import (
 	"yavam/pkg/services/auth"
 	"yavam/pkg/services/config"
 	"yavam/pkg/updater"
+	"yavam/pkg/utils"
 
 	"yavam/pkg/server"
 
@@ -35,6 +36,9 @@ var iconData []byte
 
 //go:embed wails.json
 var wailsConfig []byte
+
+//go:embed CHANGELOG.md
+var changelogData string
 
 // App struct
 type App struct {
@@ -629,6 +633,100 @@ func (a *App) RestartApp() {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	cmd.Start()
 
-	// Quit current
 	runtime.Quit(a.ctx)
+}
+
+// GetChangelog returns the markdown content for the current version
+func (a *App) GetChangelog() (string, error) {
+	return changelogData, nil
+}
+
+// SetLastSeenVersion updates the config with the latest seen version
+func (a *App) SetLastSeenVersion(version string) error {
+	return a.manager.UpdateConfig(func(cfg *config.Config) {
+		cfg.LastSeenVersion = version
+	})
+}
+
+// ExportSettings opens a dialog to save the settings zip
+func (a *App) ExportSettings() (string, error) {
+	// Open Save Dialog
+	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		Title:           "Export Settings",
+		DefaultFilename: "YAVAM_Backup.zip",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "Zip Files (*.zip)", Pattern: "*.zip"},
+		},
+	})
+
+	if err != nil || path == "" {
+		return "", err
+	}
+
+	// Zip DataPath
+	// We need DataPath. manager has it.
+	dataPath := a.manager.DataPath
+	return path, utils.ZipDirectory(dataPath, path)
+}
+
+// ImportSettings imports settings from a zip file and restarts
+func (a *App) ImportSettings() error {
+	zipPath, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title: "Import Settings Backup",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "Zip Files (*.zip)", Pattern: "*.zip"},
+		},
+	})
+	if err != nil {
+		return err
+	}
+	if zipPath == "" {
+		return nil // Cancelled
+	}
+
+	// 1. Validate Zip (Simple check: can we open it? utils.UnzipDirectory does checks)
+	// But we want to check for config.json presence ideally.
+	// For now, let's proceed with UnzipDirectory which is safe against Zip Slip.
+
+	// 2. Wipe current DataPath?
+	// If Unzip fails halfway, we might be in trouble.
+	// Better: Unzip to temp, then swap.
+	tempDir, err := os.MkdirTemp("", "yavam_restore")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tempDir)
+
+	if err := utils.UnzipDirectory(zipPath, tempDir); err != nil {
+		return fmt.Errorf("failed to unzip backup: %w", err)
+	}
+
+	// 3. Verify content
+	if _, err := os.Stat(filepath.Join(tempDir, "config.json")); os.IsNotExist(err) {
+		return fmt.Errorf("invalid backup: config.json not found")
+	}
+
+	// 4. Overwrite DataPath
+	// We remove old DataPath contents
+	dataPath := a.manager.DataPath
+
+	// Issue: We cannot remove `lock` files if app is running?
+	// `auth.json`, `config.json` should be fine.
+	// `db` folder might be locked if using sqlite/badger.
+	// Yavam uses simple JSON files + LibraryService scanning (no locking DB yet).
+	// So it should be safe.
+
+	os.RemoveAll(dataPath)
+	// Move tempDir to dataPath is tricky across volumes.
+	// CopyDir logic needed?
+	// Or just Unzip directly to DataPath after clearing.
+	// We validated integrity with temp unzip. Now unzip to real path.
+	os.MkdirAll(dataPath, 0755)
+	if err := utils.UnzipDirectory(zipPath, dataPath); err != nil {
+		return fmt.Errorf("failed to restore: %w", err)
+	}
+
+	// 5. Restart
+	a.RestartApp()
+	return nil
 }

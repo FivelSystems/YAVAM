@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { AlertTriangle, Trash2, FolderOpen, ExternalLink } from 'lucide-react';
-// Generic Components
 import { SettingGroup } from '../components/SettingGroup';
 import { Input } from '../../../components/ui/Input';
+import { Button } from '../../../components/ui/Button';
+import { Download, Upload, FolderOpen, Trash2, AlertTriangle, ExternalLink } from 'lucide-react';
 
 interface SecurityTabProps {
     handleClearData: () => void;
@@ -29,6 +29,28 @@ const SecurityTab = ({ handleClearData, addToast }: SecurityTabProps) => {
             }
         } catch (e: any) {
             addToast("Failed to update password: " + (e.message || e), "error");
+        }
+    };
+
+    const handleExport = async () => {
+        try {
+            // @ts-ignore
+            const path = await window.go.main.App.ExportSettings();
+            if (path) addToast(`Settings exported to ${path}`, 'success');
+        } catch (e: any) {
+            addToast(`Export failed: ${e}`, 'error');
+        }
+    };
+
+    const handleImport = async () => {
+        if (!confirm("This will overwrite your current settings and restart the application. Continue?")) return;
+        try {
+            // @ts-ignore
+            await window.go.main.App.ImportSettings();
+            // App restarts, so we might not see this
+            addToast("Restoring...", 'info');
+        } catch (e: any) {
+            addToast(`Import failed: ${e}`, 'error');
         }
     };
 
@@ -83,6 +105,29 @@ const SecurityTab = ({ handleClearData, addToast }: SecurityTabProps) => {
                                 </div>
                             </div>
                         )}
+                    </SettingGroup>
+
+
+                    {/* Backup & Restore (Moved from Application) */}
+                    <SettingGroup title="Backup & Restore">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Button
+                                variant="secondary"
+                                icon={<Download size={16} />}
+                                onClick={handleExport}
+                                className="w-full justify-start"
+                            >
+                                Export Backup
+                            </Button>
+                            <Button
+                                variant="secondary"
+                                icon={<Upload size={16} className="text-amber-500" />}
+                                onClick={handleImport}
+                                className="w-full justify-start hover:text-amber-400"
+                            >
+                                Restore Backup
+                            </Button>
+                        </div>
                     </SettingGroup>
 
                     {/* Data Management */}
