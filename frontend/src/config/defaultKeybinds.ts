@@ -83,5 +83,17 @@ export const DEFAULT_KEYBINDS: KeybindDefinition[] = [
         label: "Add Next to Selection",
         category: "navigation",
         defaultKeys: ["CTRL", "RIGHT"]
+    },
+    {
+        id: "prev_page",
+        label: "Previous Page",
+        category: "navigation",
+        defaultKeys: ["SHIFT", "LEFT"]
+    },
+    {
+        id: "next_page",
+        label: "Next Page",
+        category: "navigation",
+        defaultKeys: ["SHIFT", "RIGHT"]
     }
 ];

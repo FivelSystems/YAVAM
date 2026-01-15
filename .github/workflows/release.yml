@@ -62,7 +62,7 @@ jobs:
           
           # Find the current version section
           for ($i=0; $i -lt $changelog.Count; $i++) {
-            if ($changelog[$i] -match "^## \[v$($env:VERSION)\]") {
+            if ($changelog[$i] -match "^## \[v?$($env:VERSION)\]") {
               $start = $i + 1
               continue
             }
@@ -71,7 +71,7 @@ jobs:
               break
             }
           }
-          
+
           if ($start -gt 0) {
             if ($end -eq 0) { $end = $changelog.Count }
             $notes = $changelog[$start..($end-1)] | Where-Object { $_ -notmatch "^\[.*\]: http" } # Exclude links
@@ -96,7 +96,7 @@ jobs:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}-nightly', env.VERSION) }}
           
           # TITLE: If tag, use it (e.g. v1.3.0). If dev, use 'v{VERSION}-nightly'
-          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}-nightly', env.VERSION) }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && format('YAVAM {0}', github.ref_name) || format('v{0}-nightly', env.VERSION) }}
           
           body_path: RELEASE_NOTES.md
         env:
