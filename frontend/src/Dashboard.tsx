@@ -516,6 +516,7 @@ function Dashboard(): JSX.Element {
     const [blurAmount, setBlurAmount] = useState(() => parseInt(localStorage.getItem('blurAmount') || '10'));
     const [hidePackageNames, setHidePackageNames] = useState(() => localStorage.getItem('hidePackageNames') === 'true');
     const [hideCreatorNames, setHideCreatorNames] = useState(() => localStorage.getItem('hideCreatorNames') === 'true');
+    const [gridSize, setGridSize] = useState(parseInt(localStorage.getItem("gridSize") || "160"));
     // Global Privacy Toggle (Ephemeral)
     const [isPrivacyModeEnabled, setIsPrivacyModeEnabled] = useState(false);
     // Auth Polling Interval
@@ -616,7 +617,9 @@ function Dashboard(): JSX.Element {
 
     // Settings
     // (State moved to top)
-    const [gridSize, setGridSize] = useState(parseInt(localStorage.getItem("gridSize") || "160"));
+    // Settings
+    // (State moved to top)
+    // const [gridSize, setGridSize] = useState(parseInt(localStorage.getItem("gridSize") || "160")); // MOVED UP
 
 
     const handleSetMinimize = (val: boolean) => {
