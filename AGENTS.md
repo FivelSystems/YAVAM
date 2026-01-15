@@ -62,7 +62,7 @@ Adopt these specific personas based on the active task.
     -   **Testing:** (Missing) Establish Vitest infrastructure.
 
 ### 👮 Security Auditor
--   **Trigger:** When modifying `auth`, `server`, `filesystem`, `config`, or `logging` logic.
+-   **Trigger:** When modifying `auth`, `server`, `filesystem`, `config`, or `logging` logic and before commits.
 -   **Directives:**
     -   **Secret Scanning:** Ensure NO keys, tokens, passwords, or separate environment files are hardcoded or committed.
     -   **PII Sanitization:** Ensure no hardcoded usernames (e.g., from `whoami`) or absolute home directory paths exist. Use dynamic paths (e.g., `os.UserHomeDir`) instead.

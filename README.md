@@ -57,7 +57,7 @@ Once you turn on the server, just type your PC's IP into any browser:
 ---
 
 ## 🔮 Roadmap (The fun stuff coming soon!)
-- **v1.3.0**: **Security** (Network passwords, so your roommates can't mess with your library 🔒).
+- **v1.3.0**: **Released** 🚀 (Application Security, Backup/Restore, Privacy Enhancements).
 - **v1.4.0**: **Granular Control** (Hide specific "private" libraries from the web view 🤫).
 - **v1.5.0**: **Bulk Downloads** (Grab tons of files as one big ZIP).
 - **v1.8.0**: **Hub Integration** (Find missing dependencies online automatically!).
