@@ -136,7 +136,8 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 		if normName == "meta.json" || normName == "core/meta.json" {
 			rc, err := f.Open()
 			if err == nil {
-				bytes, err := io.ReadAll(rc)
+				// Limit meta.json/meta.json to 5MB
+				bytes, err := io.ReadAll(io.LimitReader(rc, 5*1024*1024))
 				rc.Close()
 				if err == nil {
 					// Decode encoding if necessary
@@ -150,7 +151,8 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 		if strings.HasSuffix(normName, ".vam") {
 			rc, err := f.Open()
 			if err == nil {
-				bytes, err := io.ReadAll(rc)
+				// Limit .vam files to 5MB
+				bytes, err := io.ReadAll(io.LimitReader(rc, 5*1024*1024))
 				rc.Close()
 				if err == nil {
 					decoded := decodeBytes(bytes)
@@ -255,7 +257,8 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 	if candidate != nil {
 		rc, err := candidate.Open()
 		if err == nil {
-			data, err := io.ReadAll(rc)
+			// Limit thumbnail extraction to 20MB (generous but safe)
+			data, err := io.ReadAll(io.LimitReader(rc, 20*1024*1024))
 			rc.Close()
 			if err == nil {
 				thumbBytes = data
