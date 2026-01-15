@@ -44,6 +44,43 @@ jobs:
         run: |
           go run cmd/sign-update/main.go build/bin/yavam.exe
 
+      - name: Extract Version
+        shell: pwsh
+        run: |
+          $json = Get-Content wails.json | ConvertFrom-Json
+          $version = $json.info.productVersion
+          echo "VERSION=$version" >> $env:GITHUB_ENV
+          Write-Host "Detected Version: $version"
+
+      - name: Extract Release Notes
+        shell: pwsh
+        run: |
+          $changelog = Get-Content CHANGELOG.md
+          $start = 0
+          $end = 0
+          $notes = @()
+          
+          # Find the current version section
+          for ($i=0; $i -lt $changelog.Count; $i++) {
+            if ($changelog[$i] -match "^## \[v$($env:VERSION)\]") {
+              $start = $i + 1
+              continue
+            }
+            if ($start -gt 0 -and $changelog[$i] -match "^## \[v") {
+              $end = $i
+              break
+            }
+          }
+          
+          if ($start -gt 0) {
+            if ($end -eq 0) { $end = $changelog.Count }
+            $notes = $changelog[$start..($end-1)] | Where-Object { $_ -notmatch "^\[.*\]: http" } # Exclude links
+            $notes | Out-File -Encoding UTF8 RELEASE_NOTES.md
+          } else {
+             Write-Host "Version header not found in CHANGELOG.md"
+             "Automated Build" | Out-File -Encoding UTF8 RELEASE_NOTES.md
+          }
+
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v1
@@ -52,9 +89,16 @@ jobs:
             build/bin/yavam.exe
             build/bin/yavam.exe.sig
           draft: false
-          # If tag: Regular release. If main: Nightly Pre-release
+          # PRE-RELEASE: True if not a tag
           prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
+          
+          # TAG NAME: If push is a tag, use it. If main branch, use 'nightly' (Rolling Release)
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'nightly' }}
+          
+          # TITLE: If tag, use 'v1.3.0'. If main, use 'v1.3.0-nightly'
+          name: v${{ env.VERSION }}${{ startsWith(github.ref, 'refs/tags/') && '' || '-nightly' }}
+          
+          body_path: RELEASE_NOTES.md
           overwrite: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
