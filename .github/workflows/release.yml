@@ -92,13 +92,12 @@ jobs:
           # PRE-RELEASE: True if not a tag
           prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
           
-          # TAG NAME: If push is a tag, use it. If main branch, use 'nightly' (Rolling Release)
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'nightly' }}
+          # TAG NAME: If tag, use it. If dev, use 'v{VERSION}-nightly'
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}-nightly', env.VERSION) }}
           
-          # TITLE: If tag, use 'v1.3.0'. If main, use 'v1.3.0-nightly'
-          name: v${{ env.VERSION }}${{ startsWith(github.ref, 'refs/tags/') && '' || '-nightly' }}
+          # TITLE: If tag, use it (e.g. v1.3.0). If dev, use 'v{VERSION}-nightly'
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v{0}-nightly', env.VERSION) }}
           
           body_path: RELEASE_NOTES.md
-          overwrite: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

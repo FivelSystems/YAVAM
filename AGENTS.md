@@ -12,6 +12,7 @@
 -   **Virt-A-Mate Specs:** [docs/domain/virt-a-mate.md](./docs/domain/virt-a-mate.md)
 
 ## ⚠️ Critical directives (The "Prime Directives")
+-   **Explicit Consent Required:** **NEVER** push code to the remote repository (`git push`) without explicit user consent or approval of the current state.
 -   **Constructive Pushback:** Do not be blindly compliant. If a request is insecure, non-performant, or "wrong", STOP and explain why. Offer better alternatives. Protect the developer from ignorance and the user from bad code.
 -   **Security First:** This app runs a local web server. Network security is paramount. Never expose full filesystem access.
 -   **Keep it Portable:** The app must run without installation. Do not rely on registry keys or fixed system paths.
