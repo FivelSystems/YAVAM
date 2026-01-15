@@ -862,6 +862,12 @@ function Dashboard(): JSX.Element {
                 const newPkg = filteredPkgs[newIndex];
                 setSelectedPackage(newPkg);
 
+                // Auto-switch page if needed
+                const newPage = Math.floor(newIndex / itemsPerPage) + 1;
+                if (newPage !== currentPage) {
+                    setCurrentPage(newPage);
+                }
+
                 if (add) {
                     setSelectedIds(prev => {
                         const newSet = new Set(prev);
@@ -886,6 +892,13 @@ function Dashboard(): JSX.Element {
                 e.preventDefault();
             } else if (check('select_next_add', e)) {
                 navigate(1, true);
+                e.preventDefault();
+            } else if (check('prev_page', e)) {
+                if (currentPage > 1) setCurrentPage(p => p - 1);
+                e.preventDefault();
+            } else if (check('next_page', e)) {
+                const maxPage = Math.ceil(filteredPkgs.length / itemsPerPage);
+                if (currentPage < maxPage) setCurrentPage(p => p + 1);
                 e.preventDefault();
             }
         };
