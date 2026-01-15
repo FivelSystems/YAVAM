@@ -519,7 +519,8 @@ function Dashboard(): JSX.Element {
     // Global Privacy Toggle (Ephemeral)
     const [isPrivacyModeEnabled, setIsPrivacyModeEnabled] = useState(false);
     // Auth Polling Interval
-    const [authPollInterval, setAuthPollInterval] = useState(15);
+    // Auth Polling Interval
+    const [authPollInterval, setAuthPollInterval] = useState(() => parseInt(localStorage.getItem('authPollInterval') || '15'));
 
     // Persist Privacy Settings
     useEffect(() => {
@@ -527,7 +528,9 @@ function Dashboard(): JSX.Element {
         localStorage.setItem('blurAmount', blurAmount.toString());
         localStorage.setItem('hidePackageNames', hidePackageNames.toString());
         localStorage.setItem('hideCreatorNames', hideCreatorNames.toString());
-    }, [censorThumbnails, blurAmount, hidePackageNames, hideCreatorNames]);
+        localStorage.setItem('gridSize', gridSize.toString());
+        localStorage.setItem('authPollInterval', authPollInterval.toString());
+    }, [censorThumbnails, blurAmount, hidePackageNames, hideCreatorNames, gridSize, authPollInterval]);
 
     // Network & System State (Lifted for SettingsDialog)
 
