@@ -41,6 +41,15 @@ export namespace config {
 	    serverPort: string;
 	    authPollInterval: number;
 	    lastSeenVersion: string;
+	    privacyMode: boolean;
+	    keybinds?: Record<string, Array<string>>;
+	    gridSize: number;
+	    sortMode: string;
+	    itemsPerPage: number;
+	    censorThumbnails: boolean;
+	    blurAmount: number;
+	    hidePackageNames: boolean;
+	    hideCreatorNames: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
@@ -61,6 +70,15 @@ export namespace config {
 	        this.serverPort = source["serverPort"];
 	        this.authPollInterval = source["authPollInterval"];
 	        this.lastSeenVersion = source["lastSeenVersion"];
+	        this.privacyMode = source["privacyMode"];
+	        this.keybinds = source["keybinds"];
+	        this.gridSize = source["gridSize"];
+	        this.sortMode = source["sortMode"];
+	        this.itemsPerPage = source["itemsPerPage"];
+	        this.censorThumbnails = source["censorThumbnails"];
+	        this.blurAmount = source["blurAmount"];
+	        this.hidePackageNames = source["hidePackageNames"];
+	        this.hideCreatorNames = source["hideCreatorNames"];
 	    }
 	}
 

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"reflect"
 	"testing"
 )
 
@@ -66,5 +67,40 @@ func TestPersistence(t *testing.T) {
 	}
 	if !cfg.ServerEnabled {
 		t.Errorf("Persisted ServerEnabled mismatch. Got false, want true")
+	}
+}
+
+func TestKeybindPersistence(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// 1. Create and Modify
+	svc1, err := NewFileConfigService(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to create config service: %v", err)
+	}
+
+	overrides := map[string][]string{
+		"toggle_sidebar": {"CTRL", "TAB"},
+		"my_action":      {"SHIFT", "F1"},
+	}
+
+	err = svc1.Update(func(c *Config) {
+		c.Keybinds = overrides
+	})
+	if err != nil {
+		t.Fatalf("Update failed: %v", err)
+	}
+
+	// 2. Reload
+	svc2, err := NewFileConfigService(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to reload config service: %v", err)
+	}
+
+	cfg := svc2.Get()
+
+	// 3. Verify
+	if !reflect.DeepEqual(cfg.Keybinds, overrides) {
+		t.Errorf("Keybind persistence mismatch.\nGot: %v\nWant: %v", cfg.Keybinds, overrides)
 	}
 }

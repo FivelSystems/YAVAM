@@ -32,6 +32,12 @@ func (m *Manager) UpdateConfig(fn func(*config.Config)) error {
 	return m.config.Update(fn)
 }
 
+// Close cleans up resources
+func (m *Manager) Close() error {
+	// Placeholder for future cleanup (e.g. database connections)
+	return nil
+}
+
 func NewManager(sys system.SystemService, lib library.LibraryService, cfg config.ConfigService) *Manager {
 	configDir, _ := os.UserConfigDir()
 	// Standard Location: %AppData%\YAVAM

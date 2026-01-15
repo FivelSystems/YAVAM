@@ -64,23 +64,41 @@ const PrivacyTab = ({
                             />
                         </SettingItem>
 
-                        {censorThumbnails && (
-                            <SettingItem
-                                title="Blur Strength"
-                                tooltip="Intensity of the blur effect."
-                            >
-                                <div className="w-48">
-                                    <Slider
-                                        min={1}
-                                        max={20}
-                                        step={1}
-                                        value={blurAmount}
-                                        onChange={setBlurAmount}
-                                        label={`${blurAmount}px`}
-                                    />
+                        <SettingItem
+                            title="Blur Strength"
+                            tooltip="Intensity of the blur effect."
+                        >
+                            <div className="w-48">
+                                <Slider
+                                    min={1}
+                                    max={20}
+                                    step={1}
+                                    value={blurAmount}
+                                    onChange={setBlurAmount}
+                                    label={`${blurAmount}px`}
+                                />
+                            </div>
+                        </SettingItem>
+
+                        {/* Preview Section */}
+                        <div className="mt-4 pt-4 border-t border-gray-700/50">
+                            <div className="flex items-center gap-2 mb-2">
+                                <span className="text-xs font-medium text-gray-400">Preview</span>
+                            </div>
+                            <div className="relative w-32 h-32 rounded-lg overflow-hidden border border-gray-700 bg-gray-900 group shadow-inner">
+                                <img
+                                    src="/favicon.png"
+                                    alt="Preview"
+                                    className="w-full h-full object-cover p-2"
+                                    style={{ filter: `blur(${blurAmount}px)` }}
+                                />
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                    <span className="text-white/90 font-mono text-xs font-bold drop-shadow-lg px-2 py-1 rounded bg-black/30 backdrop-blur-md border border-white/10">
+                                        Censored
+                                    </span>
                                 </div>
-                            </SettingItem>
-                        )}
+                            </div>
+                        </div>
                     </SettingGroup>
 
                     {/* Metadata Privacy */}

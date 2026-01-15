@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, memo } from 'react';
 import { VarPackage } from '../../types';
 import clsx from 'clsx';
 import { AlertCircle, Check, AlertTriangle, Power, Copy } from 'lucide-react';
@@ -9,6 +9,7 @@ interface PackageCardProps {
     onContextMenu: (e: React.MouseEvent, pkg: VarPackage) => void;
     onSelect: (pkg: VarPackage, e?: React.MouseEvent) => void;
     isSelected?: boolean;
+    isAnchor?: boolean;
     viewMode?: 'grid' | 'list';
     censorThumbnails?: boolean;
     blurAmount?: number;
@@ -16,12 +17,21 @@ interface PackageCardProps {
     hideCreatorNames?: boolean;
 }
 
-const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'grid', censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false }: PackageCardProps) => {
+const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, viewMode = 'grid', censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false }: PackageCardProps) => {
     const cardRef = useRef<HTMLDivElement>(null);
     const [thumbSrc, setThumbSrc] = useState<string | undefined>(
         pkg.thumbnailBase64 ? `data:image/jpeg;base64,${pkg.thumbnailBase64}` : undefined
     );
     const [isVisible, setIsVisible] = useState(false);
+
+    // Scroll Into View when Anchor
+    useEffect(() => {
+        if (isAnchor && cardRef.current) {
+            // Use subtle timeout to allow layout to settle if needed, or run immediately.
+            // 'nearest' ensures minimal scrolling just to get it in view.
+            cardRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }, [isAnchor]);
 
     const handleClick = (e: React.MouseEvent) => {
         onSelect(pkg, e);
@@ -81,22 +91,26 @@ const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'gri
     let statusClass = "border-gray-700 opacity-60 grayscale";
     let statusIcon = <Power size={14} className="text-gray-400" />;
 
-    if (isSelected) {
-        statusClass = "border-blue-500 ring-2 ring-blue-500/50 shadow-xl z-10 grayscale-0 " + (viewMode === 'grid' ? "scale-[1.02]" : "");
-    } else if (pkg.isEnabled) {
-        statusClass = "border-gray-600 grayscale-0";
-        if (pkg.missingDeps && pkg.missingDeps.length > 0) {
-            statusClass = "border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]";
-            statusIcon = <AlertCircle size={16} className="text-red-500" />;
-        } else if (pkg.isExactDuplicate) {
-            statusClass = "border-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.3)]";
-            statusIcon = <Copy size={16} className="text-purple-500" />;
-        } else if (pkg.isDuplicate) {
-            statusClass = "border-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.3)]";
-            statusIcon = <AlertTriangle size={16} className="text-yellow-500" />;
-        } else {
-            statusClass = "border-green-500/50 hover:border-green-400";
-            statusIcon = <Check size={16} className="text-green-500" />;
+    if (isAnchor) {
+        statusClass = "border-white ring-2 ring-white/50 shadow-2xl z-20 grayscale-0 " + (viewMode === 'grid' ? "scale-[1.05]" : "");
+    } else {
+        if (isSelected) {
+            statusClass = "border-blue-500 ring-2 ring-blue-500/50 shadow-xl z-10 grayscale-0 " + (viewMode === 'grid' ? "scale-[1.02]" : "");
+        } else if (pkg.isEnabled) {
+            statusClass = "border-gray-600 grayscale-0";
+            if (pkg.missingDeps && pkg.missingDeps.length > 0) {
+                statusClass = "border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]";
+                statusIcon = <AlertCircle size={16} className="text-red-500" />;
+            } else if (pkg.isExactDuplicate) {
+                statusClass = "border-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.3)]";
+                statusIcon = <Copy size={16} className="text-purple-500" />;
+            } else if (pkg.isDuplicate) {
+                statusClass = "border-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.3)]";
+                statusIcon = <AlertTriangle size={16} className="text-yellow-500" />;
+            } else {
+                statusClass = "border-green-500/50 hover:border-green-400";
+                statusIcon = <Check size={16} className="text-green-500" />;
+            }
         }
     }
 
@@ -225,6 +239,6 @@ const PackageCard = ({ pkg, onContextMenu, onSelect, isSelected, viewMode = 'gri
             </div>
         </motion.div>
     );
-};
+});
 
 export default PackageCard;

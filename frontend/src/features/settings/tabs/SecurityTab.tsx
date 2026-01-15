@@ -109,26 +109,29 @@ const SecurityTab = ({ handleClearData, addToast }: SecurityTabProps) => {
 
 
                     {/* Backup & Restore (Moved from Application) */}
-                    <SettingGroup title="Backup & Restore">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Button
-                                variant="secondary"
-                                icon={<Download size={16} />}
-                                onClick={handleExport}
-                                className="w-full justify-start"
-                            >
-                                Export Backup
-                            </Button>
-                            <Button
-                                variant="secondary"
-                                icon={<Upload size={16} className="text-amber-500" />}
-                                onClick={handleImport}
-                                className="w-full justify-start hover:text-amber-400"
-                            >
-                                Restore Backup
-                            </Button>
-                        </div>
-                    </SettingGroup>
+                    {/* @ts-ignore */}
+                    {window.go && (
+                        <SettingGroup title="Backup & Restore">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <Button
+                                    variant="secondary"
+                                    icon={<Download size={16} />}
+                                    onClick={handleExport}
+                                    className="w-full justify-start"
+                                >
+                                    Export Backup
+                                </Button>
+                                <Button
+                                    variant="secondary"
+                                    icon={<Upload size={16} className="text-amber-500" />}
+                                    onClick={handleImport}
+                                    className="w-full justify-start hover:text-amber-400"
+                                >
+                                    Restore Backup
+                                </Button>
+                            </div>
+                        </SettingGroup>
+                    )}
 
                     {/* Data Management */}
                     <SettingGroup title="Data Management">

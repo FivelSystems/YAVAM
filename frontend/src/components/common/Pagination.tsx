@@ -15,7 +15,7 @@ export const Pagination: React.FC<PaginationProps> = ({ currentPage, totalItems,
     // Safety check
     if (totalPages <= 1) return null;
 
-    const maxVisible = 5;
+    const maxVisible = 9; // Increased from 5 for better Desktop navigation
     let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
     let endPage = Math.min(totalPages, startPage + maxVisible - 1);
 

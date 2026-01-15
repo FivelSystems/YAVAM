@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 // import { useNavigate } from 'react-router-dom'; // Unused
 import { AnimatePresence, motion } from 'framer-motion';
 import { RefreshCw, Search, X, PanelLeft, LayoutGrid, List, Filter, WifiOff, ArrowUpDown, Calendar, ArrowUpAZ, ArrowDownZA, ArrowDownWideNarrow, ArrowUpNarrowWide } from 'lucide-react';
+import { useKeybind } from './context/KeybindContext';
 import clsx from 'clsx';
 import { Toast, ToastItem, ToastType } from './components/ui/Toast';
 import DragDropOverlay from './features/upload/DragDropOverlay';
@@ -343,6 +344,18 @@ function Dashboard(): JSX.Element {
                     if (cfg) {
                         setPublicAccess(cfg.publicAccess);
                         if (cfg.authPollInterval) setAuthPollInterval(cfg.authPollInterval);
+                        if (cfg.privacyMode !== undefined) setIsPrivacyModeEnabled(cfg.privacyMode);
+
+                        // Sync UI Preferences
+                        if (cfg.gridSize) setGridSize(cfg.gridSize);
+                        if (cfg.sortMode) setSortMode(cfg.sortMode);
+                        if (cfg.itemsPerPage) setItemsPerPage(cfg.itemsPerPage);
+
+                        // Bool/Int settings
+                        setCensorThumbnails(cfg.censorThumbnails);
+                        setBlurAmount(cfg.blurAmount);
+                        setHidePackageNames(cfg.hidePackageNames);
+                        setHideCreatorNames(cfg.hideCreatorNames);
                     }
                 } else {
                     const res = await fetch('/api/config');
@@ -517,54 +530,22 @@ function Dashboard(): JSX.Element {
     const [hidePackageNames, setHidePackageNames] = useState(() => localStorage.getItem('hidePackageNames') === 'true');
     const [hideCreatorNames, setHideCreatorNames] = useState(() => localStorage.getItem('hideCreatorNames') === 'true');
     const [gridSize, setGridSize] = useState(parseInt(localStorage.getItem("gridSize") || "160"));
-    // Global Privacy Toggle (Ephemeral)
-    const [isPrivacyModeEnabled, setIsPrivacyModeEnabled] = useState(false);
-    // Auth Polling Interval
+    // Global Privacy Toggle (Persistent)
+    const [isPrivacyModeEnabled, setIsPrivacyModeEnabled] = useState(() => localStorage.getItem('isPrivacyModeEnabled') === 'true');
     // Auth Polling Interval
     const [authPollInterval, setAuthPollInterval] = useState(() => parseInt(localStorage.getItem('authPollInterval') || '15'));
 
-    // Persist Privacy Settings
-    useEffect(() => {
-        localStorage.setItem('censorThumbnails', censorThumbnails.toString());
-        localStorage.setItem('blurAmount', blurAmount.toString());
-        localStorage.setItem('hidePackageNames', hidePackageNames.toString());
-        localStorage.setItem('hideCreatorNames', hideCreatorNames.toString());
-        localStorage.setItem('gridSize', gridSize.toString());
-        localStorage.setItem('authPollInterval', authPollInterval.toString());
-    }, [censorThumbnails, blurAmount, hidePackageNames, hideCreatorNames, gridSize, authPollInterval]);
+
 
     // Network & System State (Lifted for SettingsDialog)
 
 
 
-    // Keybinds State
-    const [keybinds, setKeybinds] = useState<{ [key: string]: string }>(() => {
-        const saved = localStorage.getItem('keybinds');
-        return saved ? JSON.parse(saved) : { togglePrivacy: 'v' };
-    });
+    // Keybinds (New System)
+    const { check } = useKeybind();
+    const searchInputRef = useRef<HTMLInputElement>(null);
 
 
-
-    // Hotkey Listener
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            // Ignore if typing in input/textarea
-            const target = e.target as HTMLElement;
-            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
-
-            // Toggle Censor
-            if (e.key.toLowerCase() === keybinds.togglePrivacy?.toLowerCase()) {
-                setIsPrivacyModeEnabled(prev => {
-                    const newVal = !prev;
-                    addToast(newVal ? "Privacy Mode Enabled" : "Privacy Mode Disabled", 'info');
-                    return newVal;
-                });
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [keybinds]); // Depend on keybinds to update listener only when bindings change
 
     // Filter State
     const [searchQuery, setSearchQuery] = useState("");
@@ -575,6 +556,37 @@ function Dashboard(): JSX.Element {
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(() => parseInt(localStorage.getItem('itemsPerPage') || '25'));
     const [maxToasts, setMaxToasts] = useState(() => parseInt(localStorage.getItem('maxToasts') || '5'));
+
+    // Persist Privacy & UI Settings
+    useEffect(() => {
+        localStorage.setItem('censorThumbnails', censorThumbnails.toString());
+        localStorage.setItem('blurAmount', blurAmount.toString());
+        localStorage.setItem('hidePackageNames', hidePackageNames.toString());
+        localStorage.setItem('hideCreatorNames', hideCreatorNames.toString());
+        localStorage.setItem('gridSize', gridSize.toString());
+        localStorage.setItem('authPollInterval', authPollInterval.toString());
+        localStorage.setItem('isPrivacyModeEnabled', isPrivacyModeEnabled.toString());
+        localStorage.setItem("sortMode", sortMode);
+        localStorage.setItem('itemsPerPage', itemsPerPage.toString());
+
+        // @ts-ignore
+        if (window.go && window.go.main && window.go.main.App) {
+            // @ts-ignore
+            window.go.main.App.SetPrivacyMode(isPrivacyModeEnabled);
+            // @ts-ignore
+            window.go.main.App.SetAuthPollInterval(authPollInterval);
+
+            // Sync UI Prefs
+            // @ts-ignore
+            window.go.main.App.SetGridSize(gridSize);
+            // @ts-ignore
+            window.go.main.App.SetSortMode(sortMode);
+            // @ts-ignore
+            window.go.main.App.SetItemsPerPage(itemsPerPage);
+            // @ts-ignore
+            window.go.main.App.SetPrivacyOptions(censorThumbnails, blurAmount, hidePackageNames, hideCreatorNames);
+        }
+    }, [censorThumbnails, blurAmount, hidePackageNames, hideCreatorNames, gridSize, authPollInterval, isPrivacyModeEnabled, sortMode, itemsPerPage]);
 
     const [toasts, setToasts] = useState<ToastItem[]>([]);
 
@@ -729,9 +741,9 @@ function Dashboard(): JSX.Element {
                 else newSet.add(pkg.filePath);
                 return newSet;
             });
-            // Update anchor, but DO NOT open details panel
+            // Update anchor and ensure details panel shows the new anchor
             setSelectedPackage(pkg);
-            setIsDetailsPanelOpen(false);
+            setIsDetailsPanelOpen(true);
         } else if (e && e.shiftKey && selectedPackage) {
             // Shift select (range)
             const start = filteredPkgs.findIndex(p => p.filePath === selectedPackage.filePath);
@@ -747,7 +759,7 @@ function Dashboard(): JSX.Element {
                 });
             }
             setSelectedPackage(pkg);
-            setIsDetailsPanelOpen(false);
+            setIsDetailsPanelOpen(true);
         } else {
             // Single select
             if (selectedPackage?.filePath === pkg.filePath && selectedIds.size === 1) {
@@ -778,6 +790,109 @@ function Dashboard(): JSX.Element {
             // We pass 'pkg' as the anchor, but actions should check selectedIds
         });
     };
+
+    // Global Hotkey Listener (Moved here to access all state)
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Check Centralized Keybinds
+            if (check('open_settings', e)) {
+                setIsSettingsOpen(true);
+                e.preventDefault();
+            } else if (check('toggle_privacy', e)) {
+                const newVal = !censorThumbnails;
+                setCensorThumbnails(newVal);
+
+                // @ts-ignore
+                if (window.go) {
+                    // @ts-ignore
+                    window.go.main.App.SetPrivacyOptions(newVal, blurAmount, hidePackageNames, hideCreatorNames);
+                }
+
+                addToast(newVal ? "Blur Enabled" : "Blur Disabled", 'info');
+                e.preventDefault();
+            } else if (check('toggle_sidebar', e)) {
+                setIsSidebarOpen(prev => !prev);
+                e.preventDefault();
+            } else if (check('focus_search', e)) {
+                searchInputRef.current?.focus();
+                e.preventDefault();
+            } else if (check('select_all', e)) {
+                // Select only current page
+                const startIndex = (currentPage - 1) * itemsPerPage;
+                const endIndex = startIndex + itemsPerPage;
+                const pagePkgs = filteredPkgs.slice(startIndex, endIndex);
+
+                const pageIds = new Set(pagePkgs.map(p => p.filePath));
+                setSelectedIds(pageIds);
+                if (pageIds.size > 0) addToast(`Selected ${pageIds.size} packages (Current Page)`, 'info');
+                e.preventDefault();
+            } else if (check('delete_selected', e)) {
+                if (selectedIds.size > 0) {
+                    // Open delete modal for selection
+                    // We need to resolve which packages
+                    const pkgs = packages.filter(p => selectedIds.has(p.filePath));
+                    setDeleteConfirm({ open: true, pkg: null, pkgs: pkgs, count: pkgs.length });
+                }
+                e.preventDefault();
+            } else if (check('clear_selection', e)) {
+                // ESC Logic: Close modals > Clear Selection
+                if (isSettingsOpen) { setIsSettingsOpen(false); }
+                else if (isDetailsPanelOpen) { setIsDetailsPanelOpen(false); }
+                else if (selectedIds.size > 0) { setSelectedIds(new Set()); setSelectedPackage(null); }
+                else if (isSidebarOpen && window.innerWidth < 768) { setIsSidebarOpen(false); } // Mobile close sidebar
+                e.preventDefault();
+            } else if (check('refresh', e)) {
+                scanPackages();
+                e.preventDefault();
+            } else if (check('toggle_server', e)) {
+                handleToggleServer();
+                e.preventDefault();
+            }
+
+            // Navigation Logic Helper
+            const navigate = (direction: -1 | 1, add: boolean) => {
+                if (!selectedPackage) return;
+
+                const currentIndex = filteredPkgs.findIndex(p => p.filePath === selectedPackage.filePath);
+                if (currentIndex === -1) return;
+
+                const newIndex = currentIndex + direction;
+                if (newIndex < 0 || newIndex >= filteredPkgs.length) return;
+
+                const newPkg = filteredPkgs[newIndex];
+                setSelectedPackage(newPkg);
+
+                if (add) {
+                    setSelectedIds(prev => {
+                        const newSet = new Set(prev);
+                        newSet.add(newPkg.filePath);
+                        return newSet;
+                    });
+                } else {
+                    setSelectedIds(new Set([newPkg.filePath]));
+                }
+
+                if (!isDetailsPanelOpen) setIsDetailsPanelOpen(true);
+            };
+
+            if (check('select_prev', e)) {
+                navigate(-1, false);
+                e.preventDefault();
+            } else if (check('select_next', e)) {
+                navigate(1, false);
+                e.preventDefault();
+            } else if (check('select_prev_add', e)) {
+                navigate(-1, true);
+                e.preventDefault();
+            } else if (check('select_next_add', e)) {
+                navigate(1, true);
+                e.preventDefault();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [check, filteredPkgs, selectedIds, isSettingsOpen, isDetailsPanelOpen, isSidebarOpen, packages, itemsPerPage, currentPage, censorThumbnails, blurAmount, hidePackageNames, hideCreatorNames]);
 
     // Server State
     const [serverEnabled, setServerEnabled] = useState(false);
@@ -2180,28 +2295,8 @@ function Dashboard(): JSX.Element {
 
     }
 
-    // Render Setup Wizard if needed
-    if (needsSetup) {
-        return (
-            <>
-                {/* @ts-ignore */}
-                {window.go && <TitleBar />}
-                {/* @ts-ignore */}
-                <SetupWizard onComplete={(libPath?: string) => {
-                    setNeedsSetup(false);
-                    if (libPath) {
-                        handleAddLibrary(libPath);
-                    }
-                    // Fresh Install completed: Mark version as seen to skip What's New
-                    // @ts-ignore
-                    if (window.go) {
-                        // @ts-ignore
-                        window.go.main.App.GetAppVersion().then(v => localStorage.setItem('lastSeenVersion', v));
-                    }
-                }} />
-            </>
-        );
-    }
+    // (Redundant block removed)
+
 
     return (
         <div className="flex flex-col h-[100dvh] bg-gray-900 text-white overflow-hidden">
@@ -2246,8 +2341,6 @@ function Dashboard(): JSX.Element {
                     setMaxToasts={(val) => { setMaxToasts(val); localStorage.setItem('maxToasts', val.toString()); }}
                     authPollInterval={authPollInterval}
                     setAuthPollInterval={handleSetAuthPollInterval}
-                    keybinds={keybinds}
-                    setKeybinds={setKeybinds}
                     handleClearData={() => setConfirmationState({
                         isOpen: true,
                         title: "Reset Database",
@@ -2255,9 +2348,18 @@ function Dashboard(): JSX.Element {
                         confirmText: "Reset Everything",
                         confirmStyle: "danger",
                         onConfirm: async () => {
+                            // Ensure frontend state is wiped to prevent resurrection via migration logic
+                            localStorage.clear();
+
                             // @ts-ignore
-                            if (window.go) await window.go.main.App.ClearAppData();
-                            window.location.reload();
+                            if (window.go) {
+                                // @ts-ignore
+                                await window.go.main.App.ClearAppData();
+                                // @ts-ignore
+                                window.go.main.App.RestartApp();
+                            } else {
+                                window.location.reload();
+                            }
                         }
                     })}
                     addToast={addToast}
@@ -2392,6 +2494,7 @@ function Dashboard(): JSX.Element {
                                 <div className="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-lg w-full md:max-w-md">
                                     <Search size={18} className="text-gray-400 shrink-0" />
                                     <input
+                                        ref={searchInputRef}
                                         className="bg-transparent outline-none w-full text-sm"
                                         placeholder="Search packages..."
                                         value={searchQuery}
@@ -2680,14 +2783,14 @@ function Dashboard(): JSX.Element {
                                     totalCount={packages.length}
                                     onContextMenu={handleContextMenu}
                                     onSelect={handlePackageClick}
-                                    selectedPkgId={selectedIds.size === 1 ? selectedPackage?.filePath : undefined}
+                                    selectedPkgId={selectedPackage?.filePath}
                                     selectedIds={selectedIds}
                                     viewMode={viewMode}
                                     gridSize={gridSize}
-                                    censorThumbnails={isPrivacyModeEnabled && censorThumbnails}
+                                    censorThumbnails={censorThumbnails}
                                     blurAmount={blurAmount}
-                                    hidePackageNames={isPrivacyModeEnabled && hidePackageNames}
-                                    hideCreatorNames={isPrivacyModeEnabled && hideCreatorNames}
+                                    hidePackageNames={censorThumbnails && hidePackageNames}
+                                    hideCreatorNames={censorThumbnails && hideCreatorNames}
                                 />
                             </div>
 
@@ -2705,7 +2808,7 @@ function Dashboard(): JSX.Element {
                         </div>
 
                         <AnimatePresence>
-                            {(selectedPackage && selectedIds.size === 1 && isDetailsPanelOpen) && (
+                            {(selectedPackage && isDetailsPanelOpen) && (
                                 <RightSidebar
                                     pkg={selectedPackage}
                                     onClose={() => { setIsDetailsPanelOpen(false); setSelectedPackage(null); setSelectedIds(new Set()); }}

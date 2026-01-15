@@ -36,10 +36,14 @@ function AppContent() {
     );
 }
 
+import { KeybindProvider } from './context/KeybindContext';
+
 function App() {
     return (
         <AuthProvider>
-            <AppContent />
+            <KeybindProvider>
+                <AppContent />
+            </KeybindProvider>
         </AuthProvider>
     );
 }

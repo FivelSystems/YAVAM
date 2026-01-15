@@ -59,9 +59,7 @@ interface SettingsDialogProps {
     authPollInterval: number;
     setAuthPollInterval: (val: number) => void;
 
-    // Keybinds
-    keybinds: { [key: string]: string };
-    setKeybinds: (binds: { [key: string]: string }) => void;
+
 
     // Actions
     handleClearData: () => void;
@@ -102,8 +100,7 @@ const SettingsDialog = ({
     setMaxToasts,
     authPollInterval,
     setAuthPollInterval,
-    keybinds,
-    setKeybinds,
+
     handleClearData,
     addToast
 }: SettingsDialogProps) => {
@@ -123,7 +120,6 @@ const SettingsDialog = ({
         maxToasts: number;
         serverPort: string;
         authPollInterval: number;
-        keybinds: string; // Store as JSON string for easy compare
     } | null>(null);
 
     // Capture Snapshot on Open
@@ -140,7 +136,6 @@ const SettingsDialog = ({
                 maxToasts,
                 serverPort,
                 authPollInterval,
-                keybinds: JSON.stringify(keybinds)
             };
         }
     }, [isOpen]);
@@ -158,7 +153,6 @@ const SettingsDialog = ({
             setMaxToasts(s.maxToasts);
             setServerPort(s.serverPort);
             setAuthPollInterval(s.authPollInterval);
-            setKeybinds(JSON.parse(s.keybinds));
         }
         onClose();
     };
@@ -173,8 +167,7 @@ const SettingsDialog = ({
         snapshotRef.current.hideCreatorNames !== hideCreatorNames ||
         snapshotRef.current.maxToasts !== maxToasts ||
         snapshotRef.current.serverPort !== serverPort ||
-        snapshotRef.current.authPollInterval !== authPollInterval ||
-        snapshotRef.current.keybinds !== JSON.stringify(keybinds)
+        snapshotRef.current.authPollInterval !== authPollInterval
     ) : false;
 
     // Version Fetch
@@ -251,10 +244,7 @@ const SettingsDialog = ({
                 );
             case 'keybinds':
                 return (
-                    <KeybindsTab
-                        keybinds={keybinds}
-                        setKeybinds={setKeybinds}
-                    />
+                    <KeybindsTab />
                 );
             case 'about':
                 return <AboutTab appVersion={appVersion} />;

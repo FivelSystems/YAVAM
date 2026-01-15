@@ -14,15 +14,26 @@ type Config struct {
 	Theme       string   `json:"theme"`
 	AccentColor string   `json:"accentColor"`
 	// Advanced Settings
-	AutoScan         bool   `json:"autoScan"`
-	CheckUpdates     bool   `json:"checkUpdates"`
-	UseSymlinks      bool   `json:"useSymlinks"` // Default true for efficiency
-	DeleteToTrash    bool   `json:"deleteToTrash"`
-	PublicAccess     bool   `json:"publicAccess"`
-	ServerEnabled    bool   `json:"serverEnabled"`
-	ServerPort       string `json:"serverPort"`
-	AuthPollInterval int    `json:"authPollInterval"`
-	LastSeenVersion  string `json:"lastSeenVersion"`
+	AutoScan         bool                `json:"autoScan"`
+	CheckUpdates     bool                `json:"checkUpdates"`
+	UseSymlinks      bool                `json:"useSymlinks"` // Default true for efficiency
+	DeleteToTrash    bool                `json:"deleteToTrash"`
+	PublicAccess     bool                `json:"publicAccess"`
+	ServerEnabled    bool                `json:"serverEnabled"`
+	ServerPort       string              `json:"serverPort"`
+	AuthPollInterval int                 `json:"authPollInterval"`
+	LastSeenVersion  string              `json:"lastSeenVersion"`
+	PrivacyMode      bool                `json:"privacyMode"`
+	Keybinds         map[string][]string `json:"keybinds,omitempty"` // ID -> ["CTRL", "F"]
+
+	// UI Preferences
+	GridSize         int    `json:"gridSize"`
+	SortMode         string `json:"sortMode"`
+	ItemsPerPage     int    `json:"itemsPerPage"`
+	CensorThumbnails bool   `json:"censorThumbnails"`
+	BlurAmount       int    `json:"blurAmount"`
+	HidePackageNames bool   `json:"hidePackageNames"`
+	HideCreatorNames bool   `json:"hideCreatorNames"`
 }
 
 // ConfigService handles configuration persistence
@@ -52,6 +63,12 @@ func NewFileConfigService(configDir string) (ConfigService, error) {
 			PublicAccess:     false, // Default Private
 			ServerPort:       "18888",
 			AuthPollInterval: 15,
+			Keybinds:         make(map[string][]string),
+			// UI Defaults
+			GridSize:     160,
+			SortMode:     "name-asc",
+			ItemsPerPage: 25,
+			BlurAmount:   10,
 		},
 	}
 	// Attempt load

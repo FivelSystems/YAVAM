@@ -30,9 +30,22 @@ func ZipDirectory(source, target string) error {
 		baseDir = filepath.Base(source)
 	}
 
+	absTarget, _ := filepath.Abs(target)
+
 	filepath.Walk(source, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
+		}
+
+		// Prevent recursive zipping of the output file
+		absPath, _ := filepath.Abs(path)
+		if absPath == absTarget {
+			return nil
+		}
+
+		// Exclude Logs and Locks
+		if info.Name() == "application.log" || strings.HasSuffix(info.Name(), ".lock") {
+			return nil
 		}
 
 		header, err := zip.FileInfoHeader(info)

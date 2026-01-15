@@ -6,7 +6,35 @@
 
 # Changelog
 
-## [v1.3.0] - Unreleased
+## [1.3.1] - 2026-01-15
+
+### Added
+- **Stability**: Implemented Global Error Boundary to catch crashes and offer "Factory Reset" recovery.
+- **Maintenance**: Added comprehensive "Factory Reset" logic (Bootstrapped Restart + Full AppData Wipe).
+- **Keybinds**: Implemented Centralized Keybind System.
+    - Added `CTRL+F` (Search), `TAB` (Sidebar), `CTRL+,` (Settings), `CTRL+A` (Select All).
+    - Added `KeybindsTab` in Settings (Read-Only list of shortcuts).
+- **Testing**: Added Frontend Unit Testing infrastructure (`vitest` + `react-testing-library`).
+- **Dev**: Added `npm test` script.
+
+### Changed
+- **Privacy**: 'V' hotkey now directly toggles "Blur Thumbnails" setting instead of a temporary view state.
+- **Privacy**: "Hide Metadata" and "Hide Creator Names" settings are now conditional on "Blur Thumbnails" being active.
+- **Security**: Restricted "Export/Import Settings" features to Desktop clients only (hidden on Web).
+- **Parsing**: `parser.go` now explicitly prioritizes Scene thumbnails over Preset thumbnails to fix nondeterministic results.
+- **Parsing**: Added `20MB` limit to thumbnail extraction to prevent Zip Bomb attacks.
+
+### Fixed
+- **Crash**: Fixed "Recursive Zip" crash when exporting backups to the YAVAM folder.
+- **Crash**: Fixed "Rendered fewer hooks" crash in Dashboard initialization.
+- **Factory Reset**: Fixed "Resurrection Bug" where local storage would restore libraries after a wipe.
+- **Factory Reset**: Fixed file locking issues preventing clean data wipe (implemented detached process restart).
+- **Keybinds**: 'V' (Privacy Mode) no longer toggles configuration settings, only the temporary view state.
+- **Persistence**: Fixed `gridSize` and `authPollInterval` resetting on restart due to missing `localStorage` sync.
+- **Persistence**: Fixed React Strict Mode double-mount causing settings to revert to defaults.
+- **Types**: Fixed TypeScript errors in `Dashboard.tsx` and `setup.ts`.
+
+## [1.3.0] - 2026-01-14
 
 ### Added
 - **User Interface**: Redesigned settings into a unified, tabbed dialog (Application, Privacy, Network, Security).
