@@ -4,7 +4,7 @@
 - [x] Additional toggles for enabling/disabling package name and package thumbnail when privacy mode is on. [Fixed v1.3.0]
 - (Queued for v1.4.0) Enhanced library management window with advanced settings and configs (See issue [#2](https://github.com/FivelSystems/YAVAM/issues/2))
 
-### ⌨️ Planned Keybinds (v1.4.0)
+### ⌨️ Planned Keybinds (v1.3.1)
 - [ ] **Selection**
     - `CTRL + A`: Select all items in current view.
     - `ESC`: Clear selection.
