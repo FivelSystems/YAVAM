@@ -550,7 +550,10 @@ function Dashboard(): JSX.Element {
             if (e.key.toLowerCase() === keybinds.togglePrivacy?.toLowerCase()) {
                 setCensorThumbnails(prev => {
                     const newVal = !prev;
-                    localStorage.setItem('censorThumbnails', newVal.toString());
+                    // Sync other privacy settings
+                    setHidePackageNames(newVal);
+                    setHideCreatorNames(newVal);
+
                     addToast(newVal ? "Privacy Mode Enabled" : "Privacy Mode Disabled", 'info');
                     return newVal;
                 });
