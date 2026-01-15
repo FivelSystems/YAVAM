@@ -84,6 +84,8 @@ export function RestartApp():Promise<void>;
 
 export function RevokeSession(arg1:string):Promise<void>;
 
+export function SaveKeybinds(arg1:Record<string, Array<string>>):Promise<void>;
+
 export function ScanPackages(arg1:string):Promise<void>;
 
 export function SelectDirectory():Promise<string>;
@@ -92,17 +94,29 @@ export function SetAlwaysOnTop(arg1:boolean):Promise<void>;
 
 export function SetAuthPollInterval(arg1:number):Promise<void>;
 
+export function SetGridSize(arg1:number):Promise<void>;
+
+export function SetItemsPerPage(arg1:number):Promise<void>;
+
 export function SetLastSeenVersion(arg1:string):Promise<void>;
 
 export function SetMinimizeOnClose(arg1:boolean):Promise<void>;
 
 export function SetPassword(arg1:string):Promise<void>;
 
+export function SetPrivacyMode(arg1:boolean):Promise<void>;
+
+export function SetPrivacyOptions(arg1:boolean,arg2:number,arg3:boolean,arg4:boolean):Promise<void>;
+
 export function SetPublicAccess(arg1:boolean):Promise<void>;
 
 export function SetServerEnabled(arg1:boolean):Promise<void>;
 
 export function SetServerPort(arg1:string):Promise<void>;
+
+export function SetSortMode(arg1:string):Promise<void>;
+
+export function Shutdown():Promise<void>;
 
 export function StartServer():Promise<void>;
 

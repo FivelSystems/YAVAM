@@ -59,5 +59,29 @@ export const DEFAULT_KEYBINDS: KeybindDefinition[] = [
         label: "Toggle Server",
         category: "actions",
         defaultKeys: ["CTRL", "S"]
+    },
+    {
+        id: "select_prev",
+        label: "Select Previous Package",
+        category: "navigation",
+        defaultKeys: ["LEFT"]
+    },
+    {
+        id: "select_next",
+        label: "Select Next Package",
+        category: "navigation",
+        defaultKeys: ["RIGHT"]
+    },
+    {
+        id: "select_prev_add",
+        label: "Add Previous to Selection",
+        category: "navigation",
+        defaultKeys: ["CTRL", "LEFT"]
+    },
+    {
+        id: "select_next_add",
+        label: "Add Next to Selection",
+        category: "navigation",
+        defaultKeys: ["CTRL", "RIGHT"]
     }
 ];

@@ -76,6 +76,7 @@ const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, 
                                 onContextMenu={onContextMenu}
                                 onSelect={onSelect}
                                 isSelected={selectedIds ? selectedIds.has(pkg.filePath) : pkg.filePath === selectedPkgId}
+                                isAnchor={pkg.filePath === selectedPkgId}
                                 viewMode={viewMode}
                                 censorThumbnails={censorThumbnails}
                                 blurAmount={blurAmount}

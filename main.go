@@ -2,8 +2,10 @@ package main
 
 import (
 	"embed"
+	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 	"yavam/pkg/manager"
 	"yavam/pkg/services/config"
 
@@ -16,11 +18,50 @@ import (
 var assets embed.FS
 
 func main() {
-	// Initialize Config Service
+	// User Config Dir
 	configDir, _ := os.UserConfigDir()
+
+	// Custom Flag Parsing for Restart Logic
+	// We parse manually to avoid affecting any Wails internal flags
+	shouldWipe := false
+	for _, arg := range os.Args {
+		if arg == "--yavam-wait-for-exit" {
+			println("Wait flag detected. Sleeping 2s...")
+			time.Sleep(2 * time.Second)
+		}
+		if arg == "--factory-reset" {
+			shouldWipe = true
+		}
+	}
+
+	if shouldWipe {
+		fmt.Println("Performing Factory Reset...")
+		dataPath := filepath.Join(configDir, "YAVAM")
+		fmt.Printf("Target Data Path: %s\n", dataPath)
+
+		// Retry Loop
+		var err error
+		for i := 0; i < 10; i++ { // Increased to 10 attempts (10 seconds max)
+			fmt.Printf("Attempt %d/10 to wipe data...\n", i+1)
+			err = os.RemoveAll(dataPath)
+			if err == nil {
+				fmt.Println("Success: Data path wiped.")
+				break
+			}
+			fmt.Printf("Error wiping data: %v. Retrying in 1s...\n", err)
+			time.Sleep(1 * time.Second)
+		}
+
+		if err != nil {
+			fmt.Printf("CRITICAL: Failed to wipe data after retries: %v\n", err)
+		}
+
+		// Also ensure logs dir is gone if we split it
+		os.RemoveAll(filepath.Join(configDir, "YAVAM_Logs"))
+		fmt.Println("Factory Reset Logic Complete.")
+	}
 	dataPath := filepath.Join(configDir, "YAVAM")
 	os.MkdirAll(dataPath, 0755)
-
 	cfgService, err := config.NewFileConfigService(dataPath)
 	if err != nil {
 		// Log error but proceed with defaults?

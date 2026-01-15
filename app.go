@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 	"yavam/pkg/manager"
 	"yavam/pkg/models"
 	"yavam/pkg/services/auth"
@@ -40,14 +41,15 @@ var changelogData string
 
 // App struct
 type App struct {
-	ctx             context.Context
-	manager         *manager.Manager
-	server          *server.Server
-	auth            auth.AuthService
-	minimizeOnClose bool
-	assets          fs.FS
-	isQuitting      bool
-	trayRunning     bool
+	ctx                 context.Context
+	manager             *manager.Manager
+	server              *server.Server
+	auth                auth.AuthService
+	minimizeOnClose     bool
+	assets              fs.FS
+	isQuitting          bool
+	trayRunning         bool
+	pendingFactoryReset bool // Flag to trigger wipe on restart
 
 	// Scan Cancellation
 	scanMu     sync.Mutex
@@ -410,7 +412,25 @@ func (a *App) SetMinimizeOnClose(val bool) {
 	a.minimizeOnClose = val
 }
 
+// Shutdown performs clean cleanup of all resources
+func (a *App) Shutdown() {
+	if a.server != nil && a.server.IsRunning() {
+		a.server.Stop()
+	}
+	if a.manager != nil {
+		a.manager.Close()
+	}
+	// Cancel any running scans
+	a.CancelScan()
+}
+
 func (a *App) onBeforeClose(ctx context.Context) (prevent bool) {
+	// If doing factory reset, force quit immediately
+	if a.pendingFactoryReset {
+		a.Shutdown()
+		return false
+	}
+
 	// Minimize to tray if option enabled
 	if a.minimizeOnClose && !a.isQuitting {
 		runtime.WindowHide(ctx)
@@ -442,10 +462,9 @@ func (a *App) onBeforeClose(ctx context.Context) (prevent bool) {
 			a.isQuitting = false
 			return true // Prevent close
 		}
-		// User confirmed
-		a.server.Stop()
 	}
 
+	a.Shutdown()
 	return false
 }
 
@@ -519,18 +538,16 @@ func (a *App) OpenAppDataFolder() {
 	a.manager.OpenFolder(a.manager.DataPath)
 }
 
-// ClearAppData deletes the application data directory and resets configuration
+// ClearAppData sets the flag to wipe data on next launch
 func (a *App) ClearAppData() error {
-	// 1. Delete the active data path
-	if err := os.RemoveAll(a.manager.DataPath); err != nil {
-		return err
+	a.pendingFactoryReset = true
+
+	// Stop Server (release locks)
+	if a.server != nil && a.server.IsRunning() {
+		a.server.Stop()
 	}
 
-	// 2. Delete the pointer file (reset configuration)
-	configDir, _ := os.UserConfigDir()
-	pointerFile := filepath.Join(configDir, "YAVAM", "root.json")
-	os.Remove(pointerFile) // Ignore error if file doesn't exist
-
+	// We do NOT delete files here. The new process will do it.
 	return nil
 }
 
@@ -587,6 +604,35 @@ func (a *App) SetAuthPollInterval(seconds int) error {
 	})
 }
 
+// UI Preference Setters
+
+func (a *App) SetGridSize(size int) error {
+	return a.manager.UpdateConfig(func(cfg *config.Config) {
+		cfg.GridSize = size
+	})
+}
+
+func (a *App) SetSortMode(mode string) error {
+	return a.manager.UpdateConfig(func(cfg *config.Config) {
+		cfg.SortMode = mode
+	})
+}
+
+func (a *App) SetItemsPerPage(count int) error {
+	return a.manager.UpdateConfig(func(cfg *config.Config) {
+		cfg.ItemsPerPage = count
+	})
+}
+
+func (a *App) SetPrivacyOptions(censor bool, blur int, hidePackageNames bool, hideCreatorNames bool) error {
+	return a.manager.UpdateConfig(func(cfg *config.Config) {
+		cfg.CensorThumbnails = censor
+		cfg.BlurAmount = blur
+		cfg.HidePackageNames = hidePackageNames
+		cfg.HideCreatorNames = hideCreatorNames
+	})
+}
+
 // StartServer manually starts the HTTP Server
 func (a *App) StartServer() error {
 	cfg := a.manager.GetConfig()
@@ -621,10 +667,15 @@ func (a *App) IsServerRunning() bool {
 
 // RestartApp restarts the application
 func (a *App) RestartApp() {
+	var args []string
+	if a.pendingFactoryReset {
+		args = append(args, "--factory-reset")
+	}
+
 	// Use unified restart logic
 	utils.RestartApplication(func() {
 		runtime.Quit(a.ctx)
-	})
+	}, args...)
 }
 
 // GetChangelog returns the markdown content for the current version
@@ -679,44 +730,68 @@ func (a *App) ImportSettings() error {
 	// But we want to check for config.json presence ideally.
 	// For now, let's proceed with UnzipDirectory which is safe against Zip Slip.
 
+	// Restore with file logging
+	configDir, _ := os.UserConfigDir()
+	logPath := filepath.Join(configDir, "YAVAM", "application.log")
+	logFile, _ := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	defer logFile.Close()
+
+	logger := func(format string, args ...interface{}) {
+		msg := fmt.Sprintf(format, args...)
+		fmt.Print(msg)
+		if logFile != nil {
+			logFile.WriteString(time.Now().Format(time.RFC3339) + " " + msg)
+		}
+	}
+
+	logger("[Import] Restoring backup from: %s\n", zipPath)
+
+	// Clean up previous mess (YAVAM_Logs) if exists
+	os.RemoveAll(filepath.Join(configDir, "YAVAM_Logs"))
+
 	// 2. Wipe current DataPath?
 	// If Unzip fails halfway, we might be in trouble.
 	// Better: Unzip to temp, then swap.
 	tempDir, err := os.MkdirTemp("", "yavam_restore")
 	if err != nil {
+		logger("[Import] Failed to create temp dir: %v\n", err)
 		return err
 	}
 	defer os.RemoveAll(tempDir)
 
 	if err := utils.UnzipDirectory(zipPath, tempDir); err != nil {
+		logger("[Import] Failed to unzip to temp: %v\n", err)
 		return fmt.Errorf("failed to unzip backup: %w", err)
 	}
 
 	// 3. Verify content
 	if _, err := os.Stat(filepath.Join(tempDir, "config.json")); os.IsNotExist(err) {
+		logger("[Import] Invalid backup: config.json missing\n")
 		return fmt.Errorf("invalid backup: config.json not found")
 	}
 
 	// 4. Overwrite DataPath
 	// We remove old DataPath contents
 	dataPath := a.manager.DataPath
+	logger("[Import] Target DataPath: %s\n", dataPath)
 
-	// Issue: We cannot remove `lock` files if app is running?
-	// `auth.json`, `config.json` should be fine.
-	// `db` folder might be locked if using sqlite/badger.
-	// Yavam uses simple JSON files + LibraryService scanning (no locking DB yet).
-	// So it should be safe.
+	logger("[Import] Overwriting existing data (Merge mode)...\n")
 
-	os.RemoveAll(dataPath)
-	// Move tempDir to dataPath is tricky across volumes.
-	// CopyDir logic needed?
-	// Or just Unzip directly to DataPath after clearing.
-	// We validated integrity with temp unzip. Now unzip to real path.
-	os.MkdirAll(dataPath, 0755)
+	// No deletion - just overwrite/merge as requested by user.
+	// utils.UnzipDirectory will overwrite existing files.
+	// Ignored files (application.log) are handled in UnzipDirectory.
+
+	if err := os.MkdirAll(dataPath, 0755); err != nil {
+		logger("[Import] Failed to ensure DataPath: %v\n", err)
+	}
+
+	logger("[Import] Unzipping to live directory...\n")
 	if err := utils.UnzipDirectory(zipPath, dataPath); err != nil {
+		logger("[Import] Failed to final unzip: %v\n", err)
 		return fmt.Errorf("failed to restore: %w", err)
 	}
 
+	logger("[Import] Restore complete. Restarting...\n")
 	// 5. Restart
 	a.RestartApp()
 	return nil

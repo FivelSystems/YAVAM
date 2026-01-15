@@ -158,6 +158,10 @@ export function RevokeSession(arg1) {
   return window['go']['main']['App']['RevokeSession'](arg1);
 }
 
+export function SaveKeybinds(arg1) {
+  return window['go']['main']['App']['SaveKeybinds'](arg1);
+}
+
 export function ScanPackages(arg1) {
   return window['go']['main']['App']['ScanPackages'](arg1);
 }
@@ -174,6 +178,14 @@ export function SetAuthPollInterval(arg1) {
   return window['go']['main']['App']['SetAuthPollInterval'](arg1);
 }
 
+export function SetGridSize(arg1) {
+  return window['go']['main']['App']['SetGridSize'](arg1);
+}
+
+export function SetItemsPerPage(arg1) {
+  return window['go']['main']['App']['SetItemsPerPage'](arg1);
+}
+
 export function SetLastSeenVersion(arg1) {
   return window['go']['main']['App']['SetLastSeenVersion'](arg1);
 }
@@ -186,6 +198,14 @@ export function SetPassword(arg1) {
   return window['go']['main']['App']['SetPassword'](arg1);
 }
 
+export function SetPrivacyMode(arg1) {
+  return window['go']['main']['App']['SetPrivacyMode'](arg1);
+}
+
+export function SetPrivacyOptions(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SetPrivacyOptions'](arg1, arg2, arg3, arg4);
+}
+
 export function SetPublicAccess(arg1) {
   return window['go']['main']['App']['SetPublicAccess'](arg1);
 }
@@ -196,6 +216,14 @@ export function SetServerEnabled(arg1) {
 
 export function SetServerPort(arg1) {
   return window['go']['main']['App']['SetServerPort'](arg1);
+}
+
+export function SetSortMode(arg1) {
+  return window['go']['main']['App']['SetSortMode'](arg1);
+}
+
+export function Shutdown() {
+  return window['go']['main']['App']['Shutdown']();
 }
 
 export function StartServer() {
