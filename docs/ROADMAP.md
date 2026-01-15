@@ -64,3 +64,14 @@ This roadmap is designed to guide the evolution of YAVAM from a prototype to a p
 | `App.tsx` Monolith | **High** (Slows down every UI change) | Phase 3 |
 | No Tests | **Critical** (Bugs reach users instantly) | Phase 1 & 2 |
 | `cmd` usage | **Fatal** (Security vulnerability) | Phase 1 |
+
+---
+
+## Phase 5: Refinement & Robustness (v1.4.0)
+**Goal:** Improve error handling for corrupt content and enhance package diagnostics.
+
+- [ ] **Step 5.1: Corrupt Package Detection**
+    -   **Action:** enhance `pkg/scanner` to detect and flag invalid zip files during scan.
+    -   **UI:** Display a "Corrupt" status badge in the dashboard and exclude from analysis to prevent crashes.
+- [ ] **Step 5.2: Granular Library Privacy**
+    -   **Action:** Allow marking specific library folders as "Private" (hidden from web view).
