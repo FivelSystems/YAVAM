@@ -100,4 +100,16 @@ To prevent attackers from guessing passwords or valid nonces, we implemented str
 -   **Limit:** 5 requests per minute per IP address.
 -   **Scope:** Applied to `/api/auth/challenge` and `/api/auth/login`.
 -   **Implementation:** Memory-based sliding window rate limiter (`pkg/server/ratelimit.go`).
--   **Effect:** Brute force attacks become computationally infeasible (max 300 attempts/hour).
+### 6. Parser Refinement & Supply Chain Audit (Jan 14 2026) -> **PASSED**
+**Description:**
+Audited the new "Release Workflow" and "Thumbnail Parser" logic for vulnerabilities regarding secrets leakage and Denial of Service.
+
+**Findings:**
+1.  **Release Workflow (`release.yml`):**
+    -   **Secret Usage:** `UPDATER_PRIVATE_KEY` is passed via `env` to the Go program, not as a command-line argument. **SAFE**.
+    -   **Logging:** Verified `cmd/sign-update/main.go` does NOT log the key.
+2.  **Parser DoS (Zip Bomb):**
+    -   **Vulnerability:** `pkg/parser/parser.go` used `io.ReadAll` on untrusted zip contents (`meta.json`, `.vam`, thumbnails). A crafted zip could cause OOM crashes (DoS).
+    -   **Remediation:** Implementation modified to use `io.LimitReader` (Limits: Meta=5MB, Thumbnail=20MB).
+3.  **Path Traversal:**
+    -   Parser logic is strictly Read-Only (Memory). No file writes occur during parsing. **SAFE**.
