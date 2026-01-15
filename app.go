@@ -9,11 +9,8 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sync"
-	"syscall"
-	"time"
 	"yavam/pkg/manager"
 	"yavam/pkg/models"
 	"yavam/pkg/services/auth"
@@ -624,21 +621,10 @@ func (a *App) IsServerRunning() bool {
 
 // RestartApp restarts the application
 func (a *App) RestartApp() {
-	executable, err := os.Executable()
-	if err != nil {
-		return
-	}
-	// Use direct process creation without shell wrapper
-	// This prevents command injection vulnerabilities
-	cmd := exec.Command(executable)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-	cmd.Start()
-
-	// Wait briefly to allow UI to detach/dialogs to close before killing runtime
-	go func() {
-		time.Sleep(500 * time.Millisecond)
+	// Use unified restart logic
+	utils.RestartApplication(func() {
 		runtime.Quit(a.ctx)
-	}()
+	})
 }
 
 // GetChangelog returns the markdown content for the current version
