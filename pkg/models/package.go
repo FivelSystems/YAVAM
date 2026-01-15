@@ -2,10 +2,12 @@ package models
 
 type MetaJSON struct {
 	Creator      string                 `json:"creator"`
+	CreatorName  string                 `json:"creatorName,omitempty"` // Alternative to creator
 	PackageName  string                 `json:"packageName"`
 	Version      string                 `json:"version"`
 	Description  string                 `json:"description,omitempty"`
 	Dependencies map[string]interface{} `json:"dependencies,omitempty"`
+	ContentList  []string               `json:"contentList,omitempty"`
 	Tags         []string               `json:"tags,omitempty"`
 	ImageUrl     string                 `json:"imageUrl,omitempty"`
 }

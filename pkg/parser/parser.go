@@ -95,12 +95,12 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 			isContent = true
 		} else if strings.HasPrefix(normName, "custom/clothing/") {
 			categorySet["Clothing"] = true
-			if strings.HasSuffix(normName, ".vam") || strings.HasSuffix(normName, ".json") {
+			if strings.HasSuffix(normName, ".vam") || strings.HasSuffix(normName, ".json") || strings.HasSuffix(normName, ".vap") {
 				isContent = true
 			}
 		} else if strings.HasPrefix(normName, "custom/hair/") {
 			categorySet["Hair"] = true
-			if strings.HasSuffix(normName, ".vam") || strings.HasSuffix(normName, ".json") {
+			if strings.HasSuffix(normName, ".vam") || strings.HasSuffix(normName, ".json") || strings.HasSuffix(normName, ".vap") {
 				isContent = true
 			}
 		} else if strings.HasPrefix(normName, "custom/atom/person/morphs/") {
@@ -171,7 +171,7 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 		}
 
 		// Thumbnail Candidate Logic
-		if candidatePriority < 3 {
+		if candidatePriority < 4 {
 			ext := filepath.Ext(normName)
 
 			// --- Fallback Logic: Capture any potential image ---
@@ -206,32 +206,43 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 			if isContent {
 				base := normName[:len(normName)-len(ext)]
 
-				if img, ok := fileMap[base+".jpg"]; ok {
-					candidate = img
-					candidatePriority = 3
-				} else if img, ok := fileMap[base+".png"]; ok {
-					candidate = img
-					candidatePriority = 3
+				// Priority 3: Preset Match (.vap -> .jpg)
+				// Priority 4: Scene Match (.json -> .jpg) for Scenes
+				matchPrio := 3
+				if strings.HasPrefix(normName, "saves/scene/") {
+					matchPrio = 4
+				}
+
+				if matchPrio > candidatePriority {
+					if img, ok := fileMap[base+".jpg"]; ok {
+						candidate = img
+						candidatePriority = matchPrio
+					} else if img, ok := fileMap[base+".png"]; ok {
+						candidate = img
+						candidatePriority = matchPrio
+					}
 				}
 			}
 		}
 	}
 
-	// Priority 4: Standard Package Image
-	if f, ok := fileMap["package.jpg"]; ok {
-		candidate = f
-		candidatePriority = 4
-	} else if f, ok := fileMap["package.png"]; ok {
-		candidate = f
-		candidatePriority = 4
+	// Priority 5: Standard Package Image
+	if candidatePriority < 5 {
+		if f, ok := fileMap["package.jpg"]; ok {
+			candidate = f
+			candidatePriority = 5
+		} else if f, ok := fileMap["package.png"]; ok {
+			candidate = f
+			candidatePriority = 5
+		}
 	}
 
-	// Priority 5: Meta ImageUrl (Highest)
+	// Priority 6: Meta ImageUrl (Highest)
 	if meta.ImageUrl != "" {
 		target := strings.ReplaceAll(strings.ToLower(meta.ImageUrl), "\\", "/")
 		if f, ok := fileMap[target]; ok {
 			candidate = f
-			candidatePriority = 5
+			candidatePriority = 6
 		}
 	}
 
