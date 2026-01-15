@@ -23,6 +23,8 @@
 - **Keybinds**: Restored the "Keybinds" tab and functionality, allowing users to rebind the "Toggle Privacy" shortcut.
 
 ### Changed
+- **Domain Logic**: Refined Thumbnail Extraction to prioritize **Scene** images over Presets to reduce ambiguity.
+- **Domain Logic**: Expanded `.vap` detection to correctly identify content in `StartingAssets` (Clothing, Hair) folders.
 - **Breaking Change**: Removed `VamPath` (Main Library) concept from backend. Server now treats all libraries equally.
 - **Breaking Change**: API endpoints (`/api/packages`, `/api/scan/collisions`, etc.) now **strictly require** a `path` parameter.
 - **Architecture**: Decoupled `Manager` into `LibraryService`, `SystemService`, and `ConfigService`.
@@ -53,6 +55,8 @@
 - **Scanning**: Fixed a race condition where packages from a previous library scan could infiltrate the current view.
 
 ### Security
+- **Hardening**: Added Ed25519 Digital Signatures (SHA256) to Auto-Updater.
+- **DoS Protection**: Patched a potential Zip Bomb vulnerability in the package parser by enforcing strict read limits (Memory Safety).
 - **Authentication**: Passwords are never transmitted over the network (Challenge-Response).
 - **Protection**: Added sliding-window rate limiting (5 attempts/min) to login endpoints.
 - **Critical**: Removed dependencies on `powershell.exe` and `cmd.exe` to prevent Command Injection.
