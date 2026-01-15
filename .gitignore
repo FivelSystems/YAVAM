@@ -10,6 +10,8 @@ go.work.sum
 *.dll
 *.so
 *.dylib
+*.test.exe
+*.tmp
 
 # Node
 node_modules
