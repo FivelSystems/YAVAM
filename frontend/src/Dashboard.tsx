@@ -516,6 +516,8 @@ function Dashboard(): JSX.Element {
     const [blurAmount, setBlurAmount] = useState(() => parseInt(localStorage.getItem('blurAmount') || '10'));
     const [hidePackageNames, setHidePackageNames] = useState(() => localStorage.getItem('hidePackageNames') === 'true');
     const [hideCreatorNames, setHideCreatorNames] = useState(() => localStorage.getItem('hideCreatorNames') === 'true');
+    // Global Privacy Toggle (Ephemeral)
+    const [isPrivacyModeEnabled, setIsPrivacyModeEnabled] = useState(false);
     // Auth Polling Interval
     const [authPollInterval, setAuthPollInterval] = useState(15);
 
@@ -548,12 +550,8 @@ function Dashboard(): JSX.Element {
 
             // Toggle Censor
             if (e.key.toLowerCase() === keybinds.togglePrivacy?.toLowerCase()) {
-                setCensorThumbnails(prev => {
+                setIsPrivacyModeEnabled(prev => {
                     const newVal = !prev;
-                    // Sync other privacy settings
-                    setHidePackageNames(newVal);
-                    setHideCreatorNames(newVal);
-
                     addToast(newVal ? "Privacy Mode Enabled" : "Privacy Mode Disabled", 'info');
                     return newVal;
                 });
@@ -2680,10 +2678,10 @@ function Dashboard(): JSX.Element {
                                     selectedIds={selectedIds}
                                     viewMode={viewMode}
                                     gridSize={gridSize}
-                                    censorThumbnails={censorThumbnails}
+                                    censorThumbnails={isPrivacyModeEnabled && censorThumbnails}
                                     blurAmount={blurAmount}
-                                    hidePackageNames={hidePackageNames}
-                                    hideCreatorNames={hideCreatorNames}
+                                    hidePackageNames={isPrivacyModeEnabled && hidePackageNames}
+                                    hideCreatorNames={isPrivacyModeEnabled && hideCreatorNames}
                                 />
                             </div>
 
