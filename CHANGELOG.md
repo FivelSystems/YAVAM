@@ -14,6 +14,7 @@
 - **Keybinds**: Implemented Centralized Keybind System.
     - Added `CTRL+F` (Search), `TAB` (Sidebar), `CTRL+,` (Settings), `CTRL+A` (Select All).
     - Added `KeybindsTab` in Settings (Read-Only list of shortcuts).
+    - Added `Shift+Left/Right` to switch pages instantly.
 - **Testing**: Added Frontend Unit Testing infrastructure (`vitest` + `react-testing-library`).
 - **Dev**: Added `npm test` script.
 
