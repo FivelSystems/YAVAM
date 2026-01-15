@@ -4,6 +4,23 @@
 - [x] Additional toggles for enabling/disabling package name and package thumbnail when privacy mode is on. [Fixed v1.3.0]
 - (Queued for v1.4.0) Enhanced library management window with advanced settings and configs (See issue [#2](https://github.com/FivelSystems/YAVAM/issues/2))
 
+### ⌨️ Planned Keybinds (v1.4.0)
+- [ ] **Selection**
+    - `CTRL + A`: Select all items in current view.
+    - `ESC`: Clear selection.
+- **Navigation & UI**
+    - `TAB`: Toggle Left Sidebar visibility.
+    - `CTRL + ,`: Open Settings.
+    - `CTRL + F`: Focus Search Bar.
+    - `F5` / `CTRL + R`: Refresh Library / Rescan.
+- **Actions**
+    - `DEL`: Delete selected package (with confirmation).
+    - `Space`: Quick Preview / Open Details Panel for selected.
+    - `CTRL + U`: Open Upload Modal.
+- **View Control**
+    - `CTRL + +` / `CTRL + =`: Increase Thumbnail Size.
+    - `CTRL + -`: Decrease Thumbnail Size.
+    - `CTRL + 0`: Reset Thumbnail Size.
 ### Bugs
 - [x] The same client can trigger multiple login requests, causing the same device to appear multiple times in the active devices list [Fixed v1.3.0]
 - [x] Login screen is appearing twice, one timme for the full page, and a second time when the dashboard loads. [Fixed v1.3.0]
