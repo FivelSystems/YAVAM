@@ -47,6 +47,10 @@
 - **Z-Index**: Fixed confirmation modals appearing behind the settings menu (upcoming fix).
 - **Linting**: Resolved unused variable warnings in Settings and Dashboard components.
 - **Open App Data**: Fixed the button logic to explicitly enter the directory instead of just selecting it in the parent folder.
+- **Merge**: Fixed duplicates not being moved to library root on Web Clients.
+- **Upload**: Fixed file list persisting in Upload Modal when reopened.
+- **Restore**: Fixed application crash when restoring backup settings.
+- **Scanning**: Fixed a race condition where packages from a previous library scan could infiltrate the current view.
 
 ### Security
 - **Authentication**: Passwords are never transmitted over the network (Challenge-Response).
