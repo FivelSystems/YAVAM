@@ -48,6 +48,9 @@ function Dashboard(): JSX.Element {
     // Auth State
     const { isGuest } = useAuth();
 
+    // Scan Session ID to prevent race conditions (Switching libraries)
+    const scanSessionId = useRef(0);
+
     // Initial Auth Check & Logout Listener removed - handled by AuthContext (LoginModal)
 
     const hasCheckedUpdates = useRef(false);
@@ -1081,6 +1084,9 @@ function Dashboard(): JSX.Element {
     const scanPackages = useCallback(async (keepPage: boolean = false) => {
         if (!activeLibraryPath) return;
 
+        // Increment Session ID
+        const currentId = ++scanSessionId.current;
+
         setLoading(true);
         setPackages([]); // Clear current list? Or keep for smoother refresh? Clearing signals load.
         // Assuming we want to show loading spinner.
@@ -1117,6 +1123,7 @@ function Dashboard(): JSX.Element {
             const currentScanPath = activeLibraryPath;
 
             const flushBuffer = () => {
+                if (scanSessionId.current !== currentId) return;
                 if (packageBuffer.length === 0) return;
                 const batch = [...packageBuffer];
                 packageBuffer = []; // Clear local buffer
@@ -1132,6 +1139,7 @@ function Dashboard(): JSX.Element {
 
             // @ts-ignore
             window.runtime.EventsOn("package:scanned", (data: VarPackage) => {
+                if (scanSessionId.current !== currentId) return;
                 // Determine if enabled (legacy fix)
                 const pkg = { ...data, isEnabled: data.filePath.endsWith(".var") };
 
@@ -1164,10 +1172,12 @@ function Dashboard(): JSX.Element {
 
             // @ts-ignore
             window.runtime.EventsOn("scan:progress", (data: any) => {
+                if (scanSessionId.current !== currentId) return;
                 setScanProgress({ current: data.current, total: data.total });
             });
             // @ts-ignore
             window.runtime.EventsOn("scan:complete", () => {
+                if (scanSessionId.current !== currentId) return;
                 if (updateTimer) clearTimeout(updateTimer);
                 flushBuffer(); // Final flush
 
@@ -1185,6 +1195,7 @@ function Dashboard(): JSX.Element {
             });
             // @ts-ignore
             window.runtime.EventsOn("scan:error", (err: string) => {
+                if (scanSessionId.current !== currentId) return;
                 // Ignore "context canceled" errors if we caused them
                 if (err.includes("canceled")) return;
                 console.error("Scan error:", err);
@@ -1827,9 +1838,33 @@ function Dashboard(): JSX.Element {
                             if (window.go) {
                                 // @ts-ignore
                                 await window.go.main.App.CopyPackagesToLibrary([keep.filePath], activeLibraryPath, false);
-                                await togglePackage(keep, false, true);
+                                // Delete ORIGINAL file after successful copy
+                                // @ts-ignore
+                                await window.go.main.App.DeleteFileToRecycleBin(keep.filePath);
+                                // We don't toggle the old file (it's gone). The new file in root inherits state if name matches?
+                                // Actually, we should toggle the NEW file if needed, but scanning handles discovery.
+                                // We just need to ensure the DB knows about it next scan.
                             } else {
-                                console.warn("Auto-move to root not supported in web mode");
+                                // Web Mode: Use /api/install to copy to root
+                                const res = await fetch('/api/install', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        filePaths: [keep.filePath],
+                                        destLib: activeLibraryPath,
+                                        overwrite: false
+                                    })
+                                });
+                                if (!res.ok) {
+                                    const errData = await res.json();
+                                    throw new Error(errData.error || "Web copy failed");
+                                }
+                                // Delete ORIGINAL file
+                                await fetch('/api/delete', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ filePath: keep.filePath, libraryPath: activeLibraryPath })
+                                });
                             }
                         } catch (e: any) {
                             errors.push(`Failed to move ${keep.fileName}: ${e.message}`);

@@ -45,9 +45,12 @@ export const UploadModal = ({ isOpen, onClose, initialFiles, onAppendFiles, libr
 
     const [installProgress, setInstallProgress] = useState<{ current: number, total: number } | null>(null);
 
-    // Sync selectedLib on Open
+    // Sync selectedLib on Open & Clear Queue
     useEffect(() => {
         if (isOpen) {
+            setQueue([]); // Clear previous queue (except if initialFiles catches up later)
+            setInstallProgress(null); // Reset progress
+
             if (initialLibrary) {
                 setSelectedLib(initialLibrary);
             } else if (libraries.length > 0 && !selectedLib) {

@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"sync"
 	"syscall"
+	"time"
 	"yavam/pkg/manager"
 	"yavam/pkg/models"
 	"yavam/pkg/services/auth"
@@ -633,7 +634,11 @@ func (a *App) RestartApp() {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	cmd.Start()
 
-	runtime.Quit(a.ctx)
+	// Wait briefly to allow UI to detach/dialogs to close before killing runtime
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		runtime.Quit(a.ctx)
+	}()
 }
 
 // GetChangelog returns the markdown content for the current version
