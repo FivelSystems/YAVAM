@@ -30,6 +30,9 @@ type UpdateInfo struct {
 // GetLatestVersion checks GitHub for a newer version
 func GetLatestVersion(currentVersion string) (*UpdateInfo, error) {
 	url := "https://api.github.com/repos/fivelsystems/yavam/releases/latest"
+	if envUrl := os.Getenv("YAVAM_UPDATE_URL"); envUrl != "" {
+		url = envUrl
+	}
 	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err
@@ -111,9 +114,12 @@ func ApplyUpdate(downloadUrl string) error {
 	if err != nil {
 		return err
 	}
+	return applyUpdateTo(downloadUrl, executable)
+}
 
+func applyUpdateTo(downloadUrl, targetPath string) error {
 	// 1. Download to .new file
-	newFile := executable + ".new"
+	newFile := targetPath + ".new"
 	resp, err := http.Get(downloadUrl)
 	if err != nil {
 		return err
@@ -133,19 +139,19 @@ func ApplyUpdate(downloadUrl string) error {
 
 	// 2. Rename current to .old
 	// Note: Windows allows renaming a running executable!
-	oldFile := filepath.Join(filepath.Dir(executable), filepath.Base(executable)+".old")
+	oldFile := filepath.Join(filepath.Dir(targetPath), filepath.Base(targetPath)+".old")
 
 	// Ensure old doesn't exist (from previous failed update?)
 	os.Remove(oldFile)
 
-	if err := os.Rename(executable, oldFile); err != nil {
+	if err := os.Rename(targetPath, oldFile); err != nil {
 		return fmt.Errorf("failed to rename current exe: %w", err)
 	}
 
 	// 3. Rename .new to current
-	if err := os.Rename(newFile, executable); err != nil {
+	if err := os.Rename(newFile, targetPath); err != nil {
 		// Try to restore
-		os.Rename(oldFile, executable)
+		os.Rename(oldFile, targetPath)
 		return fmt.Errorf("failed to install new exe: %w", err)
 	}
 
