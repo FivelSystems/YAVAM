@@ -18,9 +18,10 @@ interface CardGridProps {
     blurAmount?: number;
     hidePackageNames?: boolean;
     hideCreatorNames?: boolean;
+    highlightedPackageId?: string | null;
 }
 
-const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, selectedPkgId, selectedIds, viewMode, gridSize = 150, censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false }: CardGridProps) => {
+const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, selectedPkgId, selectedIds, viewMode, gridSize = 150, censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false, highlightedPackageId }: CardGridProps) => {
 
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -67,9 +68,16 @@ const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, 
                         <motion.div
                             layout
                             key={pkg.filePath}
+                            id={`pkg-${pkg.filePath}`}
                             initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
+                            animate={{
+                                opacity: 1,
+                                scale: pkg.filePath === highlightedPackageId ? 1.02 : 1
+                            }}
                             exit={{ opacity: 0 }}
+                            className={pkg.filePath === highlightedPackageId
+                                ? "rounded-xl ring-2 ring-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.3)] z-10"
+                                : ""}
                         >
                             <PackageCard
                                 pkg={pkg}
