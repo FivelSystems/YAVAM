@@ -57,7 +57,6 @@ Once you turn on the server, just type your PC's IP into any browser:
 ---
 
 ## 🔮 Roadmap (The fun stuff coming soon!)
-## 🔮 Roadmap (The fun stuff coming soon!)
 - **v1.3.1**: **Released** 🚀 (Factory Reset, Crash Recovery, Privacy Refinements, Keybinds).
 - **v1.4.0**: **Granular Control** (Hide specific "private" libraries from the web view 🤫).
 - **v1.5.0**: **Bulk Downloads** (Grab tons of files as one big ZIP).
