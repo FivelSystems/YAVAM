@@ -50,10 +50,11 @@ interface RightSidebarProps {
     activeTab: 'details' | 'contents';
     onTabChange: (tab: 'details' | 'contents') => void;
     onFilterByCreator: (creator: string) => void;
+    onDependencyClick: (depId: string) => void;
     selectedCreator?: string | null;
 }
 
-const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilterByCreator, selectedCreator }: RightSidebarProps) => {
+const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilterByCreator, onDependencyClick, selectedCreator }: RightSidebarProps) => {
 
     const [contents, setContents] = useState<PackageContent[]>([]);
     const [loading, setLoading] = useState(false);
@@ -282,18 +283,21 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                                         Object.entries(pkg.meta.dependencies).map(([depId]) => {
                                             const isMissing = pkg.missingDeps?.includes(depId);
                                             return (
-                                                <div key={depId} className={clsx(
-                                                    "flex items-center gap-3 p-2 rounded-lg text-xs border transition-colors",
-                                                    isMissing
-                                                        ? "bg-red-500/10 border-red-500/20 text-red-300"
-                                                        : "bg-gray-800 border-gray-700 text-gray-400"
-                                                )}>
+                                                <div
+                                                    key={depId}
+                                                    onClick={() => onDependencyClick(depId)}
+                                                    className={clsx(
+                                                        "flex items-center gap-3 p-2 rounded-lg text-xs border transition-colors cursor-pointer group",
+                                                        isMissing
+                                                            ? "bg-red-500/10 border-red-500/20 text-red-300 hover:bg-red-500/20"
+                                                            : "bg-gray-800 border-gray-700 text-gray-400 hover:border-blue-500/50 hover:bg-gray-750"
+                                                    )}>
                                                     {isMissing ? (
                                                         <AlertCircle size={14} className="text-red-400 shrink-0" />
                                                     ) : (
-                                                        <Check size={14} className="text-green-500 shrink-0" />
+                                                        <Check size={14} className="text-green-500 shrink-0 group-hover:text-blue-400 transition-colors" />
                                                     )}
-                                                    <span className="truncate flex-1" title={depId}>{depId}</span>
+                                                    <span className="truncate flex-1 group-hover:text-blue-300 transition-colors" title={depId}>{depId}</span>
                                                 </div>
                                             );
                                         })

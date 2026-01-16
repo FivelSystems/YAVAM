@@ -2838,6 +2838,38 @@ function Dashboard(): JSX.Element {
                                         }
                                         // Sidebar remains open as requested
                                     }}
+                                    onDependencyClick={(depId) => {
+                                        // 1. Try exact match
+                                        let found = packages.find(p => {
+                                            const id = `${p.meta.creator}.${p.meta.packageName}.${p.meta.version}`;
+                                            return id.toLowerCase() === depId.toLowerCase();
+                                        });
+
+                                        // 2. Try loose match (ignore version or handle 'latest')
+                                        if (!found) {
+                                            const parts = depId.split('.');
+                                            if (parts.length >= 2) {
+                                                const baseId = `${parts[0]}.${parts[1]}`.toLowerCase();
+                                                // Find any/latest
+                                                found = packages.find(p => {
+                                                    const pId = `${p.meta.creator}.${p.meta.packageName}`;
+                                                    return pId.toLowerCase() === baseId;
+                                                });
+                                            }
+                                        }
+
+                                        // 3. System packages check
+                                        if (!found && depId.toLowerCase().startsWith("vam.core")) {
+                                            addToast(`System Dependency: ${depId}`, "info"); // Just info
+                                            return;
+                                        }
+
+                                        if (found) {
+                                            setSelectedPackage(found);
+                                        } else {
+                                            addToast(`Package not found in library: ${depId}`, "error");
+                                        }
+                                    }}
                                     selectedCreator={selectedCreator}
                                 />
                             )}
