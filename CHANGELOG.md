@@ -8,8 +8,6 @@
 
 ## [1.3.1] - 2026-01-15
 
-## [1.3.1] - 2026-01-15
-
 ### Added
 - **Stability**: Implemented Global Error Boundary to catch crashes and offer "Factory Reset" recovery.
 - **Maintenance**: Added comprehensive "Factory Reset" logic (Bootstrapped Restart + Full AppData Wipe).
