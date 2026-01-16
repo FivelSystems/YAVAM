@@ -33,6 +33,7 @@ interface VarPackage {
     isExactDuplicate: boolean;
     type?: string;
     tags?: string[];
+    isCorrupt?: boolean;
 }
 
 export interface PackageContent {
@@ -51,10 +52,12 @@ interface RightSidebarProps {
     onTabChange: (tab: 'details' | 'contents') => void;
     onFilterByCreator: (creator: string) => void;
     onDependencyClick: (depId: string) => void;
+    onTitleClick: () => void;
+    getDependencyStatus: (depId: string) => 'valid' | 'mismatch' | 'missing' | 'scanning' | 'system';
     selectedCreator?: string | null;
 }
 
-const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilterByCreator, onDependencyClick, selectedCreator }: RightSidebarProps) => {
+const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilterByCreator, onDependencyClick, onTitleClick, getDependencyStatus, selectedCreator }: RightSidebarProps) => {
 
     const [contents, setContents] = useState<PackageContent[]>([]);
     const [loading, setLoading] = useState(false);
@@ -131,9 +134,15 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
         >
             {/* Header */}
             <div className="p-4 border-b border-gray-800 flex justify-between items-start bg-gray-900/50 backdrop-blur-sm sticky top-0 z-10">
-                <h2 className="text-lg font-bold text-white truncate flex-1 mr-2" title={pkg.fileName}>
-                    {pkg.meta.packageName || pkg.fileName}
-                </h2>
+                <div
+                    className="flex-1 mr-2 cursor-pointer group"
+                    onClick={onTitleClick}
+                    title="Click to locate in grid"
+                >
+                    <h2 className="text-lg font-bold text-white truncate group-hover:text-blue-400 transition-colors">
+                        {pkg.meta.packageName || pkg.fileName}
+                    </h2>
+                </div>
                 <button
                     onClick={onClose}
                     className="p-1 hover:bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-colors"
@@ -281,23 +290,43 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                                 <div className="space-y-1">
                                     {pkg.meta.dependencies && Object.keys(pkg.meta.dependencies).length > 0 ? (
                                         Object.entries(pkg.meta.dependencies).map(([depId]) => {
-                                            const isMissing = pkg.missingDeps?.includes(depId);
+                                            const status = getDependencyStatus(depId);
+
+                                            // Status Logic
+                                            let bgClass = "bg-red-500/10 border-red-500/20 text-red-300 hover:bg-red-500/20"; // Missing/Default
+
+                                            if (status === 'valid') {
+                                                bgClass = "bg-green-500/10 border-green-500/20 text-green-300 hover:bg-green-500/20";
+                                            } else if (status === 'mismatch') {
+                                                bgClass = "bg-yellow-500/10 border-yellow-500/20 text-yellow-300 hover:bg-yellow-500/20";
+                                            } else if (status === 'scanning') {
+                                                bgClass = "bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-750";
+                                            } else if (status === 'system') {
+                                                bgClass = "bg-blue-500/10 border-blue-500/20 text-blue-300 hover:bg-blue-500/20";
+                                            }
+
                                             return (
                                                 <div
                                                     key={depId}
                                                     onClick={() => onDependencyClick(depId)}
                                                     className={clsx(
                                                         "flex items-center gap-3 p-2 rounded-lg text-xs border transition-colors cursor-pointer group",
-                                                        isMissing
-                                                            ? "bg-red-500/10 border-red-500/20 text-red-300 hover:bg-red-500/20"
-                                                            : "bg-gray-800 border-gray-700 text-gray-400 hover:border-blue-500/50 hover:bg-gray-750"
+                                                        bgClass
                                                     )}>
-                                                    {isMissing ? (
-                                                        <AlertCircle size={14} className="text-red-400 shrink-0" />
+
+                                                    {status === 'valid' ? (
+                                                        <Check size={14} className="text-green-500 shrink-0" />
+                                                    ) : status === 'mismatch' ? (
+                                                        <AlertCircle size={14} className="text-yellow-500 shrink-0" />
+                                                    ) : status === 'system' ? (
+                                                        <Box size={14} className="text-blue-500 shrink-0" />
+                                                    ) : status === 'scanning' ? (
+                                                        <div className="w-3.5 h-3.5 rounded-full border-2 border-gray-600 border-t-white animate-spin shrink-0" />
                                                     ) : (
-                                                        <Check size={14} className="text-green-500 shrink-0 group-hover:text-blue-400 transition-colors" />
+                                                        <X size={14} className="text-red-500 shrink-0" />
                                                     )}
-                                                    <span className="truncate flex-1 group-hover:text-blue-300 transition-colors" title={depId}>{depId}</span>
+
+                                                    <span className="truncate flex-1" title={depId}>{depId}</span>
                                                 </div>
                                             );
                                         })

@@ -6,6 +6,19 @@
 
 # Changelog
 
+## [1.3.2] - 2026-01-15
+
+### Added
+- **Library**: Added "Corrupt" package detection. Invalid/Corrupt `.var` files are now flagged with a red overlay and excluded from standard status counts.
+- **Library**: Added "Corrupt" filter to Sidebar.
+- **Library**: Added "Include Dependencies" toggle to Install Modal. Recursively resolves and installs required packages (supports loose & exact version matching).
+- **Refactor**: Standardized Sidebar context menu logic for better consistency and maintainability.
+- **Docs**: Added PlantUML architecture diagrams (`docs/diagrams/`) for system overview, auth flow, and scan logic.
+
+### Fixed
+- **UI**: Dashboard now auto-scrolls to top when switching pages (#20).
+- **Web**: Fixed file downloads having `.zip` appended to the filename on some browsers (#7).
+
 ## [1.3.1] - 2026-01-15
 
 ### Added

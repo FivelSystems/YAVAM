@@ -47,6 +47,7 @@ function Dashboard(): JSX.Element {
     // Highlight State
     const [highlightedPackageId, setHighlightedPackageId] = useState<string | null>(null);
 
+
     // Auth State
     const { isGuest } = useAuth();
 
@@ -588,6 +589,14 @@ function Dashboard(): JSX.Element {
             window.go.main.App.SetPrivacyOptions(censorThumbnails, blurAmount, hidePackageNames, hideCreatorNames);
         }
     }, [censorThumbnails, blurAmount, hidePackageNames, hideCreatorNames, gridSize, authPollInterval, isPrivacyModeEnabled, sortMode, itemsPerPage]);
+
+    // Scroll to top on page change
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    }, [currentPage]);
 
     const [toasts, setToasts] = useState<ToastItem[]>([]);
 
@@ -1411,12 +1420,14 @@ function Dashboard(): JSX.Element {
         let res = [...packages];
 
         // Status Filter
-        if (currentFilter === "enabled") res = res.filter(p => p.isEnabled);
-        if (currentFilter === "disabled") res = res.filter(p => !p.isEnabled);
-        if (currentFilter === "missing-deps") res = res.filter(p => p.missingDeps && p.missingDeps.length > 0);
+        // Status Filter
+        if (currentFilter === "enabled") res = res.filter(p => p.isEnabled && !p.isCorrupt);
+        if (currentFilter === "disabled") res = res.filter(p => !p.isEnabled && !p.isCorrupt);
+        if (currentFilter === "missing-deps") res = res.filter(p => p.missingDeps && p.missingDeps.length > 0 && !p.isCorrupt);
         if (currentFilter === "version-conflicts") res = res.filter(p => p.isDuplicate);
         if (currentFilter === "duplicates") res = res.filter(p => p.isDuplicate); // Backwards compat or if used
         if (currentFilter === "exact-duplicates") res = res.filter(p => p.isExactDuplicate);
+        if (currentFilter === "corrupt") res = res.filter(p => p.isCorrupt);
 
         // Creator Filter
         if (selectedCreator) res = res.filter(p => p.meta?.creator === selectedCreator);
@@ -1517,6 +1528,7 @@ function Dashboard(): JSX.Element {
         const groups = new Map<string, VarPackage[]>();
 
         pkgs.forEach(p => {
+            if (p.isCorrupt) return;
             if (p.meta && p.meta.creator && p.meta.packageName) {
                 const id = `${p.meta.creator}.${p.meta.packageName}.${p.meta.version}`;
                 pkgIds.add(id);
@@ -1558,6 +1570,7 @@ function Dashboard(): JSX.Element {
         const enabledDupesMap = new Map<string, number>();
 
         pkgs.forEach(p => {
+            if (p.isCorrupt) return;
             if (!p.meta || !p.meta.creator || !p.meta.packageName) return;
             const key = `${p.meta.creator}.${p.meta.packageName}.${p.meta.version}.${p.size}`;
 
@@ -2181,11 +2194,102 @@ const handleSidebarAction = async (action: 'enable-all' | 'disable-all' | 'resol
 
         // Collect all relevant packages from global list
 
+        const handleLocatePackage = (targetPkg: VarPackage) => {
+            // 1. Check visibility
+            const index = filteredPkgs.findIndex(p => p.filePath === targetPkg.filePath);
 
+            if (index === -1) {
+                // It exists in global but not filtered?
+                if (packages.find(p => p.filePath === targetPkg.filePath)) {
+                    addToast("Package is hidden by current filters/search", "warning");
+                } else {
+                    addToast("Package not found", "error");
+                }
+                return;
+            }
+
+            // 2. Switch Page
+            const targetPage = Math.floor(index / itemsPerPage) + 1;
+            if (targetPage !== currentPage) {
+                setCurrentPage(targetPage);
+            }
+
+            // 3. Highlight & Scroll
+            setHighlightedPackageId(targetPkg.filePath);
+
+            setTimeout(() => {
+                const el = document.getElementById(`pkg-${targetPkg.filePath}`);
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }, 150);
+
+            setTimeout(() => setHighlightedPackageId(null), 2000);
+        };
+
+
+        const handleGetDependencyStatus = (depId: string): 'valid' | 'mismatch' | 'missing' | 'scanning' | 'system' => {
+            if (loading) return 'scanning';
+
+            const cleanDep = depId.toLowerCase();
+            if (cleanDep.startsWith("vam.core")) return 'system';
+
+            // 1. Exact Match
+            const exact = packages.find(p => {
+                const id = `${p.meta.creator}.${p.meta.packageName}.${p.meta.version}`;
+                return id.toLowerCase() === cleanDep;
+            });
+            if (exact) return 'valid';
+
+            // 2. Loose Match (Latest or Version Mismatch)
+            const parts = cleanDep.split('.');
+            if (parts.length >= 2) {
+                const creator = parts[0];
+                const pkgName = parts[1];
+                const hasAny = packages.some(p =>
+                    (p.meta.creator || "").toLowerCase() === creator &&
+                    (p.meta.packageName || "").toLowerCase() === pkgName
+                );
+
+                if (hasAny) {
+                    // If original request was .latest -> Valid (Green)
+                    // Or if user considers any version "Valid" if .latest is not strictly enforced?
+                    // Requirement: "GREEN = Package found (exact match, unless .latest is specified...)"
+                    if (parts[2] && parts[2].toLowerCase() === 'latest') return 'valid';
+
+                    return 'mismatch';
+                }
+            }
+
+            return 'missing';
+        };
+
+
+<<<<<<< HEAD
         targets.forEach(t => {
             const id = `${t.meta.creator}.${t.meta.packageName}`;
             if (processedIdentities.has(id)) return;
             processedIdentities.add(id);
+=======
+    const handleSidebarAction = async (action: 'enable-all' | 'disable-all' | 'resolve-all' | 'install-all', groupType: 'creator' | 'type' | 'status', key: string) => {
+        const targets = packages.filter(p => {
+            if (groupType === 'creator') return (p.meta.creator || "Unknown") === key;
+            if (groupType === 'type') {
+                if (p.categories && p.categories.length > 0) return p.categories.includes(key);
+                return (p.type || "Unknown") === key;
+            }
+            if (groupType === 'status') {
+                if (key === 'all') return true;
+                if (key === 'enabled') return p.isEnabled && !p.isCorrupt;
+                if (key === 'disabled') return !p.isEnabled && !p.isCorrupt;
+                if (key === 'missing-deps') return p.missingDeps && p.missingDeps.length > 0 && !p.isCorrupt;
+                if (key === 'version-conflicts') return p.isDuplicate && !p.isCorrupt;
+                if (key === 'exact-duplicates') return p.isExactDuplicate && !p.isCorrupt;
+                if (key === 'corrupt') return p.isCorrupt;
+            }
+            return false;
+        });
+>>>>>>> dev
 
             // Find ALL versions/dupes globally
             const group = packages.filter(p => p.meta.creator === t.meta.creator && p.meta.packageName === t.meta.packageName);
@@ -2784,186 +2888,364 @@ return (
                                         )}
                                     </div>
 
-                                    <div className="flex gap-2 overflow-hidden flex-1 mask-linear-fade pr-8">
-                                        {[
-                                            ...selectedTags,
-                                            ...availableTags.filter(t =>
-                                                !selectedTags.includes(t) &&
-                                                t.toLowerCase().includes(tagSearchQuery.toLowerCase())
-                                            )
-                                        ].map(tag => {
-                                            const isSelected = selectedTags.includes(tag);
-                                            return (
-                                                <button
-                                                    key={tag}
-                                                    onClick={() => setSelectedTags(prev =>
-                                                        isSelected ? prev.filter(t => t !== tag) : [...prev, tag]
-                                                    )}
-                                                    className={clsx(
-                                                        "px-3 py-1 text-xs rounded-full border transition-colors whitespace-nowrap",
-                                                        isSelected
-                                                            ? "bg-blue-600 border-blue-500 text-white"
-                                                            : "bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600 hover:text-white"
-                                                    )}
-                                                >
-                                                    {tag}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-
-                                    {/* Fade Out Effect */}
-                                    <div className="absolute right-0 top-0 bottom-3 w-16 bg-gradient-to-l from-gray-800 to-transparent pointer-events-none"></div>
-                                </div>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-                </header>
-
-                <div className="flex-1 flex overflow-hidden">
-                    <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
-                        {/* CardGrid Container - Added padding bottom for absolute footer */}
-                        <div className="flex-1 overflow-auto p-4 pb-24 custom-scrollbar">
-                            <CardGrid
-                                packages={filteredPkgs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)}
-                                currentPath={activeLibraryPath}
-                                totalCount={packages.length}
-                                onContextMenu={handleContextMenu}
-                                onSelect={handlePackageClick}
-                                selectedPkgId={selectedPackage?.filePath}
-                                selectedIds={selectedIds}
-                                viewMode={viewMode}
-                                gridSize={gridSize}
-                                censorThumbnails={censorThumbnails}
-                                blurAmount={blurAmount}
-                                hidePackageNames={censorThumbnails && hidePackageNames}
-                                hideCreatorNames={censorThumbnails && hideCreatorNames}
-                                highlightedPackageId={highlightedPackageId}
-                            />
-                        </div>
-
-                        {/* Pagination Footer - Premium Glassmorphism Floating Bar */}
-                        {filteredPkgs.length > itemsPerPage && (
-                            <div className="absolute bottom-0 left-0 right-0 p-3 bg-gray-900/80 backdrop-blur-md border-t border-white/10 z-20 shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
-                                <Pagination
-                                    currentPage={currentPage}
-                                    totalItems={filteredPkgs.length}
-                                    itemsPerPage={itemsPerPage}
-                                    onChange={setCurrentPage}
+<<<<<<< HEAD
+<div className="flex gap-2 overflow-hidden flex-1 mask-linear-fade pr-8">
+    {[
+        ...selectedTags,
+        ...availableTags.filter(t =>
+            !selectedTags.includes(t) &&
+            t.toLowerCase().includes(tagSearchQuery.toLowerCase())
+        )
+    ].map(tag => {
+        const isSelected = selectedTags.includes(tag);
+        return (
+            <button
+                key={tag}
+                onClick={() => setSelectedTags(prev =>
+                    isSelected ? prev.filter(t => t !== tag) : [...prev, tag]
+                )}
+                className={clsx(
+                    "px-3 py-1 text-xs rounded-full border transition-colors whitespace-nowrap",
+                    isSelected
+                        ? "bg-blue-600 border-blue-500 text-white"
+                        : "bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600 hover:text-white"
+                )}
+            >
+                {tag}
+            </button>
+        );
+    })}
+</div>
+=======
+                    <div className="flex-1 flex overflow-hidden">
+                        <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
+                            {/* CardGrid Container - Added padding bottom for absolute footer */}
+                            <div ref={scrollContainerRef} className="flex-1 overflow-auto p-4 pb-24 custom-scrollbar">
+                                <CardGrid
+                                    packages={filteredPkgs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)}
+                                    currentPath={activeLibraryPath}
+                                    totalCount={packages.length}
+                                    onContextMenu={handleContextMenu}
+                                    onSelect={handlePackageClick}
+                                    selectedPkgId={selectedPackage?.filePath}
+                                    selectedIds={selectedIds}
+                                    viewMode={viewMode}
+                                    gridSize={gridSize}
+                                    censorThumbnails={censorThumbnails}
+                                    blurAmount={blurAmount}
+                                    hidePackageNames={censorThumbnails && hidePackageNames}
+                                    hideCreatorNames={censorThumbnails && hideCreatorNames}
+                                    highlightedPackageId={highlightedPackageId}
                                 />
                             </div>
+>>>>>>> dev
+
+{/* Fade Out Effect */ }
+<div className="absolute right-0 top-0 bottom-3 w-16 bg-gradient-to-l from-gray-800 to-transparent pointer-events-none"></div>
+                                </div >
+                            </motion.div >
                         )}
-                    </div>
+                    </AnimatePresence >
+                </header >
 
-                    <AnimatePresence>
-                        {(selectedPackage && isDetailsPanelOpen) && (
-                            <RightSidebar
-                                pkg={selectedPackage}
-                                onClose={() => { setIsDetailsPanelOpen(false); setSelectedPackage(null); setSelectedIds(new Set()); }}
-                                onResolve={handleSingleResolve}
-                                activeTab={activeRightSidebarTab}
-                                onTabChange={handleRightTabChange}
-                                onFilterByCreator={(creator) => {
-                                    if (selectedCreator === creator && currentFilter === 'creator') {
-                                        setSelectedCreator(null);
-                                        setCurrentFilter('all');
-                                    } else {
-                                        setSelectedCreator(creator);
-                                        setCurrentFilter('creator');
-                                    }
-                                    // Sidebar remains open as requested
-                                }}
-                                onDependencyClick={(depId) => {
-                                    // 1. Try exact match
-                                    let found = packages.find(p => {
-                                        const id = `${p.meta.creator}.${p.meta.packageName}.${p.meta.version}`;
-                                        return id.toLowerCase() === depId.toLowerCase();
-                                    });
-
-                                    // 2. Try loose match
-                                    if (!found) {
-                                        const parts = depId.split('.');
-                                        if (parts.length >= 2) {
-                                            const baseId = `${parts[0]}.${parts[1]}`.toLowerCase();
-                                            found = packages.find(p => {
-                                                const pId = `${p.meta.creator}.${p.meta.packageName}`;
-                                                return pId.toLowerCase() === baseId;
-                                            });
-                                        }
-                                    }
-
-                                    // 3. System check
-                                    if (!found && depId.toLowerCase().startsWith("vam.core")) {
-                                        addToast(`System Dependency: ${depId}`, "info");
-                                        return;
-                                    }
-
-                                    if (found) {
-                                        handleLocatePackage(found);
-                                    } else {
-                                        addToast(`Package not found in library: ${depId}`, "error");
-                                    }
-                                }}
-                                onTitleClick={() => selectedPackage && handleLocatePackage(selectedPackage)}
-                                selectedCreator={selectedCreator}
-                            />
-                        )}
-                    </AnimatePresence>
-                </div>
-            </main>
-
-            {/* Context Menu */}
-            {contextMenu.open && (
-                <ContextMenu
-                    x={contextMenu.x}
-                    y={contextMenu.y}
-                    pkg={contextMenu.pkg}
-                    selectedCount={selectedIds.size}
-                    onClose={() => setContextMenu({ ...contextMenu, open: false })}
-                    onToggle={handleBulkToggle}
-                    onOpenFolder={handleOpenFolder}
-                    onDownload={(pkg) => {
-                        // Install Logic
-                        // If multiple selected, install all.
-                        const targets = selectedIds.size > 1 ? packages.filter(p => selectedIds.has(p.filePath)) : [pkg];
-                        setInstallModal({ open: true, pkgs: targets });
-                    }}
-                    onCopyPath={handleCopyPath}
-                    onCopyFile={handleCopyFile}
-                    onCutFile={handleCutFile}
-                    onDelete={handleDeleteClick}
-                    onMerge={(pkg) => handleInstantMerge(pkg, false)}
-                    onMergeInPlace={(pkg) => handleInstantMerge(pkg, true)}
-                    onResolve={handleSingleResolve}
+    <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
+            {/* CardGrid Container - Added padding bottom for absolute footer */}
+            <div className="flex-1 overflow-auto p-4 pb-24 custom-scrollbar">
+                <CardGrid
+                    packages={filteredPkgs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)}
+                    currentPath={activeLibraryPath}
+                    totalCount={packages.length}
+                    onContextMenu={handleContextMenu}
+                    onSelect={handlePackageClick}
+                    selectedPkgId={selectedPackage?.filePath}
+                    selectedIds={selectedIds}
+                    viewMode={viewMode}
+                    gridSize={gridSize}
+                    censorThumbnails={censorThumbnails}
+                    blurAmount={blurAmount}
+                    hidePackageNames={censorThumbnails && hidePackageNames}
+                    hideCreatorNames={censorThumbnails && hideCreatorNames}
+                    highlightedPackageId={highlightedPackageId}
                 />
-            )}
+            </div>
 
-            {/* Cancellation Modal */}
-            <AnimatePresence>
-                {isCancelling && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
-                    >
-                        <div className="bg-gray-800 border border-gray-700 rounded-xl p-8 flex flex-col items-center gap-4 shadow-2xl">
-                            <div className="animate-spin text-blue-500">
-                                <RefreshCw size={48} />
-                            </div>
-                            <h3 className="text-xl font-bold text-white">Cancelling Scan...</h3>
-                            <p className="text-gray-400 text-sm">Please wait while we stop the current process.</p>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+<<<<<<< HEAD
+{/* Pagination Footer - Premium Glassmorphism Floating Bar */ }
+{
+    filteredPkgs.length > itemsPerPage && (
+        <div className="absolute bottom-0 left-0 right-0 p-3 bg-gray-900/80 backdrop-blur-md border-t border-white/10 z-20 shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
+            <Pagination
+                currentPage={currentPage}
+                totalItems={filteredPkgs.length}
+                itemsPerPage={itemsPerPage}
+                onChange={setCurrentPage}
+=======
+                        <AnimatePresence>
+                            {(selectedPackage && isDetailsPanelOpen) && (
+                                <RightSidebar
+                                    pkg={selectedPackage}
+                                    onClose={() => { setIsDetailsPanelOpen(false); setSelectedPackage(null); setSelectedIds(new Set()); }}
+                                    onResolve={handleSingleResolve}
+                                    activeTab={activeRightSidebarTab}
+                                    onTabChange={handleRightTabChange}
+                                    onFilterByCreator={(creator) => {
+                                        if (selectedCreator === creator && currentFilter === 'creator') {
+                                            setSelectedCreator(null);
+                                            setCurrentFilter('all');
+                                        } else {
+                                            setSelectedCreator(creator);
+                                            setCurrentFilter('creator');
+                                        }
+                                        // Sidebar remains open as requested
+                                    }}
+                                    onDependencyClick={(depId) => {
+                                        const cleanDep = depId.toLowerCase();
+
+                                        // 1. Try Exact Match First
+                                        let found = packages.find(p => {
+                                            const id = `${p.meta.creator}.${p.meta.packageName}.${p.meta.version}`;
+                                            return id.toLowerCase() === cleanDep;
+                                        });
+
+                                        // 2. If not found, find Latest Available
+                                        if (!found) {
+                                            const parts = cleanDep.split('.');
+                                            if (parts.length >= 2) {
+                                                const creator = parts[0];
+                                                const pkgName = parts[1];
+
+                                                const candidates = packages.filter(p =>
+                                                    (p.meta.creator || "").toLowerCase() === creator &&
+                                                    (p.meta.packageName || "").toLowerCase() === pkgName
+                                                );
+
+                                                if (candidates.length > 0) {
+                                                    // Sort Descending
+                                                    candidates.sort((a, b) => {
+                                                        const vA = parseInt(a.meta.version);
+                                                        const vB = parseInt(b.meta.version);
+                                                        if (!isNaN(vA) && !isNaN(vB)) return vB - vA;
+                                                        return (b.meta.version || "").localeCompare(a.meta.version || "", undefined, { numeric: true });
+                                                    });
+                                                    found = candidates[0];
+                                                }
+                                            }
+                                        }
+
+                                        // 3. System check
+                                        if (!found && cleanDep.startsWith("vam.core")) {
+                                            addToast(`System Dependency: ${depId}`, "info");
+                                            return;
+                                        }
+
+                                        if (found) {
+                                            const foundId = `${found.meta.creator}.${found.meta.packageName}.${found.meta.version}`;
+                                            if (foundId.toLowerCase() !== cleanDep) {
+                                                addToast(`Located latest available version: v${found.meta.version}`, "info");
+                                            }
+                                            handleLocatePackage(found);
+                                        } else {
+                                            addToast(`Package not found in library: ${depId}`, "error");
+                                        }
+                                    }}
+                                    onTitleClick={() => selectedPackage && handleLocatePackage(selectedPackage)}
+                                    getDependencyStatus={handleGetDependencyStatus}
+                                    selectedCreator={selectedCreator}
+>>>>>>> dev
+            />
+        </div>
+<<<<<<< HEAD
+    )
+}
+                    </div >
+=======
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
 
 
 
 
 
-            {/* Install Modal */}
+                {/* Install Modal */}
+                <InstallPackageModal
+                    isOpen={installModal.open}
+                    onClose={() => setInstallModal({ open: false, pkgs: [] })}
+                    packages={installModal.pkgs}
+                    allPackages={packages}
+                    libraries={libraries}
+                    currentLibrary={activeLibraryPath}
+                    onSuccess={(res: { installed: number, skipped: number, targetLib: string }) => {
+                        setInstallModal({ open: false, pkgs: [] });
+
+                        let msg = `Installed ${res.installed} packages`;
+                        if (res.skipped > 0) msg += ` (${res.skipped} skipped)`;
+                        addToast(msg, 'success');
+
+                        // Refresh if we installed to CURRENT library
+                        if (res.targetLib === activeLibraryPath) {
+                            scanPackages(true); // Keep Page
+                        } else {
+                            // If installed to a different library, switch to it if it exists
+                            const idx = libraries.indexOf(res.targetLib);
+                            if (idx !== -1) handleSwitchLibrary(idx);
+                        }
+                    }}
+                />
+
+                <WhatsNewModal
+                    isOpen={whatsNew.open}
+                    onClose={() => {
+                        setWhatsNew(prev => ({ ...prev, open: false }));
+                        // @ts-ignore
+                        if (window.go) window.go.main.App.SetLastSeenVersion(whatsNew.version);
+                    }}
+                    content={whatsNew.content}
+                    version={whatsNew.version}
+                />
+
+                <UpgradeModal
+                    open={showUpdateModal}
+                    version={updateInfo ? updateInfo.version : ''}
+                    onUpdate={handleUpdate}
+                    onCancel={() => setShowUpdateModal(false)}
+                    downloading={isUpdating}
+                />
+
+                <UploadModal
+                    isOpen={isUploadModalOpen}
+                    onClose={() => setIsUploadModalOpen(false)}
+                    initialFiles={uploadQueue}
+                    onAppendFiles={(_: any) => setUploadQueue([])} // We clear initial buffer logic if needed, or append? The modal handles its own queue usually, initialFiles is just seeder.
+                    // Actually UploadModal maintains its own queue. initialFiles adds to it on mount/change.
+                    // We should clear our local queue after passing it?
+                    // logic: onAppendFiles (if used by modal)
+                    libraries={libraries}
+                    initialLibrary={activeLibraryPath}
+                    onSuccess={() => {
+                        addToast("Upload complete", "success");
+                        scanPackages(true); // Keep page
+                        setUploadQueue([]); // Clear queue
+                    }}
+                />
+
+                {/* Toasts Container - Lifted to avoid Pagination (bottom-20) */}
+                <div className="fixed bottom-20 right-4 z-50 flex flex-col items-end pointer-events-none">
+>>>>>>> dev
+
+    <AnimatePresence>
+        {(selectedPackage && isDetailsPanelOpen) && (
+            <RightSidebar
+                pkg={selectedPackage}
+                onClose={() => { setIsDetailsPanelOpen(false); setSelectedPackage(null); setSelectedIds(new Set()); }}
+                onResolve={handleSingleResolve}
+                activeTab={activeRightSidebarTab}
+                onTabChange={handleRightTabChange}
+                onFilterByCreator={(creator) => {
+                    if (selectedCreator === creator && currentFilter === 'creator') {
+                        setSelectedCreator(null);
+                        setCurrentFilter('all');
+                    } else {
+                        setSelectedCreator(creator);
+                        setCurrentFilter('creator');
+                    }
+                    // Sidebar remains open as requested
+                }}
+                onDependencyClick={(depId) => {
+                    // 1. Try exact match
+                    let found = packages.find(p => {
+                        const id = `${p.meta.creator}.${p.meta.packageName}.${p.meta.version}`;
+                        return id.toLowerCase() === depId.toLowerCase();
+                    });
+
+                    // 2. Try loose match
+                    if (!found) {
+                        const parts = depId.split('.');
+                        if (parts.length >= 2) {
+                            const baseId = `${parts[0]}.${parts[1]}`.toLowerCase();
+                            found = packages.find(p => {
+                                const pId = `${p.meta.creator}.${p.meta.packageName}`;
+                                return pId.toLowerCase() === baseId;
+                            });
+                        }
+                    }
+
+                    // 3. System check
+                    if (!found && depId.toLowerCase().startsWith("vam.core")) {
+                        addToast(`System Dependency: ${depId}`, "info");
+                        return;
+                    }
+
+                    if (found) {
+                        handleLocatePackage(found);
+                    } else {
+                        addToast(`Package not found in library: ${depId}`, "error");
+                    }
+                }}
+                onTitleClick={() => selectedPackage && handleLocatePackage(selectedPackage)}
+                selectedCreator={selectedCreator}
+            />
+        )}
+    </AnimatePresence>
+                </div >
+            </main >
+
+    {/* Context Menu */ }
+{
+    contextMenu.open && (
+        <ContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            pkg={contextMenu.pkg}
+            selectedCount={selectedIds.size}
+            onClose={() => setContextMenu({ ...contextMenu, open: false })}
+            onToggle={handleBulkToggle}
+            onOpenFolder={handleOpenFolder}
+            onDownload={(pkg) => {
+                // Install Logic
+                // If multiple selected, install all.
+                const targets = selectedIds.size > 1 ? packages.filter(p => selectedIds.has(p.filePath)) : [pkg];
+                setInstallModal({ open: true, pkgs: targets });
+            }}
+            onCopyPath={handleCopyPath}
+            onCopyFile={handleCopyFile}
+            onCutFile={handleCutFile}
+            onDelete={handleDeleteClick}
+            onMerge={(pkg) => handleInstantMerge(pkg, false)}
+            onMergeInPlace={(pkg) => handleInstantMerge(pkg, true)}
+            onResolve={handleSingleResolve}
+        />
+    )
+}
+
+{/* Cancellation Modal */ }
+<AnimatePresence>
+    {isCancelling && (
+        <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+        >
+            <div className="bg-gray-800 border border-gray-700 rounded-xl p-8 flex flex-col items-center gap-4 shadow-2xl">
+                <div className="animate-spin text-blue-500">
+                    <RefreshCw size={48} />
+                </div>
+                <h3 className="text-xl font-bold text-white">Cancelling Scan...</h3>
+                <p className="text-gray-400 text-sm">Please wait while we stop the current process.</p>
+            </div>
+        </motion.div>
+    )}
+</AnimatePresence>
+
+
+
+
+
+
+{/* Install Modal */ }
             <InstallPackageModal
                 isOpen={installModal.open}
                 onClose={() => setInstallModal({ open: false, pkgs: [] })}
@@ -3024,17 +3306,17 @@ return (
                 }}
             />
 
-            {/* Toasts Container - Lifted to avoid Pagination (bottom-20) */}
-            <div className="fixed bottom-20 right-4 z-50 flex flex-col items-end pointer-events-none">
+{/* Toasts Container - Lifted to avoid Pagination (bottom-20) */ }
+<div className="fixed bottom-20 right-4 z-50 flex flex-col items-end pointer-events-none">
 
-                <AnimatePresence>
-                    {toasts.map(toast => (
-                        <Toast key={toast.id} toast={toast} onRemove={removeToast} />
-                    ))}
-                </AnimatePresence>
-            </div>
-        </div>
-    </div>
+    <AnimatePresence>
+        {toasts.map(toast => (
+            <Toast key={toast.id} toast={toast} onRemove={removeToast} />
+        ))}
+    </AnimatePresence>
+</div>
+        </div >
+    </div >
 );
 }
 

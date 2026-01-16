@@ -25,6 +25,7 @@ Why sit at your desk to organize files?
 - **No more guessing**: YAVAM looks *inside* the zip files to tell you if a package is a "Look", "Scene", "Clothing", or "Script" automatically.
 - **Dependencies? Solved**: Instantly spot packages that are missing files so you can fix them.
 - **Dupes be gone**: It finds duplicate packages (same file, different versions) and lets you resolve them with one click.
+- **Bad File Protection**: Automatically flags corrupt `.var` files (broken zips) so you know exactly which packages need re-downloading. 🚨
 
 ### **Respects your space** 🧹
 - **Non-Destructive**: It reads your files exactly where they are. No moving, no copying, no weird `_data` folders cluttering your drive.
