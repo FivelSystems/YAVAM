@@ -8,8 +8,7 @@
 
 ## [1.3.1] - 2026-01-15
 
-### Fixed
-- **Critical**: Updater failed to restart application due to `.old` file renaming (App now detects and switches to new binary).
+## [1.3.1] - 2026-01-15
 
 ### Added
 - **Stability**: Implemented Global Error Boundary to catch crashes and offer "Factory Reset" recovery.
@@ -29,6 +28,7 @@
 - **Parsing**: Added `20MB` limit to thumbnail extraction to prevent Zip Bomb attacks.
 
 ### Fixed
+- **Critical**: Updater failed to restart application due to `.old` file renaming (App now detects and switches to new binary).
 - **Crash**: Fixed "Recursive Zip" crash when exporting backups to the YAVAM folder.
 - **Crash**: Fixed "Rendered fewer hooks" crash in Dashboard initialization.
 - **Factory Reset**: Fixed "Resurrection Bug" where local storage would restore libraries after a wipe.
