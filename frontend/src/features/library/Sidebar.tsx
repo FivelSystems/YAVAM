@@ -384,87 +384,64 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
 
 
             {/* Sidebar Context Menu */}
-            {contextMenu && (
-                <div
-                    className="fixed z-50 bg-gray-800 border border-gray-700 rounded-lg shadow-xl py-1 min-w-[160px]"
-                    style={{ top: contextMenu.y, left: contextMenu.x }}
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    <div className="px-3 py-1 text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-700/50 mb-1 truncate max-w-[200px]">
-                        {contextMenu.key}
-                    </div>
-                    {/* Enable All - Show if any disabled package exists in context */}
-                    {packages.some(p => {
-                        const isInGroup = (
-                            (contextMenu.groupType === 'creator' && (p.meta.creator || "Unknown") === contextMenu.key) ||
-                            (contextMenu.groupType === 'type' && (p.type || "Unknown") === contextMenu.key) ||
-                            (contextMenu.groupType === 'status' && (
-                                contextMenu.key === 'all' ||
-                                (contextMenu.key === 'enabled' && p.isEnabled) ||
-                                (contextMenu.key === 'disabled' && !p.isEnabled) ||
-                                (contextMenu.key === 'missing-deps' && p.missingDeps && p.missingDeps.length > 0) ||
-                                (contextMenu.key === 'version-conflicts' && p.isDuplicate) ||
-                                (contextMenu.key === 'exact-duplicates' && p.isExactDuplicate)
-                            ))
-                        );
-                        return isInGroup && !p.isEnabled;
-                    }) && (
+            {contextMenu && (() => {
+                const isPackageInContext = (p: VarPackage) => {
+                    if (contextMenu.groupType === 'creator') return (p.meta.creator || "Unknown") === contextMenu.key;
+                    if (contextMenu.groupType === 'type') return (p.type || "Unknown") === contextMenu.key;
+                    if (contextMenu.groupType === 'status') {
+                        if (contextMenu.key === 'all') return true;
+                        if (contextMenu.key === 'enabled') return p.isEnabled && !p.isCorrupt;
+                        if (contextMenu.key === 'disabled') return !p.isEnabled && !p.isCorrupt;
+                        if (contextMenu.key === 'missing-deps') return p.missingDeps && p.missingDeps.length > 0 && !p.isCorrupt;
+                        if (contextMenu.key === 'version-conflicts') return p.isDuplicate && !p.isCorrupt;
+                        if (contextMenu.key === 'exact-duplicates') return p.isExactDuplicate && !p.isCorrupt;
+                        if (contextMenu.key === 'corrupt') return p.isCorrupt;
+                    }
+                    return false;
+                };
+
+                const hasDisabled = packages.some(p => isPackageInContext(p) && !p.isEnabled);
+                const hasEnabled = packages.some(p => isPackageInContext(p) && p.isEnabled);
+                const hasConflicts = packages.some(p => isPackageInContext(p) && p.isDuplicate);
+
+                return (
+                    <div
+                        className="fixed z-50 bg-gray-800 border border-gray-700 rounded-lg shadow-xl py-1 min-w-[160px]"
+                        style={{ top: contextMenu.y, left: contextMenu.x }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="px-3 py-1 text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-700/50 mb-1 truncate max-w-[200px]">
+                            {contextMenu.key}
+                        </div>
+
+                        {hasDisabled && (
                             <button onClick={() => { onSidebarAction('enable-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
                                 <CheckCircle2 size={14} className="text-green-500" /> Enable All
                             </button>
                         )}
 
-                    {/* Disable All - Show if any enabled package exists in context */}
-                    {packages.some(p => {
-                        const isInGroup = (
-                            (contextMenu.groupType === 'creator' && (p.meta.creator || "Unknown") === contextMenu.key) ||
-                            (contextMenu.groupType === 'type' && (p.type || "Unknown") === contextMenu.key) ||
-                            (contextMenu.groupType === 'status' && (
-                                contextMenu.key === 'all' ||
-                                (contextMenu.key === 'enabled' && p.isEnabled) ||
-                                (contextMenu.key === 'disabled' && !p.isEnabled) ||
-                                (contextMenu.key === 'missing-deps' && p.missingDeps && p.missingDeps.length > 0) ||
-                                (contextMenu.key === 'version-conflicts' && p.isDuplicate) ||
-                                (contextMenu.key === 'exact-duplicates' && p.isExactDuplicate)
-                            ))
-                        );
-                        return isInGroup && p.isEnabled;
-                    }) && (
+                        {hasEnabled && (
                             <button onClick={() => { onSidebarAction('disable-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
                                 <Power size={14} className="text-gray-400" /> Disable All
                             </button>
                         )}
 
-                    <div className="border-b border-gray-700/50 my-1"></div>
+                        <div className="border-b border-gray-700/50 my-1"></div>
 
-                    {/* Resolve Conflicts - Show if any version conflict exists in context */}
-                    {packages.some(p => {
-                        const isInGroup = (
-                            (contextMenu.groupType === 'creator' && (p.meta.creator || "Unknown") === contextMenu.key) ||
-                            (contextMenu.groupType === 'type' && (p.type || "Unknown") === contextMenu.key) ||
-                            (contextMenu.groupType === 'status' && (
-                                contextMenu.key === 'all' ||
-                                (contextMenu.key === 'enabled' && p.isEnabled) ||
-                                (contextMenu.key === 'disabled' && !p.isEnabled) ||
-                                (contextMenu.key === 'missing-deps' && p.missingDeps && p.missingDeps.length > 0) ||
-                                (contextMenu.key === 'version-conflicts' && p.isDuplicate) ||
-                                (contextMenu.key === 'exact-duplicates' && p.isExactDuplicate)
-                            ))
-                        );
-                        return isInGroup && p.isDuplicate; // isDuplicate = Version Conflict
-                    }) && (
+                        {hasConflicts && (
                             <button onClick={() => { onSidebarAction('resolve-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
                                 <Sparkles size={14} className="text-purple-400" /> Package Cleanup
                             </button>
                         )}
 
-                    <div className="border-b border-gray-700/50 my-1"></div>
+                        <div className="border-b border-gray-700/50 my-1"></div>
 
-                    <button onClick={() => { onSidebarAction('install-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
-                        <Download size={14} className="text-blue-400" /> Install All to Library
-                    </button>
-                </div>
-            )}
+                        <button onClick={() => { onSidebarAction('install-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
+                            <Download size={14} className="text-blue-400" /> Install All to Library
+                        </button>
+                    </div>
+                );
+            })()}
         </aside>
     );
 };

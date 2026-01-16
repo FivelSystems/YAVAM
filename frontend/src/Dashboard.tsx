@@ -2197,12 +2197,12 @@ function Dashboard(): JSX.Element {
             }
             if (groupType === 'status') {
                 if (key === 'all') return true;
-                if (key === 'enabled') return p.isEnabled;
-                if (key === 'disabled') return !p.isEnabled;
-                if (key === 'missing-deps') return p.missingDeps && p.missingDeps.length > 0;
-                if (key === 'duplicates') return p.isDuplicate;
-                if (key === 'version-conflicts') return p.isDuplicate; // Alias
-                if (key === 'exact-duplicates') return p.isExactDuplicate;
+                if (key === 'enabled') return p.isEnabled && !p.isCorrupt;
+                if (key === 'disabled') return !p.isEnabled && !p.isCorrupt;
+                if (key === 'missing-deps') return p.missingDeps && p.missingDeps.length > 0 && !p.isCorrupt;
+                if (key === 'version-conflicts') return p.isDuplicate && !p.isCorrupt;
+                if (key === 'exact-duplicates') return p.isExactDuplicate && !p.isCorrupt;
+                if (key === 'corrupt') return p.isCorrupt;
             }
             return false;
         });
