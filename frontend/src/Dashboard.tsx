@@ -2147,6 +2147,43 @@ function Dashboard(): JSX.Element {
     };
 
 
+    const handleGetDependencyStatus = (depId: string): 'valid' | 'mismatch' | 'missing' | 'scanning' | 'system' => {
+        if (loading) return 'scanning';
+
+        const cleanDep = depId.toLowerCase();
+        if (cleanDep.startsWith("vam.core")) return 'system';
+
+        // 1. Exact Match
+        const exact = packages.find(p => {
+            const id = `${p.meta.creator}.${p.meta.packageName}.${p.meta.version}`;
+            return id.toLowerCase() === cleanDep;
+        });
+        if (exact) return 'valid';
+
+        // 2. Loose Match (Latest or Version Mismatch)
+        const parts = cleanDep.split('.');
+        if (parts.length >= 2) {
+            const creator = parts[0];
+            const pkgName = parts[1];
+            const hasAny = packages.some(p =>
+                (p.meta.creator || "").toLowerCase() === creator &&
+                (p.meta.packageName || "").toLowerCase() === pkgName
+            );
+
+            if (hasAny) {
+                // If original request was .latest -> Valid (Green)
+                // Or if user considers any version "Valid" if .latest is not strictly enforced?
+                // Requirement: "GREEN = Package found (exact match, unless .latest is specified...)"
+                if (parts[2] && parts[2].toLowerCase() === 'latest') return 'valid';
+
+                return 'mismatch';
+            }
+        }
+
+        return 'missing';
+    };
+
+
     const handleSidebarAction = async (action: 'enable-all' | 'disable-all' | 'resolve-all' | 'install-all', groupType: 'creator' | 'type' | 'status', key: string) => {
         const targets = packages.filter(p => {
             if (groupType === 'creator') return (p.meta.creator || "Unknown") === key;
@@ -2876,37 +2913,57 @@ function Dashboard(): JSX.Element {
                                         // Sidebar remains open as requested
                                     }}
                                     onDependencyClick={(depId) => {
-                                        // 1. Try exact match
+                                        const cleanDep = depId.toLowerCase();
+
+                                        // 1. Try Exact Match First
                                         let found = packages.find(p => {
                                             const id = `${p.meta.creator}.${p.meta.packageName}.${p.meta.version}`;
-                                            return id.toLowerCase() === depId.toLowerCase();
+                                            return id.toLowerCase() === cleanDep;
                                         });
 
-                                        // 2. Try loose match
+                                        // 2. If not found, find Latest Available
                                         if (!found) {
-                                            const parts = depId.split('.');
+                                            const parts = cleanDep.split('.');
                                             if (parts.length >= 2) {
-                                                const baseId = `${parts[0]}.${parts[1]}`.toLowerCase();
-                                                found = packages.find(p => {
-                                                    const pId = `${p.meta.creator}.${p.meta.packageName}`;
-                                                    return pId.toLowerCase() === baseId;
-                                                });
+                                                const creator = parts[0];
+                                                const pkgName = parts[1];
+
+                                                const candidates = packages.filter(p =>
+                                                    (p.meta.creator || "").toLowerCase() === creator &&
+                                                    (p.meta.packageName || "").toLowerCase() === pkgName
+                                                );
+
+                                                if (candidates.length > 0) {
+                                                    // Sort Descending
+                                                    candidates.sort((a, b) => {
+                                                        const vA = parseInt(a.meta.version);
+                                                        const vB = parseInt(b.meta.version);
+                                                        if (!isNaN(vA) && !isNaN(vB)) return vB - vA;
+                                                        return (b.meta.version || "").localeCompare(a.meta.version || "", undefined, { numeric: true });
+                                                    });
+                                                    found = candidates[0];
+                                                }
                                             }
                                         }
 
                                         // 3. System check
-                                        if (!found && depId.toLowerCase().startsWith("vam.core")) {
+                                        if (!found && cleanDep.startsWith("vam.core")) {
                                             addToast(`System Dependency: ${depId}`, "info");
                                             return;
                                         }
 
                                         if (found) {
+                                            const foundId = `${found.meta.creator}.${found.meta.packageName}.${found.meta.version}`;
+                                            if (foundId.toLowerCase() !== cleanDep) {
+                                                addToast(`Located latest available version: v${found.meta.version}`, "info");
+                                            }
                                             handleLocatePackage(found);
                                         } else {
                                             addToast(`Package not found in library: ${depId}`, "error");
                                         }
                                     }}
                                     onTitleClick={() => selectedPackage && handleLocatePackage(selectedPackage)}
+                                    getDependencyStatus={handleGetDependencyStatus}
                                     selectedCreator={selectedCreator}
                                 />
                             )}
