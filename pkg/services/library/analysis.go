@@ -20,11 +20,11 @@ func (s *defaultLibraryService) CheckDependencies(pkgs []models.VarPackage) []mo
 	for _, p := range pkgs {
 		// strict ID
 		id := fmt.Sprintf("%s.%s.%s", p.Meta.Creator, p.Meta.PackageName, p.Meta.Version)
-		available[id] = true
+		available[strings.ToLower(id)] = true
 
 		// loose ID (just package existence)
 		baseId := fmt.Sprintf("%s.%s", p.Meta.Creator, p.Meta.PackageName)
-		available[baseId] = true
+		available[strings.ToLower(baseId)] = true
 	}
 
 	for i := range pkgs {
@@ -35,13 +35,15 @@ func (s *defaultLibraryService) CheckDependencies(pkgs []models.VarPackage) []mo
 				// We check if "Creator.Package.Version" exists
 				// VaM also allows "latest" typically handled by game, but meta lists specific version.
 
+				depIDLower := strings.ToLower(depID)
+
 				// Check strict existence
-				if !available[depID] {
+				if !available[depIDLower] {
 					// Check if any version of that package exists?
 					// Technically missing specific version might be fine if a newer one exists,
 					// but strictly it's missing.
 					// Let's check if the base package exists at least.
-					parts := strings.Split(depID, ".")
+					parts := strings.Split(depIDLower, ".")
 					if len(parts) >= 2 {
 						baseId := fmt.Sprintf("%s.%s", parts[0], parts[1])
 						if !available[baseId] {
