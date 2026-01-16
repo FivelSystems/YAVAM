@@ -1,0 +1,29 @@
+@startuml
+!theme mars
+start
+:Initiate Scan (Library Path);
+:Walk Directory (Recursive);
+
+while (Has Files?) is (Yes)
+  :Check Extension (.var);
+  if (Valid .var?) then (yes)
+    :Open Zip Reader;
+    if (Open Success?) then (yes)
+      :Parse meta.json;
+      :Extract Thumbnail;
+      :Identify Type (Scene, Look, etc.);
+      :Check Dependencies;
+    else (no)
+      #pink:Flag as **CORRUPT**;
+    endif
+    :Add to Package List;
+    :Broadcast "package:scanned" Event;
+  else (no)
+    :Ignore;
+  endif
+endwhile (No)
+
+:Analyze Duplicates;
+:Calculate Stats (Sidebar);
+stop
+@enduml

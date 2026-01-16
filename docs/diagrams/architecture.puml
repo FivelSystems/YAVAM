@@ -1,0 +1,47 @@
+@startuml
+!theme mars
+skinparam componentStyle rectangle
+
+package "Frontend (React + TypeScript)" {
+    [Dashboard]
+    [Sidebar]
+    [Settings]
+    [API Client (Axios)]
+}
+
+package "Backend (Go / Wails)" {
+    component "Wails Runtime" as Wails
+    
+    package "Services" {
+        [LibraryService]
+        [AuthService]
+        [ConfigService]
+        [Scanner]
+    }
+    
+    package "Server (HTTP)" {
+        [Router (ServeMux)]
+        [Middleware (Auth/Log)]
+    }
+
+    [FileSystem (yavam/pkg/fs)]
+}
+
+database "Disk Storage" {
+    folder "Libraries (.var files)" as Libs
+    file "config.json"
+    file "auth.json"
+}
+
+[Dashboard] --> [API Client (Axios)] : HTTP Requests (Web Mode)
+[Dashboard] --> [Wails] : IPC Calls (Desktop Mode)
+
+[Wails] --> [LibraryService]
+[Router (ServeMux)] --> [LibraryService] : /api/packages
+[Router (ServeMux)] --> [AuthService] : /api/auth/*
+
+[LibraryService] --> [Scanner]
+[Scanner] --> [FileSystem]
+[FileSystem] --> Libs
+
+@enduml
