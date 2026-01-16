@@ -44,6 +44,9 @@ function Dashboard(): JSX.Element {
     const [isUpdating, setIsUpdating] = useState(false);
     const [whatsNew, setWhatsNew] = useState({ open: false, content: '', version: '' });
 
+    // Highlight State
+    const [highlightedPackageId, setHighlightedPackageId] = useState<string | null>(null);
+
 
 
     // Auth State
@@ -2110,6 +2113,39 @@ function Dashboard(): JSX.Element {
         }
     };
 
+    const handleLocatePackage = (targetPkg: VarPackage) => {
+        // 1. Check visibility
+        const index = filteredPkgs.findIndex(p => p.filePath === targetPkg.filePath);
+
+        if (index === -1) {
+            // It exists in global but not filtered?
+            if (packages.find(p => p.filePath === targetPkg.filePath)) {
+                addToast("Package is hidden by current filters/search", "warning");
+            } else {
+                addToast("Package not found", "error");
+            }
+            return;
+        }
+
+        // 2. Switch Page
+        const targetPage = Math.floor(index / itemsPerPage) + 1;
+        if (targetPage !== currentPage) {
+            setCurrentPage(targetPage);
+        }
+
+        // 3. Highlight & Scroll
+        setHighlightedPackageId(targetPkg.filePath);
+
+        setTimeout(() => {
+            const el = document.getElementById(`pkg-${targetPkg.filePath}`);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 150);
+
+        setTimeout(() => setHighlightedPackageId(null), 2000);
+    };
+
 
     const handleSidebarAction = async (action: 'enable-all' | 'disable-all' | 'resolve-all' | 'install-all', groupType: 'creator' | 'type' | 'status', key: string) => {
         const targets = packages.filter(p => {
@@ -2804,6 +2840,7 @@ function Dashboard(): JSX.Element {
                                     blurAmount={blurAmount}
                                     hidePackageNames={censorThumbnails && hidePackageNames}
                                     hideCreatorNames={censorThumbnails && hideCreatorNames}
+                                    highlightedPackageId={highlightedPackageId}
                                 />
                             </div>
 
@@ -2845,12 +2882,11 @@ function Dashboard(): JSX.Element {
                                             return id.toLowerCase() === depId.toLowerCase();
                                         });
 
-                                        // 2. Try loose match (ignore version or handle 'latest')
+                                        // 2. Try loose match
                                         if (!found) {
                                             const parts = depId.split('.');
                                             if (parts.length >= 2) {
                                                 const baseId = `${parts[0]}.${parts[1]}`.toLowerCase();
-                                                // Find any/latest
                                                 found = packages.find(p => {
                                                     const pId = `${p.meta.creator}.${p.meta.packageName}`;
                                                     return pId.toLowerCase() === baseId;
@@ -2858,18 +2894,19 @@ function Dashboard(): JSX.Element {
                                             }
                                         }
 
-                                        // 3. System packages check
+                                        // 3. System check
                                         if (!found && depId.toLowerCase().startsWith("vam.core")) {
-                                            addToast(`System Dependency: ${depId}`, "info"); // Just info
+                                            addToast(`System Dependency: ${depId}`, "info");
                                             return;
                                         }
 
                                         if (found) {
-                                            setSelectedPackage(found);
+                                            handleLocatePackage(found);
                                         } else {
                                             addToast(`Package not found in library: ${depId}`, "error");
                                         }
                                     }}
+                                    onTitleClick={() => selectedPackage && handleLocatePackage(selectedPackage)}
                                     selectedCreator={selectedCreator}
                                 />
                             )}
