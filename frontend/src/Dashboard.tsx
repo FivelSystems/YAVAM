@@ -591,6 +591,11 @@ function Dashboard(): JSX.Element {
         }
     }, [censorThumbnails, blurAmount, hidePackageNames, hideCreatorNames, gridSize, authPollInterval, isPrivacyModeEnabled, sortMode, itemsPerPage]);
 
+    // Scroll to top on page change
+    useEffect(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, [currentPage]);
+
     const [toasts, setToasts] = useState<ToastItem[]>([]);
 
     const addToast = (message: string, type: ToastType = 'info', action?: () => void) => {
