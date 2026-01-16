@@ -63,7 +63,7 @@ jobs:
               $start = $i + 1
               continue
             }
-            if ($start -gt 0 -and $changelog[$i] -match "^## \[v") {
+            if ($start -gt 0 -and $changelog[$i] -match "^## \[v?") {
               $end = $i
               break
             }
