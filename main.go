@@ -2,7 +2,7 @@ package main
 
 import (
 	"embed"
-	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -17,7 +17,30 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+func setupLogging() (*os.File, error) {
+	configDir, _ := os.UserConfigDir()
+	logPath := filepath.Join(configDir, "YAVAM", "application.log")
+	os.MkdirAll(filepath.Dir(logPath), 0755)
+
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return nil, err
+	}
+
+	// Redirect standard log
+	log.SetOutput(f)
+
+	// Write header
+	log.Printf("=== YAVAM Session Started: %s ===\n", time.Now().Format(time.RFC3339))
+	return f, nil
+}
+
 func main() {
+	f, _ := setupLogging()
+	if f != nil {
+		defer f.Close()
+	}
+
 	// User Config Dir
 	configDir, _ := os.UserConfigDir()
 
@@ -26,7 +49,7 @@ func main() {
 	shouldWipe := false
 	for _, arg := range os.Args {
 		if arg == "--yavam-wait-for-exit" {
-			println("Wait flag detected. Sleeping 2s...")
+			log.Println("Wait flag detected. Sleeping 2s...")
 			time.Sleep(2 * time.Second)
 		}
 		if arg == "--factory-reset" {
@@ -35,37 +58,37 @@ func main() {
 	}
 
 	if shouldWipe {
-		fmt.Println("Performing Factory Reset...")
+		log.Println("Performing Factory Reset...")
 		dataPath := filepath.Join(configDir, "YAVAM")
-		fmt.Printf("Target Data Path: %s\n", dataPath)
+		log.Printf("Target Data Path: %s\n", dataPath)
 
 		// Retry Loop
 		var err error
 		for i := 0; i < 10; i++ { // Increased to 10 attempts (10 seconds max)
-			fmt.Printf("Attempt %d/10 to wipe data...\n", i+1)
+			log.Printf("Attempt %d/10 to wipe data...\n", i+1)
 			err = os.RemoveAll(dataPath)
 			if err == nil {
-				fmt.Println("Success: Data path wiped.")
+				log.Println("Success: Data path wiped.")
 				break
 			}
-			fmt.Printf("Error wiping data: %v. Retrying in 1s...\n", err)
+			log.Printf("Error wiping data: %v. Retrying in 1s...\n", err)
 			time.Sleep(1 * time.Second)
 		}
 
 		if err != nil {
-			fmt.Printf("CRITICAL: Failed to wipe data after retries: %v\n", err)
+			log.Printf("CRITICAL: Failed to wipe data after retries: %v\n", err)
 		}
 
 		// Also ensure logs dir is gone if we split it
 		os.RemoveAll(filepath.Join(configDir, "YAVAM_Logs"))
-		fmt.Println("Factory Reset Logic Complete.")
+		log.Println("Factory Reset Logic Complete.")
 	}
 	dataPath := filepath.Join(configDir, "YAVAM")
 	os.MkdirAll(dataPath, 0755)
 	cfgService, err := config.NewFileConfigService(dataPath)
 	if err != nil {
 		// Log error but proceed with defaults?
-		println("Warning: Failed to load config:", err.Error())
+		log.Println("Warning: Failed to load config:", err.Error())
 	}
 
 	// Create manager with dependencies
@@ -102,6 +125,6 @@ func main() {
 	})
 
 	if err != nil {
-		println("Error:", err.Error())
+		log.Println("Error:", err.Error())
 	}
 }
