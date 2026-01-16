@@ -29,6 +29,7 @@ type VarPackage struct {
 	Categories      []string `json:"categories"`
 	Tags            []string `json:"tags,omitempty"`
 	CreationDate    string   `json:"creationDate"` // ISO 8601
+	IsCorrupt       bool     `json:"isCorrupt"`
 }
 
 type PackageContent struct {

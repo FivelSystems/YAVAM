@@ -1,0 +1,40 @@
+@startuml
+!theme mars
+actor User
+participant "Frontend" as FE
+participant "AuthService" as Auth
+participant "Server" as Srv
+
+== Challenge-Response Login ==
+
+User -> FE : Enter Password
+FE -> Srv : POST /api/auth/challenge {username}
+Srv -> Auth : InitiateLogin(username)
+Auth -> Auth : Generate Random Nonce
+Auth --> Srv : Nonce
+Srv --> FE : { success: true, nonce: "xyz..." }
+
+FE -> FE : Hash(Password + Nonce) -> Proof
+FE -> Srv : POST /api/auth/login {nonce, proof, deviceName}
+
+Srv -> Auth : CompleteLogin(nonce, proof)
+Auth -> Auth : Verify Proof
+Auth -> Auth : Generate JWT / SessionToken
+Auth --> Srv : Token
+Srv --> FE : { success: true, token: "..." }
+
+FE -> FE : Store Token (LocalStorage)
+
+== Authenticated Request ==
+
+FE -> Srv : GET /api/packages (Header: Authorization: Bearer Token)
+Srv -> Auth : ValidateToken(Token)
+alt Valid Token
+    Srv -> Srv : Process Request
+    Srv --> FE : Data
+else Invalid/Expired
+    Srv --> FE : 401 Unauthorized
+    FE -> FE : Redirect to Login
+end
+
+@enduml

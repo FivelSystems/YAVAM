@@ -124,13 +124,17 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
     }, [packages]);
 
     const statusCounts = useMemo(() => {
+        const validPkgs = packages.filter(p => !p.isCorrupt);
+        const corruptPkgs = packages.filter(p => p.isCorrupt);
+
         return {
             all: packages.length,
-            enabled: packages.filter(p => p.isEnabled).length,
-            disabled: packages.filter(p => !p.isEnabled).length,
-            missingDeps: packages.filter(p => p.missingDeps && p.missingDeps.length > 0).length,
-            versionConflicts: packages.filter(p => p.isDuplicate).length, // "Multiple Versions"
-            exactDuplicates: packages.filter(p => p.isExactDuplicate).length // "Duplicates"
+            enabled: validPkgs.filter(p => p.isEnabled).length,
+            disabled: validPkgs.filter(p => !p.isEnabled).length,
+            missingDeps: validPkgs.filter(p => p.missingDeps && p.missingDeps.length > 0).length,
+            versionConflicts: validPkgs.filter(p => p.isDuplicate).length, // "Multiple Versions"
+            exactDuplicates: validPkgs.filter(p => p.isExactDuplicate).length, // "Duplicates"
+            corrupt: corruptPkgs.length
         };
     }, [packages]);
 
@@ -301,6 +305,18 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
                                     <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-purple-500/20 text-purple-400 border border-purple-500/10 group-hover:bg-purple-500/30 transition-colors">{statusCounts.exactDuplicates}</span>
                                 </button>
                             )}
+
+                            {statusCounts.corrupt > 0 && (
+                                <button
+                                    onClick={() => setFilter(currentFilter === 'corrupt' ? 'all' : 'corrupt')}
+                                    onContextMenu={(e) => handleContextMenu(e, 'status', 'corrupt')}
+                                    className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
+                                        currentFilter === 'corrupt' ? "bg-red-900/20 text-red-500" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
+                                >
+                                    <div className="flex items-center gap-3"><AlertTriangle size={18} /> Corrupt</div>
+                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-900/40 text-red-500 border border-red-500/20 group-hover:bg-red-900/60 transition-colors">{statusCounts.corrupt}</span>
+                                </button>
+                            )}
                         </div>
                     )}
                 </div>
@@ -368,87 +384,64 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
 
 
             {/* Sidebar Context Menu */}
-            {contextMenu && (
-                <div
-                    className="fixed z-50 bg-gray-800 border border-gray-700 rounded-lg shadow-xl py-1 min-w-[160px]"
-                    style={{ top: contextMenu.y, left: contextMenu.x }}
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    <div className="px-3 py-1 text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-700/50 mb-1 truncate max-w-[200px]">
-                        {contextMenu.key}
-                    </div>
-                    {/* Enable All - Show if any disabled package exists in context */}
-                    {packages.some(p => {
-                        const isInGroup = (
-                            (contextMenu.groupType === 'creator' && (p.meta.creator || "Unknown") === contextMenu.key) ||
-                            (contextMenu.groupType === 'type' && (p.type || "Unknown") === contextMenu.key) ||
-                            (contextMenu.groupType === 'status' && (
-                                contextMenu.key === 'all' ||
-                                (contextMenu.key === 'enabled' && p.isEnabled) ||
-                                (contextMenu.key === 'disabled' && !p.isEnabled) ||
-                                (contextMenu.key === 'missing-deps' && p.missingDeps && p.missingDeps.length > 0) ||
-                                (contextMenu.key === 'version-conflicts' && p.isDuplicate) ||
-                                (contextMenu.key === 'exact-duplicates' && p.isExactDuplicate)
-                            ))
-                        );
-                        return isInGroup && !p.isEnabled;
-                    }) && (
+            {contextMenu && (() => {
+                const isPackageInContext = (p: VarPackage) => {
+                    if (contextMenu.groupType === 'creator') return (p.meta.creator || "Unknown") === contextMenu.key;
+                    if (contextMenu.groupType === 'type') return (p.type || "Unknown") === contextMenu.key;
+                    if (contextMenu.groupType === 'status') {
+                        if (contextMenu.key === 'all') return true;
+                        if (contextMenu.key === 'enabled') return p.isEnabled && !p.isCorrupt;
+                        if (contextMenu.key === 'disabled') return !p.isEnabled && !p.isCorrupt;
+                        if (contextMenu.key === 'missing-deps') return p.missingDeps && p.missingDeps.length > 0 && !p.isCorrupt;
+                        if (contextMenu.key === 'version-conflicts') return p.isDuplicate && !p.isCorrupt;
+                        if (contextMenu.key === 'exact-duplicates') return p.isExactDuplicate && !p.isCorrupt;
+                        if (contextMenu.key === 'corrupt') return p.isCorrupt;
+                    }
+                    return false;
+                };
+
+                const hasDisabled = packages.some(p => isPackageInContext(p) && !p.isEnabled);
+                const hasEnabled = packages.some(p => isPackageInContext(p) && p.isEnabled);
+                const hasConflicts = packages.some(p => isPackageInContext(p) && p.isDuplicate);
+
+                return (
+                    <div
+                        className="fixed z-50 bg-gray-800 border border-gray-700 rounded-lg shadow-xl py-1 min-w-[160px]"
+                        style={{ top: contextMenu.y, left: contextMenu.x }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="px-3 py-1 text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-700/50 mb-1 truncate max-w-[200px]">
+                            {contextMenu.key}
+                        </div>
+
+                        {hasDisabled && (
                             <button onClick={() => { onSidebarAction('enable-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
                                 <CheckCircle2 size={14} className="text-green-500" /> Enable All
                             </button>
                         )}
 
-                    {/* Disable All - Show if any enabled package exists in context */}
-                    {packages.some(p => {
-                        const isInGroup = (
-                            (contextMenu.groupType === 'creator' && (p.meta.creator || "Unknown") === contextMenu.key) ||
-                            (contextMenu.groupType === 'type' && (p.type || "Unknown") === contextMenu.key) ||
-                            (contextMenu.groupType === 'status' && (
-                                contextMenu.key === 'all' ||
-                                (contextMenu.key === 'enabled' && p.isEnabled) ||
-                                (contextMenu.key === 'disabled' && !p.isEnabled) ||
-                                (contextMenu.key === 'missing-deps' && p.missingDeps && p.missingDeps.length > 0) ||
-                                (contextMenu.key === 'version-conflicts' && p.isDuplicate) ||
-                                (contextMenu.key === 'exact-duplicates' && p.isExactDuplicate)
-                            ))
-                        );
-                        return isInGroup && p.isEnabled;
-                    }) && (
+                        {hasEnabled && (
                             <button onClick={() => { onSidebarAction('disable-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
                                 <Power size={14} className="text-gray-400" /> Disable All
                             </button>
                         )}
 
-                    <div className="border-b border-gray-700/50 my-1"></div>
+                        <div className="border-b border-gray-700/50 my-1"></div>
 
-                    {/* Resolve Conflicts - Show if any version conflict exists in context */}
-                    {packages.some(p => {
-                        const isInGroup = (
-                            (contextMenu.groupType === 'creator' && (p.meta.creator || "Unknown") === contextMenu.key) ||
-                            (contextMenu.groupType === 'type' && (p.type || "Unknown") === contextMenu.key) ||
-                            (contextMenu.groupType === 'status' && (
-                                contextMenu.key === 'all' ||
-                                (contextMenu.key === 'enabled' && p.isEnabled) ||
-                                (contextMenu.key === 'disabled' && !p.isEnabled) ||
-                                (contextMenu.key === 'missing-deps' && p.missingDeps && p.missingDeps.length > 0) ||
-                                (contextMenu.key === 'version-conflicts' && p.isDuplicate) ||
-                                (contextMenu.key === 'exact-duplicates' && p.isExactDuplicate)
-                            ))
-                        );
-                        return isInGroup && p.isDuplicate; // isDuplicate = Version Conflict
-                    }) && (
+                        {hasConflicts && (
                             <button onClick={() => { onSidebarAction('resolve-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
                                 <Sparkles size={14} className="text-purple-400" /> Package Cleanup
                             </button>
                         )}
 
-                    <div className="border-b border-gray-700/50 my-1"></div>
+                        <div className="border-b border-gray-700/50 my-1"></div>
 
-                    <button onClick={() => { onSidebarAction('install-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
-                        <Download size={14} className="text-blue-400" /> Install All to Library
-                    </button>
-                </div>
-            )}
+                        <button onClick={() => { onSidebarAction('install-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
+                            <Download size={14} className="text-blue-400" /> Install All to Library
+                        </button>
+                    </div>
+                );
+            })()}
         </aside>
     );
 };

@@ -127,7 +127,7 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
             >
                 {/* Small Thumbnail */}
                 <div className="h-16 w-16 bg-gray-800 rounded overflow-hidden shrink-0 relative">
-                    {pkg.hasThumbnail && thumbSrc ? (
+                    {pkg.hasThumbnail && thumbSrc && !pkg.isCorrupt ? (
                         <img
                             src={thumbSrc}
                             alt={pkg.fileName}
@@ -139,8 +139,12 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
                             style={censorThumbnails ? { filter: `blur(${blurAmount}px)` } : undefined}
                         />
                     ) : (
-                        <div className="w-full h-full flex items-center justify-center text-gray-700 border border-gray-700">
-                            <span className="text-[8px] font-bold">{pkg.hasThumbnail ? "..." : "NO IMG"}</span>
+                        <div className={clsx("w-full h-full flex items-center justify-center border", pkg.isCorrupt ? "bg-red-900/40 border-red-500/30 text-red-500" : "text-gray-700 border-gray-700")}>
+                            {pkg.isCorrupt ? (
+                                <span className="text-[10px] font-bold rotate-[-15deg]">ERROR</span>
+                            ) : (
+                                <span className="text-[8px] font-bold">{pkg.hasThumbnail ? "..." : "NO IMG"}</span>
+                            )}
                         </div>
                     )}
                 </div>
@@ -186,7 +190,7 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
         >
             {/* Full size thumbnail */}
             <div className="absolute inset-0 w-full h-full">
-                {pkg.hasThumbnail && thumbSrc ? (
+                {pkg.hasThumbnail && thumbSrc && !pkg.isCorrupt ? (
                     <img
                         src={thumbSrc}
                         alt={pkg.fileName}
@@ -198,8 +202,14 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
                         style={censorThumbnails ? { filter: `blur(${blurAmount}px)` } : undefined}
                     />
                 ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
-                        <span className="text-4xl font-bold text-gray-700 select-none opacity-50">{pkg.hasThumbnail ? "..." : "VAR"}</span>
+                    <div className={clsx("w-full h-full flex items-center justify-center", pkg.isCorrupt ? "bg-red-900/40" : "bg-gradient-to-br from-gray-800 to-gray-900")}>
+                        {pkg.isCorrupt ? (
+                            <div className="flex flex-col items-center justify-center text-red-500 font-bold opacity-80 rotate-[-15deg] border-4 border-red-500/50 p-2 rounded-xl">
+                                <span className="text-2xl tracking-widest">CORRUPT</span>
+                            </div>
+                        ) : (
+                            <span className="text-4xl font-bold text-gray-700 select-none opacity-50">{pkg.hasThumbnail ? "..." : "VAR"}</span>
+                        )}
                     </div>
                 )}
             </div>

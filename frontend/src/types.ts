@@ -19,4 +19,5 @@ export interface VarPackage {
     type?: string;
     categories: string[];
     tags?: string[];
+    isCorrupt?: boolean;
 }
