@@ -1413,9 +1413,10 @@ function Dashboard(): JSX.Element {
         let res = [...packages];
 
         // Status Filter
-        if (currentFilter === "enabled") res = res.filter(p => p.isEnabled);
-        if (currentFilter === "disabled") res = res.filter(p => !p.isEnabled);
-        if (currentFilter === "missing-deps") res = res.filter(p => p.missingDeps && p.missingDeps.length > 0);
+        // Status Filter
+        if (currentFilter === "enabled") res = res.filter(p => p.isEnabled && !p.isCorrupt);
+        if (currentFilter === "disabled") res = res.filter(p => !p.isEnabled && !p.isCorrupt);
+        if (currentFilter === "missing-deps") res = res.filter(p => p.missingDeps && p.missingDeps.length > 0 && !p.isCorrupt);
         if (currentFilter === "version-conflicts") res = res.filter(p => p.isDuplicate);
         if (currentFilter === "duplicates") res = res.filter(p => p.isDuplicate); // Backwards compat or if used
         if (currentFilter === "exact-duplicates") res = res.filter(p => p.isExactDuplicate);
@@ -1520,6 +1521,7 @@ function Dashboard(): JSX.Element {
         const groups = new Map<string, VarPackage[]>();
 
         pkgs.forEach(p => {
+            if (p.isCorrupt) return;
             if (p.meta && p.meta.creator && p.meta.packageName) {
                 const id = `${p.meta.creator}.${p.meta.packageName}.${p.meta.version}`;
                 pkgIds.add(id);
@@ -1561,6 +1563,7 @@ function Dashboard(): JSX.Element {
         const enabledDupesMap = new Map<string, number>();
 
         pkgs.forEach(p => {
+            if (p.isCorrupt) return;
             if (!p.meta || !p.meta.creator || !p.meta.packageName) return;
             const key = `${p.meta.creator}.${p.meta.packageName}.${p.meta.version}.${p.size}`;
 

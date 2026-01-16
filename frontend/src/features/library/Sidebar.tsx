@@ -124,14 +124,17 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
     }, [packages]);
 
     const statusCounts = useMemo(() => {
+        const validPkgs = packages.filter(p => !p.isCorrupt);
+        const corruptPkgs = packages.filter(p => p.isCorrupt);
+
         return {
             all: packages.length,
-            enabled: packages.filter(p => p.isEnabled).length,
-            disabled: packages.filter(p => !p.isEnabled).length,
-            missingDeps: packages.filter(p => p.missingDeps && p.missingDeps.length > 0).length,
-            versionConflicts: packages.filter(p => p.isDuplicate).length, // "Multiple Versions"
-            exactDuplicates: packages.filter(p => p.isExactDuplicate).length, // "Duplicates"
-            corrupt: packages.filter(p => p.isCorrupt).length
+            enabled: validPkgs.filter(p => p.isEnabled).length,
+            disabled: validPkgs.filter(p => !p.isEnabled).length,
+            missingDeps: validPkgs.filter(p => p.missingDeps && p.missingDeps.length > 0).length,
+            versionConflicts: validPkgs.filter(p => p.isDuplicate).length, // "Multiple Versions"
+            exactDuplicates: validPkgs.filter(p => p.isExactDuplicate).length, // "Duplicates"
+            corrupt: corruptPkgs.length
         };
     }, [packages]);
 
