@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -17,6 +19,20 @@ func RestartApplication(exitFunc func(), extraArgs ...string) error {
 	executable, err := os.Executable()
 	if err != nil {
 		return err
+	}
+
+	// Hotfix: Handle Updater Rename Scenario
+	// If we are running as ".old", it means we were just updated.
+	// os.Executable() might return the ".old" path on Windows.
+	// We MUST switch to the original ".exe" (the new version).
+	if filepath.Ext(executable) == ".old" {
+		fmt.Println("[Restart] Detected .old executable. Switching to new binary...")
+		originalExe := strings.TrimSuffix(executable, ".old")
+		if _, err := os.Stat(originalExe); err == nil {
+			executable = originalExe
+		} else {
+			fmt.Printf("[Restart] Warning: Could not find new binary at %s, sticking with %s\n", originalExe, executable)
+		}
 	}
 
 	// Launch new instance
