@@ -3,11 +3,13 @@ import { X, Download, Library, CheckCircle, Loader2, AlertTriangle, ChevronDown,
 import { clsx } from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { VarPackage } from '../../types';
+import { resolveDependency } from '../../utils/dependency';
 
 interface InstallPackageModalProps {
     isOpen: boolean;
     onClose: () => void;
     packages: VarPackage[];
+    allPackages: VarPackage[];
     libraries: string[];
     currentLibrary: string; // To visually distinguishing or filtering
     onSuccess: (result: { installed: number, skipped: number, targetLib: string }) => void;
@@ -21,9 +23,10 @@ const formatBytes = (bytes: number) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
-export const InstallPackageModal = ({ isOpen, onClose, packages, libraries, currentLibrary, onSuccess }: InstallPackageModalProps) => {
+export const InstallPackageModal = ({ isOpen, onClose, packages, allPackages, libraries, currentLibrary, onSuccess }: InstallPackageModalProps) => {
     const [selectedLib, setSelectedLib] = useState<string | null>(null);
     const [overwrite, setOverwrite] = useState(false);
+    const [includeDeps, setIncludeDeps] = useState(false);
     const [loading, setLoading] = useState(false);
     const [progress, setProgress] = useState<{ current: number, total: number, filename: string } | null>(null);
     const [installResult, setInstallResult] = useState<{ installed: number, skipped: number, errors: any[] } | null>(null);
@@ -42,30 +45,56 @@ export const InstallPackageModal = ({ isOpen, onClose, packages, libraries, curr
             setProgress(null);
             setStatusHistory({});
             setLoading(false);
-            // We keep specific user selections like 'overwrite' or 'selectedLib' if desired, 
-            // or reset them. Let's reset selectedLib to force conscious choice? 
-            // Or keep it for convenience? User said "reusable", implying repetitive tasks. 
-            // Let's keep selectedLib but reset execution state.
+            setIncludeDeps(false); // Default to false
         }
     }, [isOpen]);
 
-    // Deduplicate packages to prevent "Skipped" due to same file appearing twice in list
-    const uniquePackages = useMemo(() => {
-        const seen = new Set();
-        return packages.filter(p => {
-            if (seen.has(p.fileName)) return false;
-            seen.add(p.fileName);
-            return true;
-        });
-    }, [packages]);
+    // Resolve Dependencies Logic
+    const resolvedPackages = useMemo(() => {
+        if (!isOpen) return [];
 
-    // Calculate required space
-    const requiredSpace = useMemo(() => uniquePackages.reduce((acc, p) => acc + p.size, 0), [uniquePackages]);
+        if (!includeDeps) {
+            // Simple Dedupe
+            const seen = new Set();
+            return packages.filter(p => {
+                if (seen.has(p.fileName)) return false;
+                seen.add(p.fileName);
+                return true;
+            });
+        }
+
+        // Recursive Resolution
+        // BFS
+        const seenFiles = new Set<string>();
+        const result: VarPackage[] = [];
+        const queue = [...packages];
+
+        while (queue.length > 0) {
+            const current = queue.shift()!;
+
+            if (seenFiles.has(current.fileName)) continue;
+            seenFiles.add(current.fileName);
+            result.push(current);
+
+            if (current.meta && current.meta.dependencies) {
+                for (const depId of Object.keys(current.meta.dependencies)) {
+                    const res = resolveDependency(depId, allPackages);
+                    if (res.pkg) {
+                        queue.push(res.pkg);
+                    }
+                }
+            }
+        }
+
+        return result;
+    }, [packages, includeDeps, allPackages, isOpen]);
+
+
+    // Calculate required space using RESOLVED list
+    const requiredSpace = useMemo(() => resolvedPackages.reduce((acc, p) => acc + p.size, 0), [resolvedPackages]);
+    const addedDepsCount = Math.max(0, resolvedPackages.length - packages.length);
 
     const availableLibraries = useMemo(() => {
-        // Filter out current if desirable, but user might want to re-install/repair in same lib?
-        // Usually "Install to Library" implies a different one, but let's keep all except maybe exact match if strictly copying.
-        // For now, show all, but maybe highlight current.
         return libraries.filter(l => l.toLowerCase() !== currentLibrary.toLowerCase());
     }, [libraries, currentLibrary]);
 
@@ -141,7 +170,7 @@ export const InstallPackageModal = ({ isOpen, onClose, packages, libraries, curr
         }
 
         try {
-            const paths = uniquePackages.map(p => p.filePath);
+            const paths = resolvedPackages.map(p => p.filePath);
             const total = paths.length;
             let installedCount = total;
             let skippedCount = 0;
@@ -159,7 +188,6 @@ export const InstallPackageModal = ({ isOpen, onClose, packages, libraries, curr
                 }
             } else {
                 // Web Mode
-                // Simulate progress for web if needed, or rely on hypothetical SSE
                 const res = await fetch("/api/install", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -178,25 +206,20 @@ export const InstallPackageModal = ({ isOpen, onClose, packages, libraries, curr
                 }
             }
 
-            // Success - Delegate to parent (App show toast)
-            // onSuccess({ installed: installedCount, skipped: skippedCount, targetLib: selectedLib });
-
             if (cleanupEvents) cleanupEvents(); // Unsubscribe
             setLoading(false);
-            setInstallResult({ installed: installedCount, skipped: skippedCount, errors: [] }); // We don't track explicit errors list in this scope yet, but we could filter statusHistory
+            setInstallResult({ installed: installedCount, skipped: skippedCount, errors: [] });
 
         } catch (e: any) {
             console.error(e);
             setLoading(false);
             if (cleanupEvents) cleanupEvents();
-            // Show error state in modal?
         }
     };
 
     if (!isOpen) return null;
 
     // Derived errors/skips from history for the summary result
-    // We can compute this from statusHistory since we track it live
     const completedSkips = Object.entries(statusHistory).filter(([_, s]) => s === 'skipped').map(([name]) => name);
     const completedErrors = Object.entries(statusHistory).filter(([_, s]) => s === 'error').map(([name]) => name);
 
@@ -233,7 +256,7 @@ export const InstallPackageModal = ({ isOpen, onClose, packages, libraries, curr
                                 <div>
                                     <h3 className="text-xl font-bold text-white">Installation Complete</h3>
                                     <p className="text-gray-400 mt-1">
-                                        Processed {uniquePackages.length} packages
+                                        Processed {resolvedPackages.length} packages
                                     </p>
                                 </div>
 
@@ -293,7 +316,7 @@ export const InstallPackageModal = ({ isOpen, onClose, packages, libraries, curr
 
                                     {/* Counts */}
                                     <div className="flex justify-between text-xs font-medium text-gray-500 px-1">
-                                        <span>{progress?.current || 0} / {progress?.total || uniquePackages.length}</span>
+                                        <span>{progress?.current || 0} / {progress?.total || resolvedPackages.length}</span>
                                         <span>{progress ? progress.total - progress.current : 0} left</span>
                                     </div>
                                 </div>
@@ -320,7 +343,12 @@ export const InstallPackageModal = ({ isOpen, onClose, packages, libraries, curr
                                         </div>
                                         <div>
                                             <p className="text-sm text-gray-400">Source Selection</p>
-                                            <p className="text-white font-medium">{uniquePackages.length} Packages</p>
+                                            <div className="flex items-baseline gap-2">
+                                                <p className="text-white font-medium">{resolvedPackages.length} Packages</p>
+                                                {addedDepsCount > 0 && (
+                                                    <span className="text-xs text-blue-400">(+{addedDepsCount} deps)</span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
 
@@ -329,12 +357,34 @@ export const InstallPackageModal = ({ isOpen, onClose, packages, libraries, curr
                                     <div className="flex items-center gap-3 text-right">
                                         <div>
                                             <p className="text-sm text-gray-400">Required Space</p>
-                                            <p className="text-white font-medium">{formatBytes(requiredSpace)}</p>
+                                            <p className={clsx("font-medium", hasInsufficientSpace ? "text-red-400" : "text-white")}>
+                                                {formatBytes(requiredSpace)}
+                                            </p>
                                         </div>
                                         <div className="p-2 bg-gray-700/50 text-gray-400 rounded-lg">
                                             <Download size={20} />
                                         </div>
                                     </div>
+                                </div>
+
+                                {/* Dependency Options */}
+                                <div className="flex justify-end pt-1 pb-2 px-1">
+                                    <label
+                                        className="flex items-center gap-2 cursor-pointer group select-none"
+                                        title="Recursively find and include all required packages."
+                                    >
+                                        <div className="relative flex items-center">
+                                            <input
+                                                type="checkbox"
+                                                className="peer sr-only"
+                                                checked={includeDeps}
+                                                onChange={(e) => setIncludeDeps(e.target.checked)}
+                                            />
+                                            <div className="w-4 h-4 border-2 border-gray-500 rounded peer-checked:bg-purple-500 peer-checked:border-purple-500 transition-colors"></div>
+                                            <CheckCircle size={12} className="absolute inset-0 m-auto text-white opacity-0 peer-checked:opacity-100 pointer-events-none" />
+                                        </div>
+                                        <span className="text-xs font-medium text-gray-400 group-hover:text-gray-200 transition-colors">Include Dependencies</span>
+                                    </label>
                                 </div>
 
                                 {/* Destination Selector - Foldable */}
@@ -356,6 +406,7 @@ export const InstallPackageModal = ({ isOpen, onClose, packages, libraries, curr
                                             ) : [...availableLibraries].sort((a, b) => {
                                                 const spaceA = librarySpaces[a];
                                                 const spaceB = librarySpaces[b];
+                                                // Check against NEW requiredSpace
                                                 const notEnoughA = spaceA ? spaceA.free < requiredSpace : false;
                                                 const notEnoughB = spaceB ? spaceB.free < requiredSpace : false;
                                                 // Sort: Valid first (false < true)

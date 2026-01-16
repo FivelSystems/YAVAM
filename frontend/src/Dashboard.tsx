@@ -3039,6 +3039,7 @@ function Dashboard(): JSX.Element {
                     isOpen={installModal.open}
                     onClose={() => setInstallModal({ open: false, pkgs: [] })}
                     packages={installModal.pkgs}
+                    allPackages={packages}
                     libraries={libraries}
                     currentLibrary={activeLibraryPath}
                     onSuccess={(res: { installed: number, skipped: number, targetLib: string }) => {
