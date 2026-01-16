@@ -6,12 +6,10 @@
 
 # Changelog
 
-## [1.3.2] - 2026-01-15
+## [1.3.1] - 2026-01-15
 
 ### Fixed
 - **Critical**: Updater failed to restart application due to `.old` file renaming (App now detects and switches to new binary).
-
-## [1.3.1] - 2026-01-15
 
 ### Added
 - **Stability**: Implemented Global Error Boundary to catch crashes and offer "Factory Reset" recovery.
