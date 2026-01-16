@@ -170,7 +170,8 @@ const ContextMenu = ({ x, y, pkg, selectedCount = 0, onClose, onToggle, onOpenFo
                     onClick={() => {
                         onClose();
                         // Download directly
-                        const url = `/files/?path=${encodeURIComponent(pkg.filePath)}`;
+                        const token = localStorage.getItem('yavam_auth_token');
+                        const url = `/files/?path=${encodeURIComponent(pkg.filePath)}&token=${token || ''}`;
                         const a = document.createElement('a');
                         a.href = url;
                         a.download = pkg.fileName;
