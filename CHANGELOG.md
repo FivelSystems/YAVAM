@@ -10,6 +10,8 @@
 
 ### Added
 - **Stability**: Implemented Global Error Boundary to catch crashes and offer "Factory Reset" recovery.
+- **Library**: Added "Corrupt" package detection. Invalid/Corrupt `.var` files are now flagged with a red overlay and excluded from standard status counts.
+- **Library**: Added "Corrupt" filter to Sidebar.
 - **Maintenance**: Added comprehensive "Factory Reset" logic (Bootstrapped Restart + Full AppData Wipe).
 - **Keybinds**: Implemented Centralized Keybind System.
     - Added `CTRL+F` (Search), `TAB` (Sidebar), `CTRL+,` (Settings), `CTRL+A` (Select All).
