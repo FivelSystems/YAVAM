@@ -48,6 +48,7 @@ function Dashboard(): JSX.Element {
     const [highlightedPackageId, setHighlightedPackageId] = useState<string | null>(null);
 
 
+
     // Auth State
     const { isGuest } = useAuth();
 
@@ -2122,155 +2123,79 @@ function Dashboard(): JSX.Element {
                 addToast("Optimization Completed with Errors", 'warning');
             }
         }
-    }
-};
+    };
 
-const handleLocatePackage = (targetPkg: VarPackage) => {
-    // 1. Check visibility
-    const index = filteredPkgs.findIndex(p => p.filePath === targetPkg.filePath);
+    const handleLocatePackage = (targetPkg: VarPackage) => {
+        // 1. Check visibility
+        const index = filteredPkgs.findIndex(p => p.filePath === targetPkg.filePath);
 
-    if (index === -1) {
-        // It exists in global but not filtered?
-        if (packages.find(p => p.filePath === targetPkg.filePath)) {
-            addToast("Package is hidden by current filters/search", "warning");
-        } else {
-            addToast("Package not found", "error");
-        }
-        return;
-    }
-
-    // 2. Switch Page
-    const targetPage = Math.floor(index / itemsPerPage) + 1;
-    if (targetPage !== currentPage) {
-        setCurrentPage(targetPage);
-    }
-
-    // 3. Highlight & Scroll
-    setHighlightedPackageId(targetPkg.filePath);
-
-    setTimeout(() => {
-        const el = document.getElementById(`pkg-${targetPkg.filePath}`);
-        if (el) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-    }, 150);
-
-    setTimeout(() => setHighlightedPackageId(null), 2000);
-};
-
-const handleSidebarAction = async (action: 'enable-all' | 'disable-all' | 'resolve-all' | 'install-all', groupType: 'creator' | 'type' | 'status', key: string) => {
-    const targets = packages.filter(p => {
-        if (groupType === 'creator') return (p.meta.creator || "Unknown") === key;
-        if (groupType === 'type') {
-            if (p.categories && p.categories.length > 0) return p.categories.includes(key);
-            return (p.type || "Unknown") === key;
-        }
-        if (groupType === 'status') {
-            if (key === 'all') return true;
-            if (key === 'enabled') return p.isEnabled;
-            if (key === 'disabled') return !p.isEnabled;
-            if (key === 'missing-deps') return p.missingDeps && p.missingDeps.length > 0;
-            if (key === 'duplicates') return p.isDuplicate;
-            if (key === 'version-conflicts') return p.isDuplicate; // Alias
-            if (key === 'exact-duplicates') return p.isExactDuplicate;
-        }
-        return false;
-    });
-
-    if (targets.length === 0) return;
-
-    if (action === 'resolve-all') {
-        const mergePlan: { keep: VarPackage, delete: VarPackage[] }[] = [];
-        const resolveGroups: { id: string, packages: VarPackage[] }[] = [];
-        let totalMergeDelete = 0;
-        let totalResolveDisable = 0;
-
-        const normalize = (p: string) => p.replace(/[\\/]/g, '/').replace(/\/$/, '').toLowerCase();
-        const libPathClean = normalize(activeLibraryPath);
-
-        // First, regroup everything by "Identity" (Creator + PackageName)
-        // We need to look at ALL packages that match the identity of the target selection
-        const processedIdentities = new Set<string>();
-
-        // Collect all relevant packages from global list
-
-        const handleLocatePackage = (targetPkg: VarPackage) => {
-            // 1. Check visibility
-            const index = filteredPkgs.findIndex(p => p.filePath === targetPkg.filePath);
-
-            if (index === -1) {
-                // It exists in global but not filtered?
-                if (packages.find(p => p.filePath === targetPkg.filePath)) {
-                    addToast("Package is hidden by current filters/search", "warning");
-                } else {
-                    addToast("Package not found", "error");
-                }
-                return;
+        if (index === -1) {
+            // It exists in global but not filtered?
+            if (packages.find(p => p.filePath === targetPkg.filePath)) {
+                addToast("Package is hidden by current filters/search", "warning");
+            } else {
+                addToast("Package not found", "error");
             }
+            return;
+        }
 
-            // 2. Switch Page
-            const targetPage = Math.floor(index / itemsPerPage) + 1;
-            if (targetPage !== currentPage) {
-                setCurrentPage(targetPage);
+        // 2. Switch Page
+        const targetPage = Math.floor(index / itemsPerPage) + 1;
+        if (targetPage !== currentPage) {
+            setCurrentPage(targetPage);
+        }
+
+        // 3. Highlight & Scroll
+        setHighlightedPackageId(targetPkg.filePath);
+
+        setTimeout(() => {
+            const el = document.getElementById(`pkg-${targetPkg.filePath}`);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
+        }, 150);
 
-            // 3. Highlight & Scroll
-            setHighlightedPackageId(targetPkg.filePath);
-
-            setTimeout(() => {
-                const el = document.getElementById(`pkg-${targetPkg.filePath}`);
-                if (el) {
-                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-            }, 150);
-
-            setTimeout(() => setHighlightedPackageId(null), 2000);
-        };
+        setTimeout(() => setHighlightedPackageId(null), 2000);
+    };
 
 
-        const handleGetDependencyStatus = (depId: string): 'valid' | 'mismatch' | 'missing' | 'scanning' | 'system' => {
-            if (loading) return 'scanning';
+    const handleGetDependencyStatus = (depId: string): 'valid' | 'mismatch' | 'missing' | 'scanning' | 'system' => {
+        if (loading) return 'scanning';
 
-            const cleanDep = depId.toLowerCase();
-            if (cleanDep.startsWith("vam.core")) return 'system';
+        const cleanDep = depId.toLowerCase();
+        if (cleanDep.startsWith("vam.core")) return 'system';
 
-            // 1. Exact Match
-            const exact = packages.find(p => {
-                const id = `${p.meta.creator}.${p.meta.packageName}.${p.meta.version}`;
-                return id.toLowerCase() === cleanDep;
-            });
-            if (exact) return 'valid';
+        // 1. Exact Match
+        const exact = packages.find(p => {
+            const id = `${p.meta.creator}.${p.meta.packageName}.${p.meta.version}`;
+            return id.toLowerCase() === cleanDep;
+        });
+        if (exact) return 'valid';
 
-            // 2. Loose Match (Latest or Version Mismatch)
-            const parts = cleanDep.split('.');
-            if (parts.length >= 2) {
-                const creator = parts[0];
-                const pkgName = parts[1];
-                const hasAny = packages.some(p =>
-                    (p.meta.creator || "").toLowerCase() === creator &&
-                    (p.meta.packageName || "").toLowerCase() === pkgName
-                );
+        // 2. Loose Match (Latest or Version Mismatch)
+        const parts = cleanDep.split('.');
+        if (parts.length >= 2) {
+            const creator = parts[0];
+            const pkgName = parts[1];
+            const hasAny = packages.some(p =>
+                (p.meta.creator || "").toLowerCase() === creator &&
+                (p.meta.packageName || "").toLowerCase() === pkgName
+            );
 
-                if (hasAny) {
-                    // If original request was .latest -> Valid (Green)
-                    // Or if user considers any version "Valid" if .latest is not strictly enforced?
-                    // Requirement: "GREEN = Package found (exact match, unless .latest is specified...)"
-                    if (parts[2] && parts[2].toLowerCase() === 'latest') return 'valid';
+            if (hasAny) {
+                // If original request was .latest -> Valid (Green)
+                // Or if user considers any version "Valid" if .latest is not strictly enforced?
+                // Requirement: "GREEN = Package found (exact match, unless .latest is specified...)"
+                if (parts[2] && parts[2].toLowerCase() === 'latest') return 'valid';
 
-                    return 'mismatch';
-                }
+                return 'mismatch';
             }
+        }
 
-            return 'missing';
-        };
+        return 'missing';
+    };
 
 
-<<<<<<< HEAD
-        targets.forEach(t => {
-            const id = `${t.meta.creator}.${t.meta.packageName}`;
-            if (processedIdentities.has(id)) return;
-            processedIdentities.add(id);
-=======
     const handleSidebarAction = async (action: 'enable-all' | 'disable-all' | 'resolve-all' | 'install-all', groupType: 'creator' | 'type' | 'status', key: string) => {
         const targets = packages.filter(p => {
             if (groupType === 'creator') return (p.meta.creator || "Unknown") === key;
@@ -2289,634 +2214,663 @@ const handleSidebarAction = async (action: 'enable-all' | 'disable-all' | 'resol
             }
             return false;
         });
->>>>>>> dev
 
-            // Find ALL versions/dupes globally
-            const group = packages.filter(p => p.meta.creator === t.meta.creator && p.meta.packageName === t.meta.packageName);
+        if (targets.length === 0) return;
 
-            // Step 1: Detect Exact Duplicates
-            const exactGroups = new Map<string, VarPackage[]>();
-            group.forEach(p => {
-                const key = `${p.meta.version}.${p.size}`;
-                if (!exactGroups.has(key)) exactGroups.set(key, []);
-                exactGroups.get(key)?.push(p);
-            });
+        if (action === 'resolve-all') {
+            const mergePlan: { keep: VarPackage, delete: VarPackage[] }[] = [];
+            const resolveGroups: { id: string, packages: VarPackage[] }[] = [];
+            let totalMergeDelete = 0;
+            let totalResolveDisable = 0;
 
-            // For each set of exact dupes, pick a keeper and schedule others for deletion
-            const uniqueVersions: VarPackage[] = []; // This will form the list for version resolution
+            const normalize = (p: string) => p.replace(/[\\/]/g, '/').replace(/\/$/, '').toLowerCase();
+            const libPathClean = normalize(activeLibraryPath);
 
-            exactGroups.forEach((dupes) => {
-                if (dupes.length > 1) {
-                    // Sort to pick keeper (Root > Enabled > First)
-                    dupes.sort((a, b) => {
-                        const aPath = normalize(a.filePath);
-                        const bPath = normalize(b.filePath);
-                        const aParent = aPath.substring(0, Math.max(aPath.lastIndexOf('/'), aPath.lastIndexOf('\\')));
-                        const bParent = bPath.substring(0, Math.max(bPath.lastIndexOf('/'), bPath.lastIndexOf('\\')));
-                        const aInRoot = aParent === libPathClean;
-                        const bInRoot = bParent === libPathClean;
+            // First, regroup everything by "Identity" (Creator + PackageName)
+            // We need to look at ALL packages that match the identity of the target selection
+            const processedIdentities = new Set<string>();
 
-                        if (aInRoot && !bInRoot) return -1;
-                        if (!aInRoot && bInRoot) return 1;
-                        if (a.isEnabled !== b.isEnabled) return a.isEnabled ? -1 : 1;
-                        return 0;
+            // Collect all relevant packages from global list
+
+
+            targets.forEach(t => {
+                const id = `${t.meta.creator}.${t.meta.packageName}`;
+                if (processedIdentities.has(id)) return;
+                processedIdentities.add(id);
+
+                // Find ALL versions/dupes globally
+                const group = packages.filter(p => p.meta.creator === t.meta.creator && p.meta.packageName === t.meta.packageName);
+
+                // Step 1: Detect Exact Duplicates
+                const exactGroups = new Map<string, VarPackage[]>();
+                group.forEach(p => {
+                    const key = `${p.meta.version}.${p.size}`;
+                    if (!exactGroups.has(key)) exactGroups.set(key, []);
+                    exactGroups.get(key)?.push(p);
+                });
+
+                // For each set of exact dupes, pick a keeper and schedule others for deletion
+                const uniqueVersions: VarPackage[] = []; // This will form the list for version resolution
+
+                exactGroups.forEach((dupes) => {
+                    if (dupes.length > 1) {
+                        // Sort to pick keeper (Root > Enabled > First)
+                        dupes.sort((a, b) => {
+                            const aPath = normalize(a.filePath);
+                            const bPath = normalize(b.filePath);
+                            const aParent = aPath.substring(0, Math.max(aPath.lastIndexOf('/'), aPath.lastIndexOf('\\')));
+                            const bParent = bPath.substring(0, Math.max(bPath.lastIndexOf('/'), bPath.lastIndexOf('\\')));
+                            const aInRoot = aParent === libPathClean;
+                            const bInRoot = bParent === libPathClean;
+
+                            if (aInRoot && !bInRoot) return -1;
+                            if (!aInRoot && bInRoot) return 1;
+                            if (a.isEnabled !== b.isEnabled) return a.isEnabled ? -1 : 1;
+                            return 0;
+                        });
+
+                        const keep = dupes[0];
+                        const toDelete = dupes.slice(1);
+                        mergePlan.push({ keep, delete: toDelete });
+                        totalMergeDelete += toDelete.length;
+
+                        // The 'keep' represents this version in the next step
+                        uniqueVersions.push(keep);
+                    } else {
+                        uniqueVersions.push(dupes[0]);
+                    }
+                });
+
+                // Step 2: Resolve Version Conflicts among the unique versions
+                if (uniqueVersions.length > 1) {
+                    // Sort by version descending (Numeric)
+                    uniqueVersions.sort((a, b) => {
+                        const vA = parseInt(a.meta.version) || 0;
+                        const vB = parseInt(b.meta.version) || 0;
+                        return vB - vA;
                     });
 
-                    const keep = dupes[0];
-                    const toDelete = dupes.slice(1);
-                    mergePlan.push({ keep, delete: toDelete });
-                    totalMergeDelete += toDelete.length;
-
-                    // The 'keep' represents this version in the next step
-                    uniqueVersions.push(keep);
-                } else {
-                    uniqueVersions.push(dupes[0]);
+                    resolveGroups.push({
+                        id: id,
+                        packages: uniqueVersions
+                    });
+                    totalResolveDisable += uniqueVersions.length - 1;
                 }
             });
 
-            // Step 2: Resolve Version Conflicts among the unique versions
-            if (uniqueVersions.length > 1) {
-                // Sort by version descending (Numeric)
-                uniqueVersions.sort((a, b) => {
-                    const vA = parseInt(a.meta.version) || 0;
-                    const vB = parseInt(b.meta.version) || 0;
-                    return vB - vA;
-                });
-
-                resolveGroups.push({
-                    id: id,
-                    packages: uniqueVersions
-                });
-                totalResolveDisable += uniqueVersions.length - 1;
+            if (mergePlan.length === 0 && resolveGroups.length === 0) {
+                addToast("No solvable issues (merges or conflicts) found", 'info');
+                return;
             }
-        });
 
-        if (mergePlan.length === 0 && resolveGroups.length === 0) {
-            addToast("No solvable issues (merges or conflicts) found", 'info');
+            setOptimizationData({
+                open: true,
+                mergePlan: mergePlan,
+                resolveGroups: resolveGroups,
+                forceGlobalMode: true
+            });
             return;
         }
 
-        setOptimizationData({
-            open: true,
-            mergePlan: mergePlan,
-            resolveGroups: resolveGroups,
-            forceGlobalMode: true
-        });
-        return;
-    }
-
-    if (action === 'install-all') {
-        setInstallModal({ open: true, pkgs: targets });
-        return;
-    }
-
-    if (action === 'enable-all' || action === 'disable-all') {
-        setLoading(true);
-        let processed = 0;
-        // Filter targets that need changing
-        const toToggle = targets.filter(p => action === 'enable-all' ? !p.isEnabled : p.isEnabled);
-
-        // Initialize Progress Bar
-        setScanProgress({ current: 0, total: toToggle.length });
-
-        for (const p of toToggle) {
-            // We use silent=true to avoid spamming toasts
-            // We use merge=false (users should use "Merge" for handling collisions, this is just a quick toggle)
-            await togglePackage(p, false, true).catch(console.error);
-            processed++;
-            // Update Progress Bar
-            setScanProgress({ current: processed, total: toToggle.length });
+        if (action === 'install-all') {
+            setInstallModal({ open: true, pkgs: targets });
+            return;
         }
-        setLoading(false);
-        addToast(`${action === 'enable-all' ? 'Enabled' : 'Disabled'} ${processed} packages`, 'success');
-        return;
-    }
 
-    scanPackages();
-};
+        if (action === 'enable-all' || action === 'disable-all') {
+            setLoading(true);
+            let processed = 0;
+            // Filter targets that need changing
+            const toToggle = targets.filter(p => action === 'enable-all' ? !p.isEnabled : p.isEnabled);
 
-// Render Setup Wizard if needed
-if (needsSetup) {
-    return (
-        <>
-            {/* @ts-ignore */}
-            {window.go && <TitleBar />}
-            {/* @ts-ignore */}
-            <SetupWizard onComplete={(libPath?: string) => {
-                setNeedsSetup(false);
-                if (libPath) {
-                    handleAddLibrary(libPath);
-                }
-                // Fresh Install completed: Mark version as seen to skip What's New
-                // @ts-ignore
-                if (window.go) {
-                    // @ts-ignore
-                    window.go.main.App.GetAppVersion().then((v: string) => window.go.main.App.SetLastSeenVersion(v));
-                }
-            }} />
-        </>
-    );
-}
+            // Initialize Progress Bar
+            setScanProgress({ current: 0, total: toToggle.length });
 
-if (!activeLibraryPath) {
-    // @ts-ignore
-    if (!window.go) {
+            for (const p of toToggle) {
+                // We use silent=true to avoid spamming toasts
+                // We use merge=false (users should use "Merge" for handling collisions, this is just a quick toggle)
+                await togglePackage(p, false, true).catch(console.error);
+                processed++;
+                // Update Progress Bar
+                setScanProgress({ current: processed, total: toToggle.length });
+            }
+            setLoading(false);
+            addToast(`${action === 'enable-all' ? 'Enabled' : 'Disabled'} ${processed} packages`, 'success');
+            return;
+        }
+
+        scanPackages();
+    };
+
+    // Render Setup Wizard if needed
+    if (needsSetup) {
         return (
-            <div className="flex h-screen items-center justify-center bg-gray-900 text-white flex-col p-8 text-center space-y-6">
-                <div className="bg-red-500/10 p-6 rounded-full animate-pulse">
-                    <WifiOff size={48} className="text-red-500" />
-                </div>
-                <div>
-                    <h1 className="text-2xl font-bold mb-2">Waiting for Host Configuration</h1>
-                    <p className="text-gray-400 max-w-md mx-auto">
-                        The host application has not configured a library folder yet.
-                        Please return to the host machine and select a Repository folder.
-                    </p>
-                </div>
-                <button
-                    onClick={() => window.location.reload()}
-                    className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2 mx-auto"
-                >
-                    <RefreshCw size={18} /> Retry Connection
-                </button>
-            </div>
+            <>
+                {/* @ts-ignore */}
+                {window.go && <TitleBar />}
+                {/* @ts-ignore */}
+                <SetupWizard onComplete={(libPath?: string) => {
+                    setNeedsSetup(false);
+                    if (libPath) {
+                        handleAddLibrary(libPath);
+                    }
+                    // Fresh Install completed: Mark version as seen to skip What's New
+                    // @ts-ignore
+                    if (window.go) {
+                        // @ts-ignore
+                        window.go.main.App.GetAppVersion().then((v: string) => window.go.main.App.SetLastSeenVersion(v));
+                    }
+                }} />
+            </>
         );
     }
 
-
-}
-
-// (Redundant block removed)
-
-
-return (
-    <div className="flex flex-col h-[100dvh] bg-gray-900 text-white overflow-hidden">
-        {/* @ts-ignore */}
-        {window.go && <TitleBar />}
-        <div className="flex-1 flex overflow-hidden relative">
-            <DragDropOverlay onDrop={handleDrop} onWebUpload={handleWebDrop} />
-
-
-
-            <SettingsDialog
-                isOpen={isSettingsOpen}
-                onClose={() => setIsSettingsOpen(false)}
-                isGuest={isGuest}
-                isWeb={!window.go}
-                gridSize={gridSize}
-                setGridSize={setGridSize}
-                itemsPerPage={itemsPerPage}
-                setItemsPerPage={handleSetItemsPerPage}
-                minimizeOnClose={minimizeOnClose}
-                handleSetMinimize={handleSetMinimize}
-                censorThumbnails={censorThumbnails}
-                setCensorThumbnails={setCensorThumbnails}
-                blurAmount={blurAmount}
-                setBlurAmount={setBlurAmount}
-                hidePackageNames={hidePackageNames}
-                setHidePackageNames={setHidePackageNames}
-                hideCreatorNames={hideCreatorNames}
-                setHideCreatorNames={setHideCreatorNames}
-                serverEnabled={serverEnabled}
-                onToggleServer={handleToggleServer}
-                serverPort={serverPort}
-                setServerPort={setServerPort}
-                onStartServer={handleStartServer}
-                onStopServer={handleStopServer}
-                publicAccess={publicAccess}
-                onTogglePublicAccess={handleTogglePublicAccess}
-                localIP={localIP}
-                logs={serverLogs}
-                setLogs={setServerLogs}
-                maxToasts={maxToasts}
-                setMaxToasts={(val) => { setMaxToasts(val); localStorage.setItem('maxToasts', val.toString()); }}
-                authPollInterval={authPollInterval}
-                setAuthPollInterval={handleSetAuthPollInterval}
-                handleClearData={() => setConfirmationState({
-                    isOpen: true,
-                    title: "Reset Database",
-                    message: "Are you sure you want to clear all data? This will trigger a full re-scan.",
-                    confirmText: "Reset Everything",
-                    confirmStyle: "danger",
-                    onConfirm: async () => {
-                        // Ensure frontend state is wiped to prevent resurrection via migration logic
-                        localStorage.clear();
-
-                        // @ts-ignore
-                        if (window.go) {
-                            // @ts-ignore
-                            await window.go.main.App.ClearAppData();
-                            // @ts-ignore
-                            window.go.main.App.RestartApp();
-                        } else {
-                            window.location.reload();
-                        }
-                    }
-                })}
-                addToast={addToast}
-            />
-            <ConfirmationModal
-                isOpen={deleteConfirm.open}
-                onClose={() => setDeleteConfirm({ open: false, pkg: null })}
-                onConfirm={handleConfirmDelete}
-                title={deleteConfirm.count && deleteConfirm.count > 1 ? `Delete ${deleteConfirm.count} Packages?` : "Delete Package"}
-                message={deleteConfirm.count && deleteConfirm.count > 1
-                    ? `Are you sure you want to delete these ${deleteConfirm.count} items? They will be moved to the Recycle Bin.`
-                    : `Are you sure you want to delete "${deleteConfirm.pkg?.fileName}"? It will be moved to the Recycle Bin.`
-                }
-                confirmText="Delete"
-                confirmStyle="danger"
-            />
-
-            <ConfirmationModal
-                isOpen={collisionData.open}
-                onClose={() => setCollisionData({ open: false, pkg: null })}
-                onConfirm={handleConfirmCollision}
-                title="Package Collision"
-                message={`A package with the same name already exists in the destination. Since versions match, would you like to merge/overwrite it?`}
-                confirmText="Merge & Overwrite"
-                confirmStyle="primary"
-            />
-
-            <ConfirmationModal
-                isOpen={confirmationState.isOpen}
-                onClose={() => setConfirmationState(prev => ({ ...prev, isOpen: false }))}
-                onConfirm={confirmationState.onConfirm}
-                title={confirmationState.title}
-                message={confirmationState.message}
-                confirmText={confirmationState.confirmText || "Confirm"}
-                confirmStyle={confirmationState.confirmStyle || "primary"}
-            />
-
-            <OptimizationModal
-                isOpen={optimizationData.open}
-                onClose={() => setOptimizationData(prev => ({ ...prev, open: false }))}
-                onConfirm={handleConfirmOptimization}
-                mergePlan={optimizationData.mergePlan}
-                resolveGroups={optimizationData.resolveGroups}
-                targetPackage={optimizationData.targetPackage}
-            />
-
-            <OptimizationProgressModal
-                isOpen={optimizationProgress.open}
-                onClose={() => setOptimizationProgress(prev => ({ ...prev, open: false }))}
-                current={optimizationProgress.current}
-                total={optimizationProgress.total}
-                currentFile={optimizationProgress.currentFile}
-                spaceSaved={optimizationProgress.spaceSaved}
-                completed={optimizationProgress.completed}
-                errors={optimizationProgress.errors}
-            />
-
-
-            {/* Hide sidebar on small screens when not needed, or use CSS media queries */}
-            {/* Mobile Overlay Backdrop */}
-            <AnimatePresence>
-                {isSidebarOpen && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        onClick={() => setIsSidebarOpen(false)}
-                        className="fixed inset-0 bg-black/50 z-30 md:hidden"
-                    />
-                )}
-            </AnimatePresence>
-
-            {/* Sidebar Wrapper */}
-            <div className={clsx(
-                "z-40 transition-all duration-300 ease-in-out bg-gray-800 shrink-0 border-t border-gray-700",
-                "md:relative md:h-full",
-                // @ts-ignore
-                window.go ? "fixed left-0 top-8 bottom-0" : "fixed left-0 top-0 bottom-0",
-                "shadow-2xl md:shadow-none md:top-0 md:bottom-auto",
-                isSidebarOpen ? "w-64 translate-x-0" : "w-0 -translate-x-full md:translate-x-0 md:w-0 overflow-hidden"
-            )}>
-                <div className="w-64 h-full"> {/* Inner container to maintain width while parent animates */}
-                    <Sidebar
-                        packages={packages}
-                        currentFilter={currentFilter}
-                        setFilter={setCurrentFilter}
-                        selectedCreator={selectedCreator}
-                        onFilterCreator={setSelectedCreator}
-                        selectedType={selectedType}
-                        onFilterType={setSelectedType}
-                        creatorStatus={creatorStatus}
-                        typeStatus={typeStatus}
-                        onSidebarAction={handleSidebarAction}
-                        onOpenSettings={() => setIsSettingsOpen(true)}
-
-                        // Library Switcher Props
-                        libraries={libraries}
-                        currentLibIndex={activeLibIndex}
-                        onSelectLibrary={(index) => handleSwitchLibrary(index)}
-                        // Only allow management on Desktop
-                        // @ts-ignore
-                        onAddLibrary={window.go ? handleBrowseAndAdd : undefined}
-                        // @ts-ignore
-                        onRemoveLibrary={window.go ? (index) => handleRemoveLibrary(libraries[index]) : undefined}
-                        onReorderLibraries={handleReorderLibraries}
-                    />
-                </div>
-            </div>
-
-            <main className="flex-1 flex flex-col overflow-hidden w-full">
-                <header className="flex flex-col bg-gray-800 border-b border-gray-700 shadow-md z-30 shrink-0">
-                    <div className="flex flex-col md:flex-row md:justify-between items-center p-4 gap-4 md:gap-0">
-
-                        {/* Left Group: Toggle + Search */}
-                        <div className="flex items-center gap-3 w-full md:flex-1 md:min-w-0 md:mr-8">
-                            <button
-                                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                                className="p-2 -ml-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors shrink-0 md:hidden"
-                                title="Toggle Sidebar"
-                            >
-                                <PanelLeft size={20} />
-                            </button>
-                            {/* Desktop Toggle */}
-                            <button
-                                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                                className="hidden md:block p-2 -ml-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors shrink-0"
-                                title="Toggle Sidebar"
-                            >
-                                <PanelLeft size={20} />
-                            </button>
-
-                            <div className="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-lg w-full md:max-w-md">
-                                <Search size={18} className="text-gray-400 shrink-0" />
-                                <input
-                                    ref={searchInputRef}
-                                    className="bg-transparent outline-none w-full text-sm"
-                                    placeholder="Search packages..."
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                />
-
-                                {/* Desktop: Sorting Dropdown inside Search Bar (Hidden on Mobile) */}
-                                <div className="hidden md:block relative shrink-0">
-                                    <button
-                                        onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
-                                        className={clsx(
-                                            "p-1 rounded hover:bg-gray-600 text-gray-400 hover:text-white transition-colors",
-                                            isSortDropdownOpen && "bg-gray-600 text-white"
-                                        )}
-                                        title="Sort Options"
-                                    >
-                                        <ArrowUpDown size={16} />
-                                    </button>
-                                    <AnimatePresence>
-                                        {isSortDropdownOpen && (
-                                            <motion.div
-                                                initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                animate={{ opacity: 1, y: 0, scale: 1 }}
-                                                exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                className="absolute right-0 top-full mt-2 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden"
-                                            >
-                                                <div className="flex flex-col py-1">
-                                                    {[
-                                                        { id: 'name-asc', label: 'Name (A-Z)', icon: <ArrowUpAZ size={14} /> },
-                                                        { id: 'name-desc', label: 'Name (Z-A)', icon: <ArrowDownZA size={14} /> },
-                                                        { id: 'size-desc', label: 'Size (Largest)', icon: <ArrowDownWideNarrow size={14} /> },
-                                                        { id: 'size-asc', label: 'Size (Smallest)', icon: <ArrowUpNarrowWide size={14} /> },
-                                                        { id: 'date-newest', label: 'Date (Newest)', icon: <Calendar size={14} /> },
-                                                        { id: 'date-oldest', label: 'Date (Oldest)', icon: <Calendar size={14} /> },
-                                                    ].map(opt => (
-                                                        <button
-                                                            key={opt.id}
-                                                            onClick={() => {
-                                                                setSortMode(opt.id);
-                                                                setIsSortDropdownOpen(false);
-                                                            }}
-                                                            className={clsx(
-                                                                "flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-700 transition-colors",
-                                                                sortMode === opt.id ? "text-blue-400 bg-blue-400/10" : "text-gray-300"
-                                                            )}
-                                                        >
-                                                            {opt.icon}
-                                                            <span>{opt.label}</span>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </motion.div>
-                                        )}
-                                    </AnimatePresence>
-                                    {/* Backdrop */}
-                                    {isSortDropdownOpen && (
-                                        <div
-                                            className="fixed inset-0 z-40 bg-transparent"
-                                            onClick={() => setIsSortDropdownOpen(false)}
-                                        />
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Right Group: Actions (Mobile: Row below search, Desktop: Right aligned) */}
-                        <div className="flex items-center justify-between w-full md:w-auto md:justify-end gap-4 shrink-0">
-
-                            {/* Mobile-Only Group for Sorting/Tags/View */}
-                            <div className="flex items-center gap-2 md:hidden">
-                                {/* Sorting */}
-                                <div className="relative shrink-0">
-                                    <button
-                                        onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
-                                        className={clsx(
-                                            "p-2 rounded-lg bg-gray-700 text-gray-400 hover:text-white transition-colors",
-                                            isSortDropdownOpen && "bg-gray-600 text-white"
-                                        )}
-                                        title="Sort Options"
-                                    >
-                                        <ArrowUpDown size={18} />
-                                    </button>
-                                    <AnimatePresence>
-                                        {isSortDropdownOpen && (
-                                            <motion.div
-                                                initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                animate={{ opacity: 1, y: 0, scale: 1 }}
-                                                exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                className="absolute left-0 top-full mt-2 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden"
-                                                style={{ left: 0 }} // Align left on mobile
-                                            >
-                                                <div className="flex flex-col py-1">
-                                                    {[
-                                                        { id: 'name-asc', label: 'Name (A-Z)', icon: <ArrowUpAZ size={14} /> },
-                                                        { id: 'name-desc', label: 'Name (Z-A)', icon: <ArrowDownZA size={14} /> },
-                                                        { id: 'size-desc', label: 'Size (Largest)', icon: <ArrowDownWideNarrow size={14} /> },
-                                                        { id: 'size-asc', label: 'Size (Smallest)', icon: <ArrowUpNarrowWide size={14} /> },
-                                                        { id: 'date-newest', label: 'Date (Newest)', icon: <Calendar size={14} /> },
-                                                        { id: 'date-oldest', label: 'Date (Oldest)', icon: <Calendar size={14} /> },
-                                                    ].map(opt => (
-                                                        <button
-                                                            key={opt.id}
-                                                            onClick={() => {
-                                                                setSortMode(opt.id);
-                                                                setIsSortDropdownOpen(false);
-                                                            }}
-                                                            className={clsx(
-                                                                "flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-700 transition-colors",
-                                                                sortMode === opt.id ? "text-blue-400 bg-blue-400/10" : "text-gray-300"
-                                                            )}
-                                                        >
-                                                            {opt.icon}
-                                                            <span>{opt.label}</span>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            </motion.div>
-                                        )}
-                                    </AnimatePresence>
-                                    {isSortDropdownOpen && (
-                                        <div
-                                            className="fixed inset-0 z-40 bg-transparent"
-                                            onClick={() => setIsSortDropdownOpen(false)}
-                                        />
-                                    )}
-                                </div>
-
-                                <button
-                                    onClick={() => setIsTagsVisible(!isTagsVisible)}
-                                    className={clsx(
-                                        "p-2 rounded-lg bg-gray-700 transition-colors",
-                                        isTagsVisible ? "text-blue-400 bg-blue-400/10" : "text-gray-400 hover:text-white"
-                                    )}
-                                >
-                                    <Filter size={18} />
-                                </button>
-
-                                <div className="flex items-center gap-1 bg-gray-700 p-1 rounded-lg">
-                                    <button onClick={() => setViewMode('grid')} className={clsx("p-1.5 rounded", viewMode === 'grid' ? "bg-gray-600 text-white" : "text-gray-400")}><LayoutGrid size={18} /></button>
-                                    <button onClick={() => setViewMode('list')} className={clsx("p-1.5 rounded", viewMode === 'list' ? "bg-gray-600 text-white" : "text-gray-400")}><List size={18} /></button>
-                                </div>
-                            </div>
-
-                            {/* Desktop Only Controls */}
-                            <div className="hidden md:flex items-center gap-4">
-                                <button
-                                    onClick={() => setIsTagsVisible(!isTagsVisible)}
-                                    className={clsx(
-                                        "p-2 rounded-lg transition-colors",
-                                        isTagsVisible ? "text-blue-400 bg-blue-400/10" : "text-gray-400 hover:text-white hover:bg-gray-700"
-                                    )}
-                                    title="Toggle Tags"
-                                >
-                                    <Filter size={20} />
-                                </button>
-
-                                <div className="w-px h-6 bg-gray-700"></div>
-
-                                <div className="flex items-center gap-1 bg-gray-700 p-1 rounded-lg">
-                                    <button
-                                        onClick={() => setViewMode('grid')}
-                                        className={clsx("p-1.5 rounded transition-all", viewMode === 'grid' ? "bg-gray-600 text-white shadow" : "text-gray-400 hover:text-gray-200")}
-                                        title="Grid View"
-                                    >
-                                        <LayoutGrid size={18} />
-                                    </button>
-                                    <button
-                                        onClick={() => setViewMode('list')}
-                                        className={clsx("p-1.5 rounded transition-all", viewMode === 'list' ? "bg-gray-600 text-white shadow" : "text-gray-400 hover:text-gray-200")}
-                                        title="List View"
-                                    >
-                                        <List size={18} />
-                                    </button>
-                                </div>
-
-                                <div className="w-px h-6 bg-gray-700"></div>
-                            </div>
-
-                            {/* Progress & Refresh (Visible on both, but style differs) */}
-                            <div className="flex items-center gap-4 text-sm text-gray-400 ml-auto md:ml-0">
-                                {loading ? (
-                                    <>
-                                        <div className="md:hidden">
-                                            <ScanProgressBar current={scanProgress.current} total={scanProgress.total} variant="circular" />
-                                        </div>
-                                        <div className="hidden md:block">
-                                            <ScanProgressBar current={scanProgress.current} total={scanProgress.total} variant="linear" />
-                                        </div>
-                                    </>
-                                ) : (
-                                    <span className="hidden sm:inline">{filteredPkgs.length} packages found</span>
-                                )}
-                                <button
-                                    onClick={() => scanPackages()}
-                                    className="p-2 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors"
-                                    title="Refresh Packages"
-                                >
-                                    <RefreshCw size={20} className={loading ? "animate-spin" : ""} />
-                                </button>
-                            </div>
-                        </div>
+    if (!activeLibraryPath) {
+        // @ts-ignore
+        if (!window.go) {
+            return (
+                <div className="flex h-screen items-center justify-center bg-gray-900 text-white flex-col p-8 text-center space-y-6">
+                    <div className="bg-red-500/10 p-6 rounded-full animate-pulse">
+                        <WifiOff size={48} className="text-red-500" />
                     </div>
+                    <div>
+                        <h1 className="text-2xl font-bold mb-2">Waiting for Host Configuration</h1>
+                        <p className="text-gray-400 max-w-md mx-auto">
+                            The host application has not configured a library folder yet.
+                            Please return to the host machine and select a Repository folder.
+                        </p>
+                    </div>
+                    <button
+                        onClick={() => window.location.reload()}
+                        className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2 mx-auto"
+                    >
+                        <RefreshCw size={18} /> Retry Connection
+                    </button>
+                </div>
+            );
+        }
 
-                    {/* Force Restore Desktop Sorting inside Search Bar logic? 
+
+    }
+
+    // (Redundant block removed)
+
+
+    return (
+        <div className="flex flex-col h-[100dvh] bg-gray-900 text-white overflow-hidden">
+            {/* @ts-ignore */}
+            {window.go && <TitleBar />}
+            <div className="flex-1 flex overflow-hidden relative">
+                <DragDropOverlay onDrop={handleDrop} onWebUpload={handleWebDrop} />
+
+
+
+                <SettingsDialog
+                    isOpen={isSettingsOpen}
+                    onClose={() => setIsSettingsOpen(false)}
+                    isGuest={isGuest}
+                    isWeb={!window.go}
+                    gridSize={gridSize}
+                    setGridSize={setGridSize}
+                    itemsPerPage={itemsPerPage}
+                    setItemsPerPage={handleSetItemsPerPage}
+                    minimizeOnClose={minimizeOnClose}
+                    handleSetMinimize={handleSetMinimize}
+                    censorThumbnails={censorThumbnails}
+                    setCensorThumbnails={setCensorThumbnails}
+                    blurAmount={blurAmount}
+                    setBlurAmount={setBlurAmount}
+                    hidePackageNames={hidePackageNames}
+                    setHidePackageNames={setHidePackageNames}
+                    hideCreatorNames={hideCreatorNames}
+                    setHideCreatorNames={setHideCreatorNames}
+                    serverEnabled={serverEnabled}
+                    onToggleServer={handleToggleServer}
+                    serverPort={serverPort}
+                    setServerPort={setServerPort}
+                    onStartServer={handleStartServer}
+                    onStopServer={handleStopServer}
+                    publicAccess={publicAccess}
+                    onTogglePublicAccess={handleTogglePublicAccess}
+                    localIP={localIP}
+                    logs={serverLogs}
+                    setLogs={setServerLogs}
+                    maxToasts={maxToasts}
+                    setMaxToasts={(val) => { setMaxToasts(val); localStorage.setItem('maxToasts', val.toString()); }}
+                    authPollInterval={authPollInterval}
+                    setAuthPollInterval={handleSetAuthPollInterval}
+                    handleClearData={() => setConfirmationState({
+                        isOpen: true,
+                        title: "Reset Database",
+                        message: "Are you sure you want to clear all data? This will trigger a full re-scan.",
+                        confirmText: "Reset Everything",
+                        confirmStyle: "danger",
+                        onConfirm: async () => {
+                            // Ensure frontend state is wiped to prevent resurrection via migration logic
+                            localStorage.clear();
+
+                            // @ts-ignore
+                            if (window.go) {
+                                // @ts-ignore
+                                await window.go.main.App.ClearAppData();
+                                // @ts-ignore
+                                window.go.main.App.RestartApp();
+                            } else {
+                                window.location.reload();
+                            }
+                        }
+                    })}
+                    addToast={addToast}
+                />
+                <ConfirmationModal
+                    isOpen={deleteConfirm.open}
+                    onClose={() => setDeleteConfirm({ open: false, pkg: null })}
+                    onConfirm={handleConfirmDelete}
+                    title={deleteConfirm.count && deleteConfirm.count > 1 ? `Delete ${deleteConfirm.count} Packages?` : "Delete Package"}
+                    message={deleteConfirm.count && deleteConfirm.count > 1
+                        ? `Are you sure you want to delete these ${deleteConfirm.count} items? They will be moved to the Recycle Bin.`
+                        : `Are you sure you want to delete "${deleteConfirm.pkg?.fileName}"? It will be moved to the Recycle Bin.`
+                    }
+                    confirmText="Delete"
+                    confirmStyle="danger"
+                />
+
+                <ConfirmationModal
+                    isOpen={collisionData.open}
+                    onClose={() => setCollisionData({ open: false, pkg: null })}
+                    onConfirm={handleConfirmCollision}
+                    title="Package Collision"
+                    message={`A package with the same name already exists in the destination. Since versions match, would you like to merge/overwrite it?`}
+                    confirmText="Merge & Overwrite"
+                    confirmStyle="primary"
+                />
+
+                <ConfirmationModal
+                    isOpen={confirmationState.isOpen}
+                    onClose={() => setConfirmationState(prev => ({ ...prev, isOpen: false }))}
+                    onConfirm={confirmationState.onConfirm}
+                    title={confirmationState.title}
+                    message={confirmationState.message}
+                    confirmText={confirmationState.confirmText || "Confirm"}
+                    confirmStyle={confirmationState.confirmStyle || "primary"}
+                />
+
+                <OptimizationModal
+                    isOpen={optimizationData.open}
+                    onClose={() => setOptimizationData(prev => ({ ...prev, open: false }))}
+                    onConfirm={handleConfirmOptimization}
+                    mergePlan={optimizationData.mergePlan}
+                    resolveGroups={optimizationData.resolveGroups}
+                    targetPackage={optimizationData.targetPackage}
+                />
+
+                <OptimizationProgressModal
+                    isOpen={optimizationProgress.open}
+                    onClose={() => setOptimizationProgress(prev => ({ ...prev, open: false }))}
+                    current={optimizationProgress.current}
+                    total={optimizationProgress.total}
+                    currentFile={optimizationProgress.currentFile}
+                    spaceSaved={optimizationProgress.spaceSaved}
+                    completed={optimizationProgress.completed}
+                    errors={optimizationProgress.errors}
+                />
+
+
+                {/* Hide sidebar on small screens when not needed, or use CSS media queries */}
+                {/* Mobile Overlay Backdrop */}
+                <AnimatePresence>
+                    {isSidebarOpen && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setIsSidebarOpen(false)}
+                            className="fixed inset-0 bg-black/50 z-30 md:hidden"
+                        />
+                    )}
+                </AnimatePresence>
+
+                {/* Sidebar Wrapper */}
+                <div className={clsx(
+                    "z-40 transition-all duration-300 ease-in-out bg-gray-800 shrink-0 border-t border-gray-700",
+                    "md:relative md:h-full",
+                    // @ts-ignore
+                    window.go ? "fixed left-0 top-8 bottom-0" : "fixed left-0 top-0 bottom-0",
+                    "shadow-2xl md:shadow-none md:top-0 md:bottom-auto",
+                    isSidebarOpen ? "w-64 translate-x-0" : "w-0 -translate-x-full md:translate-x-0 md:w-0 overflow-hidden"
+                )}>
+                    <div className="w-64 h-full"> {/* Inner container to maintain width while parent animates */}
+                        <Sidebar
+                            packages={packages}
+                            currentFilter={currentFilter}
+                            setFilter={setCurrentFilter}
+                            selectedCreator={selectedCreator}
+                            onFilterCreator={setSelectedCreator}
+                            selectedType={selectedType}
+                            onFilterType={setSelectedType}
+                            creatorStatus={creatorStatus}
+                            typeStatus={typeStatus}
+                            onSidebarAction={handleSidebarAction}
+                            onOpenSettings={() => setIsSettingsOpen(true)}
+
+                            // Library Switcher Props
+                            libraries={libraries}
+                            currentLibIndex={activeLibIndex}
+                            onSelectLibrary={(index) => handleSwitchLibrary(index)}
+                            // Only allow management on Desktop
+                            // @ts-ignore
+                            onAddLibrary={window.go ? handleBrowseAndAdd : undefined}
+                            // @ts-ignore
+                            onRemoveLibrary={window.go ? (index) => handleRemoveLibrary(libraries[index]) : undefined}
+                            onReorderLibraries={handleReorderLibraries}
+                        />
+                    </div>
+                </div>
+
+                <main className="flex-1 flex flex-col overflow-hidden w-full">
+                    <header className="flex flex-col bg-gray-800 border-b border-gray-700 shadow-md z-30 shrink-0">
+                        <div className="flex flex-col md:flex-row md:justify-between items-center p-4 gap-4 md:gap-0">
+
+                            {/* Left Group: Toggle + Search */}
+                            <div className="flex items-center gap-3 w-full md:flex-1 md:min-w-0 md:mr-8">
+                                <button
+                                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                                    className="p-2 -ml-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors shrink-0 md:hidden"
+                                    title="Toggle Sidebar"
+                                >
+                                    <PanelLeft size={20} />
+                                </button>
+                                {/* Desktop Toggle */}
+                                <button
+                                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                                    className="hidden md:block p-2 -ml-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors shrink-0"
+                                    title="Toggle Sidebar"
+                                >
+                                    <PanelLeft size={20} />
+                                </button>
+
+                                <div className="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-lg w-full md:max-w-md">
+                                    <Search size={18} className="text-gray-400 shrink-0" />
+                                    <input
+                                        ref={searchInputRef}
+                                        className="bg-transparent outline-none w-full text-sm"
+                                        placeholder="Search packages..."
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                    />
+
+                                    {/* Desktop: Sorting Dropdown inside Search Bar (Hidden on Mobile) */}
+                                    <div className="hidden md:block relative shrink-0">
+                                        <button
+                                            onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
+                                            className={clsx(
+                                                "p-1 rounded hover:bg-gray-600 text-gray-400 hover:text-white transition-colors",
+                                                isSortDropdownOpen && "bg-gray-600 text-white"
+                                            )}
+                                            title="Sort Options"
+                                        >
+                                            <ArrowUpDown size={16} />
+                                        </button>
+                                        <AnimatePresence>
+                                            {isSortDropdownOpen && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                    className="absolute right-0 top-full mt-2 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden"
+                                                >
+                                                    <div className="flex flex-col py-1">
+                                                        {[
+                                                            { id: 'name-asc', label: 'Name (A-Z)', icon: <ArrowUpAZ size={14} /> },
+                                                            { id: 'name-desc', label: 'Name (Z-A)', icon: <ArrowDownZA size={14} /> },
+                                                            { id: 'size-desc', label: 'Size (Largest)', icon: <ArrowDownWideNarrow size={14} /> },
+                                                            { id: 'size-asc', label: 'Size (Smallest)', icon: <ArrowUpNarrowWide size={14} /> },
+                                                            { id: 'date-newest', label: 'Date (Newest)', icon: <Calendar size={14} /> },
+                                                            { id: 'date-oldest', label: 'Date (Oldest)', icon: <Calendar size={14} /> },
+                                                        ].map(opt => (
+                                                            <button
+                                                                key={opt.id}
+                                                                onClick={() => {
+                                                                    setSortMode(opt.id);
+                                                                    setIsSortDropdownOpen(false);
+                                                                }}
+                                                                className={clsx(
+                                                                    "flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-700 transition-colors",
+                                                                    sortMode === opt.id ? "text-blue-400 bg-blue-400/10" : "text-gray-300"
+                                                                )}
+                                                            >
+                                                                {opt.icon}
+                                                                <span>{opt.label}</span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+                                        {/* Backdrop */}
+                                        {isSortDropdownOpen && (
+                                            <div
+                                                className="fixed inset-0 z-40 bg-transparent"
+                                                onClick={() => setIsSortDropdownOpen(false)}
+                                            />
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Right Group: Actions (Mobile: Row below search, Desktop: Right aligned) */}
+                            <div className="flex items-center justify-between w-full md:w-auto md:justify-end gap-4 shrink-0">
+
+                                {/* Mobile-Only Group for Sorting/Tags/View */}
+                                <div className="flex items-center gap-2 md:hidden">
+                                    {/* Sorting */}
+                                    <div className="relative shrink-0">
+                                        <button
+                                            onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
+                                            className={clsx(
+                                                "p-2 rounded-lg bg-gray-700 text-gray-400 hover:text-white transition-colors",
+                                                isSortDropdownOpen && "bg-gray-600 text-white"
+                                            )}
+                                            title="Sort Options"
+                                        >
+                                            <ArrowUpDown size={18} />
+                                        </button>
+                                        <AnimatePresence>
+                                            {isSortDropdownOpen && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                    className="absolute left-0 top-full mt-2 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden"
+                                                    style={{ left: 0 }} // Align left on mobile
+                                                >
+                                                    <div className="flex flex-col py-1">
+                                                        {[
+                                                            { id: 'name-asc', label: 'Name (A-Z)', icon: <ArrowUpAZ size={14} /> },
+                                                            { id: 'name-desc', label: 'Name (Z-A)', icon: <ArrowDownZA size={14} /> },
+                                                            { id: 'size-desc', label: 'Size (Largest)', icon: <ArrowDownWideNarrow size={14} /> },
+                                                            { id: 'size-asc', label: 'Size (Smallest)', icon: <ArrowUpNarrowWide size={14} /> },
+                                                            { id: 'date-newest', label: 'Date (Newest)', icon: <Calendar size={14} /> },
+                                                            { id: 'date-oldest', label: 'Date (Oldest)', icon: <Calendar size={14} /> },
+                                                        ].map(opt => (
+                                                            <button
+                                                                key={opt.id}
+                                                                onClick={() => {
+                                                                    setSortMode(opt.id);
+                                                                    setIsSortDropdownOpen(false);
+                                                                }}
+                                                                className={clsx(
+                                                                    "flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-700 transition-colors",
+                                                                    sortMode === opt.id ? "text-blue-400 bg-blue-400/10" : "text-gray-300"
+                                                                )}
+                                                            >
+                                                                {opt.icon}
+                                                                <span>{opt.label}</span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+                                        {isSortDropdownOpen && (
+                                            <div
+                                                className="fixed inset-0 z-40 bg-transparent"
+                                                onClick={() => setIsSortDropdownOpen(false)}
+                                            />
+                                        )}
+                                    </div>
+
+                                    <button
+                                        onClick={() => setIsTagsVisible(!isTagsVisible)}
+                                        className={clsx(
+                                            "p-2 rounded-lg bg-gray-700 transition-colors",
+                                            isTagsVisible ? "text-blue-400 bg-blue-400/10" : "text-gray-400 hover:text-white"
+                                        )}
+                                    >
+                                        <Filter size={18} />
+                                    </button>
+
+                                    <div className="flex items-center gap-1 bg-gray-700 p-1 rounded-lg">
+                                        <button onClick={() => setViewMode('grid')} className={clsx("p-1.5 rounded", viewMode === 'grid' ? "bg-gray-600 text-white" : "text-gray-400")}><LayoutGrid size={18} /></button>
+                                        <button onClick={() => setViewMode('list')} className={clsx("p-1.5 rounded", viewMode === 'list' ? "bg-gray-600 text-white" : "text-gray-400")}><List size={18} /></button>
+                                    </div>
+                                </div>
+
+                                {/* Desktop Only Controls */}
+                                <div className="hidden md:flex items-center gap-4">
+                                    <button
+                                        onClick={() => setIsTagsVisible(!isTagsVisible)}
+                                        className={clsx(
+                                            "p-2 rounded-lg transition-colors",
+                                            isTagsVisible ? "text-blue-400 bg-blue-400/10" : "text-gray-400 hover:text-white hover:bg-gray-700"
+                                        )}
+                                        title="Toggle Tags"
+                                    >
+                                        <Filter size={20} />
+                                    </button>
+
+                                    <div className="w-px h-6 bg-gray-700"></div>
+
+                                    <div className="flex items-center gap-1 bg-gray-700 p-1 rounded-lg">
+                                        <button
+                                            onClick={() => setViewMode('grid')}
+                                            className={clsx("p-1.5 rounded transition-all", viewMode === 'grid' ? "bg-gray-600 text-white shadow" : "text-gray-400 hover:text-gray-200")}
+                                            title="Grid View"
+                                        >
+                                            <LayoutGrid size={18} />
+                                        </button>
+                                        <button
+                                            onClick={() => setViewMode('list')}
+                                            className={clsx("p-1.5 rounded transition-all", viewMode === 'list' ? "bg-gray-600 text-white shadow" : "text-gray-400 hover:text-gray-200")}
+                                            title="List View"
+                                        >
+                                            <List size={18} />
+                                        </button>
+                                    </div>
+
+                                    <div className="w-px h-6 bg-gray-700"></div>
+                                </div>
+
+                                {/* Progress & Refresh (Visible on both, but style differs) */}
+                                <div className="flex items-center gap-4 text-sm text-gray-400 ml-auto md:ml-0">
+                                    {loading ? (
+                                        <>
+                                            <div className="md:hidden">
+                                                <ScanProgressBar current={scanProgress.current} total={scanProgress.total} variant="circular" />
+                                            </div>
+                                            <div className="hidden md:block">
+                                                <ScanProgressBar current={scanProgress.current} total={scanProgress.total} variant="linear" />
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <span className="hidden sm:inline">{filteredPkgs.length} packages found</span>
+                                    )}
+                                    <button
+                                        onClick={() => scanPackages()}
+                                        className="p-2 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors"
+                                        title="Refresh Packages"
+                                    >
+                                        <RefreshCw size={20} className={loading ? "animate-spin" : ""} />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Force Restore Desktop Sorting inside Search Bar logic? 
                             I'll modify the Search Bar block above in a 2nd pass or do it all here. 
                             I'll inject the Desktop Sorting Button back into the search bar container, visible only on md.
                         */}
 
-                    {/* Tags Filter Bar */}
-                    <AnimatePresence>
-                        {isTagsVisible && availableTags.length > 0 && (
-                            <motion.div
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                className="overflow-hidden"
-                            >
-                                <div className="relative group px-4 pb-3 flex items-center gap-2">
-                                    {/* Tag Search Toggle */}
-                                    <div className={clsx(
-                                        "flex items-center bg-gray-700 rounded-full transition-all duration-300 ease-in-out overflow-hidden shrink-0",
-                                        isTagSearchOpen ? "w-48 px-3 py-1" : "w-8 h-8 justify-center cursor-pointer hover:bg-gray-600"
-                                    )} onClick={() => !isTagSearchOpen && setIsTagSearchOpen(true)}>
-                                        <Search size={14} className="text-gray-400 shrink-0" />
-                                        <input
-                                            className={clsx(
-                                                "bg-transparent outline-none text-xs text-white ml-2 w-full",
-                                                !isTagSearchOpen && "hidden"
+                        {/* Tags Filter Bar */}
+                        <AnimatePresence>
+                            {isTagsVisible && availableTags.length > 0 && (
+                                <motion.div
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: 'auto', opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    className="overflow-hidden"
+                                >
+                                    <div className="relative group px-4 pb-3 flex items-center gap-2">
+                                        {/* Tag Search Toggle */}
+                                        <div className={clsx(
+                                            "flex items-center bg-gray-700 rounded-full transition-all duration-300 ease-in-out overflow-hidden shrink-0",
+                                            isTagSearchOpen ? "w-48 px-3 py-1" : "w-8 h-8 justify-center cursor-pointer hover:bg-gray-600"
+                                        )} onClick={() => !isTagSearchOpen && setIsTagSearchOpen(true)}>
+                                            <Search size={14} className="text-gray-400 shrink-0" />
+                                            <input
+                                                className={clsx(
+                                                    "bg-transparent outline-none text-xs text-white ml-2 w-full",
+                                                    !isTagSearchOpen && "hidden"
+                                                )}
+                                                placeholder="Filter tags..."
+                                                value={tagSearchQuery}
+                                                onChange={(e) => setTagSearchQuery(e.target.value)}
+                                                onBlur={() => !tagSearchQuery && setIsTagSearchOpen(false)}
+                                                autoFocus={isTagSearchOpen}
+                                            />
+                                            {isTagSearchOpen && tagSearchQuery && (
+                                                <button onClick={(e) => { e.stopPropagation(); setTagSearchQuery(''); }} className="ml-1 text-gray-400 hover:text-white">
+                                                    <X size={12} />
+                                                </button>
                                             )}
-                                            placeholder="Filter tags..."
-                                            value={tagSearchQuery}
-                                            onChange={(e) => setTagSearchQuery(e.target.value)}
-                                            onBlur={() => !tagSearchQuery && setIsTagSearchOpen(false)}
-                                            autoFocus={isTagSearchOpen}
-                                        />
-                                        {isTagSearchOpen && tagSearchQuery && (
-                                            <button onClick={(e) => { e.stopPropagation(); setTagSearchQuery(''); }} className="ml-1 text-gray-400 hover:text-white">
-                                                <X size={12} />
-                                            </button>
-                                        )}
-                                    </div>
+                                        </div>
 
-<<<<<<< HEAD
-<div className="flex gap-2 overflow-hidden flex-1 mask-linear-fade pr-8">
-    {[
-        ...selectedTags,
-        ...availableTags.filter(t =>
-            !selectedTags.includes(t) &&
-            t.toLowerCase().includes(tagSearchQuery.toLowerCase())
-        )
-    ].map(tag => {
-        const isSelected = selectedTags.includes(tag);
-        return (
-            <button
-                key={tag}
-                onClick={() => setSelectedTags(prev =>
-                    isSelected ? prev.filter(t => t !== tag) : [...prev, tag]
-                )}
-                className={clsx(
-                    "px-3 py-1 text-xs rounded-full border transition-colors whitespace-nowrap",
-                    isSelected
-                        ? "bg-blue-600 border-blue-500 text-white"
-                        : "bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600 hover:text-white"
-                )}
-            >
-                {tag}
-            </button>
-        );
-    })}
-</div>
-=======
+                                        <div className="flex gap-2 overflow-hidden flex-1 mask-linear-fade pr-8">
+                                            {[
+                                                ...selectedTags,
+                                                ...availableTags.filter(t =>
+                                                    !selectedTags.includes(t) &&
+                                                    t.toLowerCase().includes(tagSearchQuery.toLowerCase())
+                                                )
+                                            ].map(tag => {
+                                                const isSelected = selectedTags.includes(tag);
+                                                return (
+                                                    <button
+                                                        key={tag}
+                                                        onClick={() => setSelectedTags(prev =>
+                                                            isSelected ? prev.filter(t => t !== tag) : [...prev, tag]
+                                                        )}
+                                                        className={clsx(
+                                                            "px-3 py-1 text-xs rounded-full border transition-colors whitespace-nowrap",
+                                                            isSelected
+                                                                ? "bg-blue-600 border-blue-500 text-white"
+                                                                : "bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600 hover:text-white"
+                                                        )}
+                                                    >
+                                                        {tag}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {/* Fade Out Effect */}
+                                        <div className="absolute right-0 top-0 bottom-3 w-16 bg-gradient-to-l from-gray-800 to-transparent pointer-events-none"></div>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </header>
+
                     <div className="flex-1 flex overflow-hidden">
                         <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
                             {/* CardGrid Container - Added padding bottom for absolute footer */}
@@ -2938,49 +2892,20 @@ return (
                                     highlightedPackageId={highlightedPackageId}
                                 />
                             </div>
->>>>>>> dev
 
-{/* Fade Out Effect */ }
-<div className="absolute right-0 top-0 bottom-3 w-16 bg-gradient-to-l from-gray-800 to-transparent pointer-events-none"></div>
-                                </div >
-                            </motion.div >
-                        )}
-                    </AnimatePresence >
-                </header >
+                            {/* Pagination Footer - Premium Glassmorphism Floating Bar */}
+                            {filteredPkgs.length > itemsPerPage && (
+                                <div className="absolute bottom-0 left-0 right-0 p-3 bg-gray-900/80 backdrop-blur-md border-t border-white/10 z-20 shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
+                                    <Pagination
+                                        currentPage={currentPage}
+                                        totalItems={filteredPkgs.length}
+                                        itemsPerPage={itemsPerPage}
+                                        onChange={setCurrentPage}
+                                    />
+                                </div>
+                            )}
+                        </div>
 
-    <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
-            {/* CardGrid Container - Added padding bottom for absolute footer */}
-            <div className="flex-1 overflow-auto p-4 pb-24 custom-scrollbar">
-                <CardGrid
-                    packages={filteredPkgs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)}
-                    currentPath={activeLibraryPath}
-                    totalCount={packages.length}
-                    onContextMenu={handleContextMenu}
-                    onSelect={handlePackageClick}
-                    selectedPkgId={selectedPackage?.filePath}
-                    selectedIds={selectedIds}
-                    viewMode={viewMode}
-                    gridSize={gridSize}
-                    censorThumbnails={censorThumbnails}
-                    blurAmount={blurAmount}
-                    hidePackageNames={censorThumbnails && hidePackageNames}
-                    hideCreatorNames={censorThumbnails && hideCreatorNames}
-                    highlightedPackageId={highlightedPackageId}
-                />
-            </div>
-
-<<<<<<< HEAD
-{/* Pagination Footer - Premium Glassmorphism Floating Bar */ }
-{
-    filteredPkgs.length > itemsPerPage && (
-        <div className="absolute bottom-0 left-0 right-0 p-3 bg-gray-900/80 backdrop-blur-md border-t border-white/10 z-20 shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
-            <Pagination
-                currentPage={currentPage}
-                totalItems={filteredPkgs.length}
-                itemsPerPage={itemsPerPage}
-                onChange={setCurrentPage}
-=======
                         <AnimatePresence>
                             {(selectedPackage && isDetailsPanelOpen) && (
                                 <RightSidebar
@@ -3052,14 +2977,54 @@ return (
                                     onTitleClick={() => selectedPackage && handleLocatePackage(selectedPackage)}
                                     getDependencyStatus={handleGetDependencyStatus}
                                     selectedCreator={selectedCreator}
->>>>>>> dev
-            />
-        </div>
-<<<<<<< HEAD
-    )
-}
-                    </div >
-=======
+                                />
+                            )}
+                        </AnimatePresence>
+                    </div>
+                </main>
+
+                {/* Context Menu */}
+                {contextMenu.open && (
+                    <ContextMenu
+                        x={contextMenu.x}
+                        y={contextMenu.y}
+                        pkg={contextMenu.pkg}
+                        selectedCount={selectedIds.size}
+                        onClose={() => setContextMenu({ ...contextMenu, open: false })}
+                        onToggle={handleBulkToggle}
+                        onOpenFolder={handleOpenFolder}
+                        onDownload={(pkg) => {
+                            // Install Logic
+                            // If multiple selected, install all.
+                            const targets = selectedIds.size > 1 ? packages.filter(p => selectedIds.has(p.filePath)) : [pkg];
+                            setInstallModal({ open: true, pkgs: targets });
+                        }}
+                        onCopyPath={handleCopyPath}
+                        onCopyFile={handleCopyFile}
+                        onCutFile={handleCutFile}
+                        onDelete={handleDeleteClick}
+                        onMerge={(pkg) => handleInstantMerge(pkg, false)}
+                        onMergeInPlace={(pkg) => handleInstantMerge(pkg, true)}
+                        onResolve={handleSingleResolve}
+                    />
+                )}
+
+                {/* Cancellation Modal */}
+                <AnimatePresence>
+                    {isCancelling && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+                        >
+                            <div className="bg-gray-800 border border-gray-700 rounded-xl p-8 flex flex-col items-center gap-4 shadow-2xl">
+                                <div className="animate-spin text-blue-500">
+                                    <RefreshCw size={48} />
+                                </div>
+                                <h3 className="text-xl font-bold text-white">Cancelling Scan...</h3>
+                                <p className="text-gray-400 text-sm">Please wait while we stop the current process.</p>
+                            </div>
                         </motion.div>
                     )}
                 </AnimatePresence>
@@ -3118,10 +3083,10 @@ return (
                     isOpen={isUploadModalOpen}
                     onClose={() => setIsUploadModalOpen(false)}
                     initialFiles={uploadQueue}
-                    onAppendFiles={(_: any) => setUploadQueue([])} // We clear initial buffer logic if needed, or append? The modal handles its own queue usually, initialFiles is just seeder.
+                    onAppendFiles={(_: any) => setUploadQueue([])} // We clear initial buffer logic if needed, or append? The modal handles its own queue usually, initialFiles is just seeder. 
                     // Actually UploadModal maintains its own queue. initialFiles adds to it on mount/change.
                     // We should clear our local queue after passing it?
-                    // logic: onAppendFiles (if used by modal)
+                    // logic: onAppendFiles (if used by modal) 
                     libraries={libraries}
                     initialLibrary={activeLibraryPath}
                     onSuccess={() => {
@@ -3133,191 +3098,16 @@ return (
 
                 {/* Toasts Container - Lifted to avoid Pagination (bottom-20) */}
                 <div className="fixed bottom-20 right-4 z-50 flex flex-col items-end pointer-events-none">
->>>>>>> dev
 
-    <AnimatePresence>
-        {(selectedPackage && isDetailsPanelOpen) && (
-            <RightSidebar
-                pkg={selectedPackage}
-                onClose={() => { setIsDetailsPanelOpen(false); setSelectedPackage(null); setSelectedIds(new Set()); }}
-                onResolve={handleSingleResolve}
-                activeTab={activeRightSidebarTab}
-                onTabChange={handleRightTabChange}
-                onFilterByCreator={(creator) => {
-                    if (selectedCreator === creator && currentFilter === 'creator') {
-                        setSelectedCreator(null);
-                        setCurrentFilter('all');
-                    } else {
-                        setSelectedCreator(creator);
-                        setCurrentFilter('creator');
-                    }
-                    // Sidebar remains open as requested
-                }}
-                onDependencyClick={(depId) => {
-                    // 1. Try exact match
-                    let found = packages.find(p => {
-                        const id = `${p.meta.creator}.${p.meta.packageName}.${p.meta.version}`;
-                        return id.toLowerCase() === depId.toLowerCase();
-                    });
-
-                    // 2. Try loose match
-                    if (!found) {
-                        const parts = depId.split('.');
-                        if (parts.length >= 2) {
-                            const baseId = `${parts[0]}.${parts[1]}`.toLowerCase();
-                            found = packages.find(p => {
-                                const pId = `${p.meta.creator}.${p.meta.packageName}`;
-                                return pId.toLowerCase() === baseId;
-                            });
-                        }
-                    }
-
-                    // 3. System check
-                    if (!found && depId.toLowerCase().startsWith("vam.core")) {
-                        addToast(`System Dependency: ${depId}`, "info");
-                        return;
-                    }
-
-                    if (found) {
-                        handleLocatePackage(found);
-                    } else {
-                        addToast(`Package not found in library: ${depId}`, "error");
-                    }
-                }}
-                onTitleClick={() => selectedPackage && handleLocatePackage(selectedPackage)}
-                selectedCreator={selectedCreator}
-            />
-        )}
-    </AnimatePresence>
-                </div >
-            </main >
-
-    {/* Context Menu */ }
-{
-    contextMenu.open && (
-        <ContextMenu
-            x={contextMenu.x}
-            y={contextMenu.y}
-            pkg={contextMenu.pkg}
-            selectedCount={selectedIds.size}
-            onClose={() => setContextMenu({ ...contextMenu, open: false })}
-            onToggle={handleBulkToggle}
-            onOpenFolder={handleOpenFolder}
-            onDownload={(pkg) => {
-                // Install Logic
-                // If multiple selected, install all.
-                const targets = selectedIds.size > 1 ? packages.filter(p => selectedIds.has(p.filePath)) : [pkg];
-                setInstallModal({ open: true, pkgs: targets });
-            }}
-            onCopyPath={handleCopyPath}
-            onCopyFile={handleCopyFile}
-            onCutFile={handleCutFile}
-            onDelete={handleDeleteClick}
-            onMerge={(pkg) => handleInstantMerge(pkg, false)}
-            onMergeInPlace={(pkg) => handleInstantMerge(pkg, true)}
-            onResolve={handleSingleResolve}
-        />
-    )
-}
-
-{/* Cancellation Modal */ }
-<AnimatePresence>
-    {isCancelling && (
-        <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
-        >
-            <div className="bg-gray-800 border border-gray-700 rounded-xl p-8 flex flex-col items-center gap-4 shadow-2xl">
-                <div className="animate-spin text-blue-500">
-                    <RefreshCw size={48} />
+                    <AnimatePresence>
+                        {toasts.map(toast => (
+                            <Toast key={toast.id} toast={toast} onRemove={removeToast} />
+                        ))}
+                    </AnimatePresence>
                 </div>
-                <h3 className="text-xl font-bold text-white">Cancelling Scan...</h3>
-                <p className="text-gray-400 text-sm">Please wait while we stop the current process.</p>
             </div>
-        </motion.div>
-    )}
-</AnimatePresence>
-
-
-
-
-
-
-{/* Install Modal */ }
-            <InstallPackageModal
-                isOpen={installModal.open}
-                onClose={() => setInstallModal({ open: false, pkgs: [] })}
-                packages={installModal.pkgs}
-                libraries={libraries}
-                currentLibrary={activeLibraryPath}
-                onSuccess={(res: { installed: number, skipped: number, targetLib: string }) => {
-                    setInstallModal({ open: false, pkgs: [] });
-
-                    let msg = `Installed ${res.installed} packages`;
-                    if (res.skipped > 0) msg += ` (${res.skipped} skipped)`;
-                    addToast(msg, 'success');
-
-                    // Refresh if we installed to CURRENT library
-                    if (res.targetLib === activeLibraryPath) {
-                        scanPackages(true); // Keep Page
-                    } else {
-                        // If installed to a different library, switch to it if it exists
-                        const idx = libraries.indexOf(res.targetLib);
-                        if (idx !== -1) handleSwitchLibrary(idx);
-                    }
-                }}
-            />
-
-            <WhatsNewModal
-                isOpen={whatsNew.open}
-                onClose={() => {
-                    setWhatsNew(prev => ({ ...prev, open: false }));
-                    // @ts-ignore
-                    if (window.go) window.go.main.App.SetLastSeenVersion(whatsNew.version);
-                }}
-                content={whatsNew.content}
-                version={whatsNew.version}
-            />
-
-            <UpgradeModal
-                open={showUpdateModal}
-                version={updateInfo ? updateInfo.version : ''}
-                onUpdate={handleUpdate}
-                onCancel={() => setShowUpdateModal(false)}
-                downloading={isUpdating}
-            />
-
-            <UploadModal
-                isOpen={isUploadModalOpen}
-                onClose={() => setIsUploadModalOpen(false)}
-                initialFiles={uploadQueue}
-                onAppendFiles={(_: any) => setUploadQueue([])} // We clear initial buffer logic if needed, or append? The modal handles its own queue usually, initialFiles is just seeder. 
-                // Actually UploadModal maintains its own queue. initialFiles adds to it on mount/change.
-                // We should clear our local queue after passing it?
-                // logic: onAppendFiles (if used by modal) 
-                libraries={libraries}
-                initialLibrary={activeLibraryPath}
-                onSuccess={() => {
-                    addToast("Upload complete", "success");
-                    scanPackages(true); // Keep page
-                    setUploadQueue([]); // Clear queue
-                }}
-            />
-
-{/* Toasts Container - Lifted to avoid Pagination (bottom-20) */ }
-<div className="fixed bottom-20 right-4 z-50 flex flex-col items-end pointer-events-none">
-
-    <AnimatePresence>
-        {toasts.map(toast => (
-            <Toast key={toast.id} toast={toast} onRemove={removeToast} />
-        ))}
-    </AnimatePresence>
-</div>
-        </div >
-    </div >
-);
+        </div>
+    );
 }
 
 
