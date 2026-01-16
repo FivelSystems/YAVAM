@@ -33,6 +33,7 @@ interface VarPackage {
     isExactDuplicate: boolean;
     type?: string;
     tags?: string[];
+    isCorrupt?: boolean;
 }
 
 export interface PackageContent {

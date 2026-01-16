@@ -80,6 +80,7 @@ func (s *defaultLibraryService) Scan(ctx context.Context, rootPath string, onPac
 				p.HasThumbnail = len(thumbBytes) > 0
 			} else {
 				p.Type = "Unknown"
+				p.IsCorrupt = true
 			}
 
 			// Fix empty fields from filename

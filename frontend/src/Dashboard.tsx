@@ -1419,6 +1419,7 @@ function Dashboard(): JSX.Element {
         if (currentFilter === "version-conflicts") res = res.filter(p => p.isDuplicate);
         if (currentFilter === "duplicates") res = res.filter(p => p.isDuplicate); // Backwards compat or if used
         if (currentFilter === "exact-duplicates") res = res.filter(p => p.isExactDuplicate);
+        if (currentFilter === "corrupt") res = res.filter(p => p.isCorrupt);
 
         // Creator Filter
         if (selectedCreator) res = res.filter(p => p.meta?.creator === selectedCreator);

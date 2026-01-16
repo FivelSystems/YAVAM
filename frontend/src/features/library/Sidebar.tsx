@@ -130,7 +130,8 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
             disabled: packages.filter(p => !p.isEnabled).length,
             missingDeps: packages.filter(p => p.missingDeps && p.missingDeps.length > 0).length,
             versionConflicts: packages.filter(p => p.isDuplicate).length, // "Multiple Versions"
-            exactDuplicates: packages.filter(p => p.isExactDuplicate).length // "Duplicates"
+            exactDuplicates: packages.filter(p => p.isExactDuplicate).length, // "Duplicates"
+            corrupt: packages.filter(p => p.isCorrupt).length
         };
     }, [packages]);
 
@@ -299,6 +300,18 @@ const Sidebar = ({ packages, currentFilter, setFilter, selectedCreator, onFilter
                                 >
                                     <div className="flex items-center gap-3"><Copy size={18} /> Duplicates</div>
                                     <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-purple-500/20 text-purple-400 border border-purple-500/10 group-hover:bg-purple-500/30 transition-colors">{statusCounts.exactDuplicates}</span>
+                                </button>
+                            )}
+
+                            {statusCounts.corrupt > 0 && (
+                                <button
+                                    onClick={() => setFilter(currentFilter === 'corrupt' ? 'all' : 'corrupt')}
+                                    onContextMenu={(e) => handleContextMenu(e, 'status', 'corrupt')}
+                                    className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group",
+                                        currentFilter === 'corrupt' ? "bg-red-900/20 text-red-500" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
+                                >
+                                    <div className="flex items-center gap-3"><AlertTriangle size={18} /> Corrupt</div>
+                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-900/40 text-red-500 border border-red-500/20 group-hover:bg-red-900/60 transition-colors">{statusCounts.corrupt}</span>
                                 </button>
                             )}
                         </div>
