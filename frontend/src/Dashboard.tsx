@@ -592,8 +592,11 @@ function Dashboard(): JSX.Element {
     }, [censorThumbnails, blurAmount, hidePackageNames, hideCreatorNames, gridSize, authPollInterval, isPrivacyModeEnabled, sortMode, itemsPerPage]);
 
     // Scroll to top on page change
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
     useEffect(() => {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+        }
     }, [currentPage]);
 
     const [toasts, setToasts] = useState<ToastItem[]>([]);
@@ -2871,7 +2874,7 @@ function Dashboard(): JSX.Element {
                     <div className="flex-1 flex overflow-hidden">
                         <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
                             {/* CardGrid Container - Added padding bottom for absolute footer */}
-                            <div className="flex-1 overflow-auto p-4 pb-24 custom-scrollbar">
+                            <div ref={scrollContainerRef} className="flex-1 overflow-auto p-4 pb-24 custom-scrollbar">
                                 <CardGrid
                                     packages={filteredPkgs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)}
                                     currentPath={activeLibraryPath}
