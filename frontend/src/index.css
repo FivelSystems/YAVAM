@@ -3,20 +3,22 @@
 @tailwind utilities;
 
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-  
-  color-scheme: dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+    font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+    font-weight: 400;
+
+    color-scheme: dark;
+    color: rgba(255, 255, 255, 0.87);
+    background-color: #242424;
 }
 
 body {
-  margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
+    margin: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
 }
+
 /* Custom Scrollbars */
 ::-webkit-scrollbar {
     width: 8px;
@@ -24,19 +26,22 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-    background: #111827; /* gray-900 */
+    background: #111827;
+    /* gray-900 */
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #374151; /* gray-700 */
+    background: #374151;
+    /* gray-700 */
     border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #4b5563; /* gray-600 */
+    background: #4b5563;
+    /* gray-600 */
 }
 
 /* Wails Drag Region */
 .wails-drag {
-    --wails-draggable:drag;
+    --wails-draggable: drag;
 }
