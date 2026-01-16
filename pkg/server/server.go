@@ -919,6 +919,7 @@ func (s *Server) Start(port string, libraries []string) error {
 			return
 		}
 
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filepath.Base(targetFile)))
 		http.ServeFile(w, r, targetFile)
 	})))
 

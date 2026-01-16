@@ -6,12 +6,21 @@
 
 # Changelog
 
+## [1.3.2] - 2026-01-15
+
+### Added
+- **Library**: Added "Corrupt" package detection. Invalid/Corrupt `.var` files are now flagged with a red overlay and excluded from standard status counts.
+- **Library**: Added "Corrupt" filter to Sidebar.
+- **Refactor**: Standardized Sidebar context menu logic for better consistency and maintainability.
+
+### Fixed
+- **UI**: Dashboard now auto-scrolls to top when switching pages (#20).
+- **Web**: Fixed file downloads having `.zip` appended to the filename on some browsers (#7).
+
 ## [1.3.1] - 2026-01-15
 
 ### Added
 - **Stability**: Implemented Global Error Boundary to catch crashes and offer "Factory Reset" recovery.
-- **Library**: Added "Corrupt" package detection. Invalid/Corrupt `.var` files are now flagged with a red overlay and excluded from standard status counts.
-- **Library**: Added "Corrupt" filter to Sidebar.
 - **Maintenance**: Added comprehensive "Factory Reset" logic (Bootstrapped Restart + Full AppData Wipe).
 - **Keybinds**: Implemented Centralized Keybind System.
     - Added `CTRL+F` (Search), `TAB` (Sidebar), `CTRL+,` (Settings), `CTRL+A` (Select All).
