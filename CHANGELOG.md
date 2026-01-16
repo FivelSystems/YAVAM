@@ -11,6 +11,7 @@
 ### Added
 - **Library**: Added "Corrupt" package detection. Invalid/Corrupt `.var` files are now flagged with a red overlay and excluded from standard status counts.
 - **Library**: Added "Corrupt" filter to Sidebar.
+- **Library**: Added "Include Dependencies" toggle to Install Modal. Recursively resolves and installs required packages (supports loose & exact version matching).
 - **Refactor**: Standardized Sidebar context menu logic for better consistency and maintainability.
 - **Docs**: Added PlantUML architecture diagrams (`docs/diagrams/`) for system overview, auth flow, and scan logic.
 
