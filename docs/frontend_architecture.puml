@@ -1,0 +1,117 @@
+@startuml Frontend_Architecture_v1.3.3
+
+package "Controller (Orchestrator)" {
+    class Dashboard {
+        + State: packages, filters, selection
+        + Handlers: handleScan, handleAction
+    }
+}
+
+package "Logic Layer (Custom Hooks)" {
+    class usePackages {
+        + packages
+        + scanning state
+    }
+    class useFilters {
+        + searchQuery
+        + filteredPackages
+    }
+    class useSelection {
+        + selectedIds
+        + contextMenu
+    }
+    class useLibrary {
+        + libraries
+        + activeLibrary
+    }
+    class useServer {
+        + serverConfig
+        + polling
+    }
+    class usePackageActions {
+        + bulkOperations
+        + dependencyLogic
+    }
+    class useDragDrop {
+        + uploadQueue
+    }
+    class useNavigation {
+        + highlighting
+    }
+    
+    Dashboard --> usePackages : consumes
+    Dashboard --> useFilters : consumes
+    Dashboard --> useSelection : consumes
+    Dashboard --> useLibrary : consumes
+    Dashboard --> useServer : consumes
+    Dashboard --> usePackageActions : consumes
+    Dashboard --> useDragDrop : consumes
+    Dashboard --> useNavigation : consumes
+}
+
+package "View Layer (UI Components)" {
+    
+    package "Layouts" {
+        class SidebarContainer {
+            - Library List
+        }
+        class FilterToolbar {
+            - Search Input
+            - Sort/Filter Controls
+        }
+        class PackageLayout {
+            - Grid/List View
+            - Right Details Sidebar
+        }
+    }
+
+    package "Modals (Domain Partitioned)" {
+        class SystemModals {
+            - Settings
+            - Updates
+            - Optimizations
+        }
+        class PackageActionModals {
+            - Install
+            - Layout/Upload
+        }
+        class GlobalDialogs {
+            - Confirmations
+        }
+    }
+
+    package "Overlays" {
+        class GlobalOverlays {
+            - Toasts
+            - ContextMenu
+            - DragDropZone
+        }
+        class ScanOverlay {
+            - Cancellation
+        }
+        class EmptyState {
+            - Setup Wizard
+        }
+    }
+
+    Dashboard --> SidebarContainer : props(libraries, activeLib)
+    Dashboard --> FilterToolbar : props(filters, searchQuery)
+    Dashboard --> PackageLayout : props(filteredPackages, selection)
+    
+    Dashboard --> SystemModals : props(settingsState)
+    Dashboard --> PackageActionModals : props(actionState)
+    Dashboard --> GlobalDialogs : props(confirmState)
+    
+    Dashboard --> GlobalOverlays : props(toasts, menuState)
+    Dashboard --> ScanOverlay : props(isCancelling)
+    Dashboard --> EmptyState : props(setupState)
+}
+
+note right of Dashboard
+  **The Great Refactor**
+  Dashboard now acts as a pure Controller,
+  initializing hooks and passing state
+  down to "Dumb" View components.
+end note
+
+@enduml

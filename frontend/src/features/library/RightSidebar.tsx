@@ -1,40 +1,12 @@
 import { useState, useEffect } from 'react';
-import { X, Check, AlertCircle, Box, FileImage, User, Scissors, Copy } from 'lucide-react';
+import { X, Check, AlertCircle, AlertTriangle, Box, FileImage, User, Scissors, Copy, Power } from 'lucide-react';
 import clsx from 'clsx';
 import { motion } from 'framer-motion';
-
-// Ideally, App exports it. 
-// If App.tsx exports it, we need to import it.
-// The previous code had "import { VarPackage } from '../types';" but linter complained.
-// Maybe circle dependency issue if App imports RightSidebar and RightSidebar imports App?
-// YES. Circular dependency.
-// Best practice: Move types to a separate file `src/types.ts`.
-// For now, I will use "any" or a simplified local interface to break the cycle quickly, 
-// OR simpler: just ignore the exported one and keep local one but rename it or don't import.
-// I will keep local but NOT import from App.
-
-interface VarPackage {
-    filePath: string;
-    fileName: string;
-    size: number;
-    meta: {
-        creator: string;
-        packageName: string;
-        version: string;
-        description?: string;
-        dependencies?: Record<string, any>;
-    };
-    thumbnailPath: string;
-    thumbnailBase64?: string;
-    isEnabled: boolean;
-    hasThumbnail: boolean;
-    missingDeps: string[];
-    isDuplicate: boolean;
-    isExactDuplicate: boolean;
-    type?: string;
-    tags?: string[];
-    isCorrupt?: boolean;
-}
+import { VarPackage } from '../../types';
+import { useThumbnail } from '../../hooks/useThumbnail';
+import { PACKAGE_STATUS } from '../../constants';
+import { usePackageContext } from '../../context/PackageContext';
+import { getPackageStatus, findBestPackageMatch, getBlurStyle } from './utils';
 
 export interface PackageContent {
     filePath: string;
@@ -53,44 +25,24 @@ interface RightSidebarProps {
     onFilterByCreator: (creator: string) => void;
     onDependencyClick: (depId: string) => void;
     onTitleClick: () => void;
-    getDependencyStatus: (depId: string) => 'valid' | 'mismatch' | 'missing' | 'scanning' | 'system';
+    getDependencyStatus: (depId: string) => 'valid' | 'mismatch' | 'missing' | 'scanning' | 'system' | 'corrupt' | 'disabled';
     selectedCreator?: string | null;
+    censorThumbnails?: boolean;
+    blurAmount?: number;
 }
 
-const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilterByCreator, onDependencyClick, onTitleClick, getDependencyStatus, selectedCreator }: RightSidebarProps) => {
+const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilterByCreator, onDependencyClick, onTitleClick, getDependencyStatus, selectedCreator, censorThumbnails = false, blurAmount = 10 }: RightSidebarProps) => {
 
     const [contents, setContents] = useState<PackageContent[]>([]);
     const [loading, setLoading] = useState(false);
-    const [thumbSrc, setThumbSrc] = useState<string | undefined>(undefined);
+    const thumbSrc = useThumbnail(pkg);
+    const { packages } = usePackageContext();
 
     useEffect(() => {
         if (pkg) {
             fetchContents();
-
-            // Thumbnail Logic
-            if (pkg.thumbnailBase64) {
-                setThumbSrc(`data:image/jpeg;base64,${pkg.thumbnailBase64}`);
-            } else if (pkg.hasThumbnail) {
-                // Fetch
-                // @ts-ignore
-                if (window.go) {
-                    // @ts-ignore
-                    window.go.main.App.GetPackageThumbnail(pkg.filePath)
-                        .then((b64: string) => {
-                            if (b64) setThumbSrc(`data:image/jpeg;base64,${b64}`);
-                        })
-                        .catch((e: any) => console.error(e));
-                } else {
-                    const token = localStorage.getItem('yavam_auth_token');
-                    setThumbSrc(`/api/thumbnail?filePath=${encodeURIComponent(pkg.filePath)}&token=${token || ''}`);
-                }
-            } else {
-                setThumbSrc(undefined);
-            }
-
         } else {
             setContents([]);
-            setThumbSrc(undefined);
         }
     }, [pkg]);
 
@@ -158,7 +110,11 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                         <img
                             src={thumbSrc}
                             alt={pkg.fileName}
-                            className="w-full h-full object-cover object-center transition-transform duration-700 group-hover:scale-105"
+                            className={clsx(
+                                "w-full h-full object-cover object-center transition-transform duration-700 group-hover:scale-105",
+                                censorThumbnails && "scale-110" // Scale up to hide blur edges
+                            )}
+                            style={getBlurStyle(censorThumbnails, blurAmount)}
                         />
                     ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center text-gray-700">
@@ -292,17 +248,21 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                                         Object.entries(pkg.meta.dependencies).map(([depId]) => {
                                             const status = getDependencyStatus(depId);
 
-                                            // Status Logic
+                                            // Status Logic for legacy getDependencyStatus
                                             let bgClass = "bg-red-500/10 border-red-500/20 text-red-300 hover:bg-red-500/20"; // Missing/Default
 
-                                            if (status === 'valid') {
+                                            if (status === PACKAGE_STATUS.VALID) {
                                                 bgClass = "bg-green-500/10 border-green-500/20 text-green-300 hover:bg-green-500/20";
-                                            } else if (status === 'mismatch') {
+                                            } else if (status === PACKAGE_STATUS.MISMATCH) {
                                                 bgClass = "bg-yellow-500/10 border-yellow-500/20 text-yellow-300 hover:bg-yellow-500/20";
-                                            } else if (status === 'scanning') {
+                                            } else if (status === PACKAGE_STATUS.SCANNING) {
                                                 bgClass = "bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-750";
-                                            } else if (status === 'system') {
+                                            } else if (status === PACKAGE_STATUS.SYSTEM) {
                                                 bgClass = "bg-blue-500/10 border-blue-500/20 text-blue-300 hover:bg-blue-500/20";
+                                            } else if (status === PACKAGE_STATUS.CORRUPT) {
+                                                bgClass = "bg-red-900/40 border-red-500 text-red-500 hover:bg-red-900/60";
+                                            } else if (status === PACKAGE_STATUS.DISABLED) {
+                                                bgClass = "bg-gray-800 border-gray-600 text-gray-400 hover:bg-gray-700";
                                             }
 
                                             return (
@@ -314,14 +274,18 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                                                         bgClass
                                                     )}>
 
-                                                    {status === 'valid' ? (
+                                                    {status === PACKAGE_STATUS.VALID ? (
                                                         <Check size={14} className="text-green-500 shrink-0" />
-                                                    ) : status === 'mismatch' ? (
+                                                    ) : status === PACKAGE_STATUS.MISMATCH ? (
                                                         <AlertCircle size={14} className="text-yellow-500 shrink-0" />
-                                                    ) : status === 'system' ? (
+                                                    ) : status === PACKAGE_STATUS.SYSTEM ? (
                                                         <Box size={14} className="text-blue-500 shrink-0" />
-                                                    ) : status === 'scanning' ? (
+                                                    ) : status === PACKAGE_STATUS.SCANNING ? (
                                                         <div className="w-3.5 h-3.5 rounded-full border-2 border-gray-600 border-t-white animate-spin shrink-0" />
+                                                    ) : status === PACKAGE_STATUS.CORRUPT ? (
+                                                        <AlertTriangle size={14} className="text-red-500 shrink-0" />
+                                                    ) : status === PACKAGE_STATUS.DISABLED ? (
+                                                        <Power size={14} className="text-gray-400 shrink-0" />
                                                     ) : (
                                                         <X size={14} className="text-red-500 shrink-0" />
                                                     )}
@@ -332,6 +296,87 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                                         })
                                     ) : (
                                         <div className="text-xs text-gray-600 italic">No dependencies listed.</div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Used By (Incoming Dependencies) */}
+                            <div className="mb-6">
+                                <div className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-2 flex items-center justify-between">
+                                    Used By
+                                    {pkg.referencedBy && <span className="text-gray-600">{pkg.referencedBy.length}</span>}
+                                </div>
+                                <div className="space-y-1">
+                                    {pkg.referencedBy && pkg.referencedBy.length > 0 ? (
+                                        pkg.referencedBy.map((refId) => {
+                                            // 1. Resolve Consumer
+                                            // refId is the Package ID (Creator.Pkg.Version).
+                                            // We use findBestPackageMatch to get the ENABLED version if it exists.
+                                            const consumerPkg = findBestPackageMatch(packages, refId);
+
+                                            // 2. Centralized Status Logic
+                                            const status = getPackageStatus(consumerPkg);
+
+                                            // 3. Styling (Green for Valid/Enabled, etc.)
+                                            let bgClass = "bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-750"; // Default
+
+                                            if (status === PACKAGE_STATUS.VALID) {
+                                                bgClass = "bg-green-500/10 border-green-500/20 text-green-300 hover:bg-green-500/20";
+                                            } else if (status === PACKAGE_STATUS.MISMATCH) {
+                                                bgClass = "bg-yellow-500/10 border-yellow-500/20 text-yellow-300 hover:bg-yellow-500/20";
+                                            } else if (status === PACKAGE_STATUS.DUPLICATE) {
+                                                bgClass = "bg-purple-500/10 border-purple-500/20 text-purple-300 hover:bg-purple-500/20";
+                                            } else if (status === PACKAGE_STATUS.OBSOLETE) {
+                                                bgClass = "bg-orange-500/10 border-orange-500/20 text-orange-300 hover:bg-orange-500/20";
+                                            } else if (status === PACKAGE_STATUS.CORRUPT) {
+                                                bgClass = "bg-red-900/40 border-red-500 text-red-500 hover:bg-red-900/60";
+                                            } else if (status === PACKAGE_STATUS.ROOT) {
+                                                bgClass = "bg-blue-500/10 border-blue-500/20 text-blue-300 hover:bg-blue-500/20";
+                                            }
+
+                                            // 4. Display Name (Full ID)
+                                            const displayName = consumerPkg?.meta
+                                                ? `${consumerPkg.meta.creator}.${consumerPkg.meta.packageName}.${consumerPkg.meta.version}`
+                                                : (consumerPkg?.fileName || refId);
+
+                                            // 5. Click Handler
+                                            // Must navigate to the RESOLVED package ID (consumerPkg id), not just the ref string.
+                                            // If consumer matches, use its specific ID.
+                                            const targetId = consumerPkg
+                                                ? consumerPkg.filePath // Use Path for exact lookup in PackageLayout
+                                                : refId;
+
+                                            return (
+                                                <div
+                                                    key={refId}
+                                                    onClick={() => onDependencyClick(targetId)}
+                                                    className={clsx(
+                                                        "flex items-center gap-3 p-2 rounded-lg text-xs border transition-colors cursor-pointer group",
+                                                        bgClass
+                                                    )}>
+
+                                                    {status === PACKAGE_STATUS.VALID ? (
+                                                        <Check size={14} className="text-green-500 shrink-0" />
+                                                    ) : status === PACKAGE_STATUS.MISMATCH ? (
+                                                        <AlertCircle size={14} className="text-yellow-500 shrink-0" />
+                                                    ) : status === PACKAGE_STATUS.DUPLICATE ? (
+                                                        <Copy size={14} className="text-purple-500 shrink-0" />
+                                                    ) : status === PACKAGE_STATUS.OBSOLETE ? (
+                                                        <AlertCircle size={14} className="text-orange-500 shrink-0" />
+                                                    ) : status === PACKAGE_STATUS.CORRUPT ? (
+                                                        <AlertTriangle size={14} className="text-red-500 shrink-0" />
+                                                    ) : status === PACKAGE_STATUS.DISABLED ? (
+                                                        <Power size={14} className="text-gray-400 shrink-0" />
+                                                    ) : (
+                                                        <Box size={14} className="text-gray-500 shrink-0" />
+                                                    )}
+
+                                                    <span className="truncate flex-1" title={displayName}>{displayName}</span>
+                                                </div>
+                                            );
+                                        })
+                                    ) : (
+                                        <div className="text-xs text-gray-600 italic">No packages depend on this.</div>
                                     )}
                                 </div>
                             </div>
@@ -359,7 +404,11 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                                                     <img
                                                         src={`data:image/jpeg;base64,${item.thumbnailBase64}`}
                                                         alt={item.fileName}
-                                                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                                                        className={clsx(
+                                                            "w-full h-full object-cover transition-transform duration-500 group-hover:scale-110",
+                                                            censorThumbnails && "scale-125" // Scale up more to hide blur edges
+                                                        )}
+                                                        style={getBlurStyle(censorThumbnails, blurAmount)}
                                                     />
                                                 ) : (
                                                     <div className="w-full h-full flex flex-col items-center justify-center text-gray-700 p-2 text-center">

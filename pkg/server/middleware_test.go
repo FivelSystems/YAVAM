@@ -46,6 +46,13 @@ func (m *MockAuthService) RevokeSession(id string) error {
 	return nil
 }
 
+func (m *MockAuthService) Login(username, password, deviceName string) (string, error) {
+	if username == "admin" && password == "password" {
+		return m.validToken, nil
+	}
+	return "", auth.ErrInvalidToken
+}
+
 type MockConfigService struct {
 	config *config.Config
 }

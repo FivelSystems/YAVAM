@@ -20,4 +20,6 @@ export interface VarPackage {
     categories: string[];
     tags?: string[];
     isCorrupt?: boolean;
+    isOrphan?: boolean;
+    referencedBy?: string[];
 }

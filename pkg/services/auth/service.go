@@ -42,6 +42,9 @@ type AuthService interface {
 	// RevokeSession removes a session by ID
 	RevokeSession(id string) error
 
+	// Login verifies credentials directly
+	Login(username, password, deviceName string) (string, error)
+
 	// SetPassword updates the admin password
 	SetPassword(newPassword string) error
 }

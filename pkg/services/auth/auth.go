@@ -2,20 +2,19 @@ package auth
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"sync"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
-// SimpleTokenAuthService implements AuthService using Challenge-Response
+// SimpleTokenAuthService implements AuthService using Bcrypt
 type SimpleTokenAuthService struct {
 	mu          sync.RWMutex
 	validTokens map[string]*User
-	nonces      map[string]time.Time // Nonce -> Expiration
-	adminHash   string               // SHA256(password)
+	adminHash   string // Bcrypt hash of password
 	store       *FileAuthStore
 }
 
@@ -30,9 +29,10 @@ func NewSimpleAuthService(configPath string) (*SimpleTokenAuthService, error) {
 	if config != nil && config.AdminHash != "" {
 		hashStr = config.AdminHash
 	} else {
-		// Default to "admin" if no config exists
-		hash := sha256.Sum256([]byte("admin"))
-		hashStr = hex.EncodeToString(hash[:])
+		// Default to "admin"
+		// Generate bcrypt hash for "admin"
+		hash, _ := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.DefaultCost)
+		hashStr = string(hash)
 		// Save default
 		store.Save(&AuthConfig{AdminHash: hashStr})
 	}
@@ -51,13 +51,9 @@ func NewSimpleAuthService(configPath string) (*SimpleTokenAuthService, error) {
 
 	s := &SimpleTokenAuthService{
 		validTokens: validTokens,
-		nonces:      make(map[string]time.Time),
 		adminHash:   hashStr,
 		store:       store,
 	}
-
-	// Start cleanup routine for nonces
-	go s.cleanupNonces()
 
 	return s, nil
 }
@@ -74,35 +70,22 @@ func (s *SimpleTokenAuthService) SetPassword(newPassword string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	hash := sha256.Sum256([]byte(newPassword))
-	hashStr := hex.EncodeToString(hash[:])
-
-	s.adminHash = hashStr
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	s.adminHash = string(hash)
 	return s.persistState()
 }
 
+// InitiateLogin is deprecated/noop in bcrypt flow but kept for interface/api compatibility if strictly needed,
+// but we will likely remove calls to it.
 func (s *SimpleTokenAuthService) InitiateLogin(username string) (string, error) {
-	// Simulating single user for now
-	if username != "admin" {
-		return "", ErrInvalidToken // User not found
-	}
-
-	// Generate 16 bytes nonce
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	nonce := hex.EncodeToString(b)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	// Nonce valid for 2 minutes
-	s.nonces[nonce] = time.Now().Add(2 * time.Minute)
-
-	return nonce, nil
+	return "bcrypt-mode", nil
 }
 
-func (s *SimpleTokenAuthService) CompleteLogin(username, nonce, proof, deviceName string) (string, error) {
+// Login verifies credentials directly using Bcrypt
+func (s *SimpleTokenAuthService) Login(username, password, deviceName string) (string, error) {
 	if username != "admin" {
 		return "", ErrInvalidToken
 	}
@@ -110,29 +93,13 @@ func (s *SimpleTokenAuthService) CompleteLogin(username, nonce, proof, deviceNam
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Check Nonce validity
-	expiry, exists := s.nonces[nonce]
-	if !exists {
-		return "", fmt.Errorf("invalid or expired nonce")
-	}
-	if time.Now().After(expiry) {
-		delete(s.nonces, nonce)
-		return "", fmt.Errorf("nonce expired")
-	}
-	// Consume nonce (prevent replay)
-	delete(s.nonces, nonce)
-
-	// Verify Proof
-	// Expected Proof = SHA256(MasterHash + Nonce)
-	data := s.adminHash + nonce
-	hash := sha256.Sum256([]byte(data))
-	expectedProof := hex.EncodeToString(hash[:])
-
-	if subtle.ConstantTimeCompare([]byte(proof), []byte(expectedProof)) != 1 {
-		return "", fmt.Errorf("invalid proof")
+	// Verify Password
+	err := bcrypt.CompareHashAndPassword([]byte(s.adminHash), []byte(password))
+	if err != nil {
+		return "", fmt.Errorf("invalid credentials")
 	}
 
-	// Generate Token directly here
+	// Generate Token
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
@@ -171,6 +138,11 @@ func (s *SimpleTokenAuthService) CompleteLogin(username, nonce, proof, deviceNam
 	return token, nil
 }
 
+// Deprecated: CompleteLogin was for CR-Auth. Kept stub to prevent compile errors if interface not changed yet.
+func (s *SimpleTokenAuthService) CompleteLogin(username, nonce, proof, deviceName string) (string, error) {
+	return "", fmt.Errorf("use Login() instead")
+}
+
 func (s *SimpleTokenAuthService) ValidateToken(token string) (*User, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -179,7 +151,6 @@ func (s *SimpleTokenAuthService) ValidateToken(token string) (*User, error) {
 	if !exists {
 		return nil, ErrInvalidToken
 	}
-	// TODO: Check expiration if we add time fields later
 	return user, nil
 }
 
@@ -241,7 +212,6 @@ func (s *SimpleTokenAuthService) RevokeSession(id string) error {
 	return fmt.Errorf("session not found")
 }
 
-// RevokeToken removes a token
 func (s *SimpleTokenAuthService) RevokeToken(token string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -250,15 +220,5 @@ func (s *SimpleTokenAuthService) RevokeToken(token string) {
 }
 
 func (s *SimpleTokenAuthService) cleanupNonces() {
-	ticker := time.NewTicker(5 * time.Minute)
-	for range ticker.C {
-		s.mu.Lock()
-		now := time.Now()
-		for nonce, expiry := range s.nonces {
-			if now.After(expiry) {
-				delete(s.nonces, nonce)
-			}
-		}
-		s.mu.Unlock()
-	}
+	// No nonces in bcrypt mode
 }

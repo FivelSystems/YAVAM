@@ -51,10 +51,26 @@ const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, 
         )
     }
 
+    // Animation Variants
+    const itemVariants = {
+        hidden: { opacity: 0, y: 20, scale: 0.95 },
+        visible: {
+            opacity: 1,
+            y: 0,
+            scale: 1,
+            transition: {
+                duration: 0.2, // Snappy uniform fade-in
+                ease: "easeOut"
+            }
+        },
+        exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } }
+    };
+
     return (
         <div ref={containerRef} className="h-full">
             <motion.div
                 layout
+                key={viewMode} // Forces re-mount on view switch to prevent morphing artifacts
                 className={viewMode === 'list'
                     ? "flex flex-col gap-2 pb-20 p-4"
                     : "grid gap-4 pb-20 p-4"
@@ -64,20 +80,17 @@ const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, 
                 } : undefined}
             >
                 <AnimatePresence mode="popLayout">
-                    {packages.map((pkg) => (
+                    {packages.map((pkg, i) => (
                         <motion.div
                             layout
                             key={pkg.filePath}
                             id={`pkg-${pkg.filePath}`}
-                            initial={{ opacity: 0 }}
-                            animate={{
-                                opacity: 1,
-                                scale: pkg.filePath === highlightedPackageId ? 1.02 : 1
-                            }}
-                            exit={{ opacity: 0 }}
-                            className={pkg.filePath === highlightedPackageId
-                                ? "rounded-xl ring-2 ring-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.3)] z-10"
-                                : ""}
+                            custom={i} // Pass index for stagger delay
+                            variants={itemVariants}
+                            initial="hidden"
+                            animate="visible"
+                            exit="exit"
+                            className=""
                         >
                             <PackageCard
                                 pkg={pkg}
@@ -90,6 +103,7 @@ const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, 
                                 blurAmount={blurAmount}
                                 hidePackageNames={hidePackageNames}
                                 hideCreatorNames={hideCreatorNames}
+                                isHighlighted={pkg.filePath === highlightedPackageId}
                             />
                         </motion.div>
                     ))}
@@ -97,6 +111,7 @@ const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, 
             </motion.div>
         </div>
     );
+
 };
 
 export default CardGrid;

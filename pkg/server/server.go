@@ -201,8 +201,8 @@ func (s *Server) Start(port string, libraries []string) error {
 
 	mux := http.NewServeMux()
 
-	// SSE Endpoint
-	mux.HandleFunc("/api/events", func(w http.ResponseWriter, r *http.Request) {
+	// SSE Endpoint (Secured)
+	mux.Handle("/api/events", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
@@ -241,7 +241,7 @@ func (s *Server) Start(port string, libraries []string) error {
 				}
 			}
 		}
-	})
+	})))
 
 	// Scan Cancel Endpoint
 	mux.HandleFunc("/api/scan/cancel", func(w http.ResponseWriter, r *http.Request) {
@@ -294,7 +294,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		})
 	}))
 
-	// Auth: Login Endpoint (Complete)
+	// Auth: Login Endpoint (Simple Password)
 	mux.HandleFunc("/api/auth/login", loginLimiter.Middleware(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -302,8 +302,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		}
 		var req struct {
 			Username   string `json:"username"`
-			Nonce      string `json:"nonce"`
-			Proof      string `json:"proof"`
+			Password   string `json:"password"`
 			DeviceName string `json:"deviceName"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -316,11 +315,14 @@ func (s *Server) Start(port string, libraries []string) error {
 			return
 		}
 
-		token, err := s.auth.CompleteLogin(req.Username, req.Nonce, req.Proof, req.DeviceName)
+		token, err := s.auth.Login(req.Username, req.Password, req.DeviceName)
 		if err != nil {
-			s.writeError(w, "Invalid credentials or expired nonce", 401)
+			s.log(fmt.Sprintf("Login failed for user '%s' from device '%s': %v", req.Username, req.DeviceName, err))
+			// Generic error for security
+			s.writeError(w, "Invalid credentials", 401)
 			return
 		}
+		s.log(fmt.Sprintf("User '%s' logged in successfully from '%s'", req.Username, req.DeviceName))
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{

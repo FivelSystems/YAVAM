@@ -6,6 +6,20 @@
 
 # Changelog
 
+## [1.3.10] - 2026-01-19
+
+### Added
+- **UI**: Implemented "Neon Flash" highlight animation to clearly identify located packages in the grid.
+- **Privacy**: Extended "Privacy Mode" (Blur) features to the details panel banner and content thumbnails.
+- **Privacy**: Added global `getBlurStyle` helper for consistent privacy logic across the application.
+
+### Fixed
+- **Status**: Fixed duplicate detection logic to correctly identify duplicates even if they are disabled.
+- **Status**: Prioritized status checks to ensure disabled packages are marked as `DISABLED` (Gray) instead of `OBSOLETE` or `DUPLICATE`.
+- **Status**: Fixed "Obsolete" status logic by using natural numeric version sorting (`1.10 > 1.2`), preventing newer versions from being incorrectly flagged.
+- **Status**: Changed "Root" package status color from Blue (System) to Indigo to clarify they are top-level user content, not system files.
+- **Dependencies**: Fixed critical discrepancy where valid dependencies appeared as "Missing". Logic now correctly handles package names with dots and explicitly resolves `.latest` references.
+
 ## [1.3.2] - 2026-01-15
 
 ### Added

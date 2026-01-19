@@ -54,12 +54,7 @@ export const DEFAULT_KEYBINDS: KeybindDefinition[] = [
         category: "actions",
         defaultKeys: ["F5"]
     },
-    {
-        id: "toggle_server",
-        label: "Toggle Server",
-        category: "actions",
-        defaultKeys: ["CTRL", "S"]
-    },
+
     {
         id: "select_prev",
         label: "Select Previous Package",

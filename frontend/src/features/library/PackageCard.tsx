@@ -15,9 +15,10 @@ interface PackageCardProps {
     blurAmount?: number;
     hidePackageNames?: boolean;
     hideCreatorNames?: boolean;
+    isHighlighted?: boolean;
 }
 
-const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, viewMode = 'grid', censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false }: PackageCardProps) => {
+const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, viewMode = 'grid', censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false, isHighlighted = false }: PackageCardProps) => {
     const cardRef = useRef<HTMLDivElement>(null);
     const [thumbSrc, setThumbSrc] = useState<string | undefined>(
         pkg.thumbnailBase64 ? `data:image/jpeg;base64,${pkg.thumbnailBase64}` : undefined
@@ -48,7 +49,6 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
 
     // Lazy Loading Logic
     useEffect(() => {
-        // @ts-ignore
         if (!window.go) {
             // Web Mode: Use API URL directly
             if (pkg.hasThumbnail && !pkg.thumbnailBase64) {
@@ -75,9 +75,7 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
 
     useEffect(() => {
         // Fetch for Desktop when visible
-        // @ts-ignore
         if (window.go && isVisible && pkg.hasThumbnail && !thumbSrc) {
-            // @ts-ignore
             window.go.main.App.GetPackageThumbnail(pkg.filePath)
                 .then((b64: string) => {
                     if (b64) setThumbSrc(`data:image/jpeg;base64,${b64}`);
@@ -94,19 +92,22 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
     if (isAnchor) {
         statusClass = "border-white ring-2 ring-white/50 shadow-2xl z-20 grayscale-0 " + (viewMode === 'grid' ? "scale-[1.05]" : "");
     } else {
-        if (isSelected) {
+        if (pkg.isCorrupt) {
+            statusClass = "border-red-600 ring-1 ring-red-600/50 shadow-[0_0_15px_rgba(220,38,38,0.4)] z-10 grayscale-0";
+            statusIcon = <AlertTriangle size={14} className="text-red-500" />;
+        } else if (isSelected) {
             statusClass = "border-blue-500 ring-2 ring-blue-500/50 shadow-xl z-10 grayscale-0 " + (viewMode === 'grid' ? "scale-[1.02]" : "");
         } else if (pkg.isEnabled) {
             statusClass = "border-gray-600 grayscale-0";
-            if (pkg.missingDeps && pkg.missingDeps.length > 0) {
-                statusClass = "border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]";
-                statusIcon = <AlertCircle size={16} className="text-red-500" />;
-            } else if (pkg.isExactDuplicate) {
+            if (pkg.isExactDuplicate) {
                 statusClass = "border-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.3)]";
                 statusIcon = <Copy size={16} className="text-purple-500" />;
             } else if (pkg.isDuplicate) {
                 statusClass = "border-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.3)]";
                 statusIcon = <AlertTriangle size={16} className="text-yellow-500" />;
+            } else if (pkg.missingDeps && pkg.missingDeps.length > 0) {
+                statusClass = "border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]";
+                statusIcon = <AlertCircle size={16} className="text-red-500" />;
             } else {
                 statusClass = "border-green-500/50 hover:border-green-400";
                 statusIcon = <Check size={16} className="text-green-500" />;
@@ -114,9 +115,16 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
         }
     }
 
+    // Override with Highlight
+    if (isHighlighted) {
+        // Keep grayscale-0 but set border to base pink (animation modulated alpha)
+        statusClass = "border-pink-500 animate-neon-flash shadow-xl z-20 grayscale-0 scale-[1.05]";
+    }
+
     if (viewMode === 'list') {
         return (
             <div
+                id={`package-${pkg.filePath}`}
                 ref={cardRef}
                 onClick={handleClick}
                 onContextMenu={(e) => onContextMenu(e, pkg)}
@@ -176,6 +184,7 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
     return (
         <motion.div
             layout
+            id={`package-${pkg.filePath}`}
             ref={cardRef}
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
