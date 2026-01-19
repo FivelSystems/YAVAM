@@ -10,6 +10,7 @@
 ## 📚 Domain Knowledge (Skills)
 > **For Agents:** Before designing features related to VaM internals (parsing, dependencies, scene structure), **YOU MUST READ** the files in `docs/domain/*.md`.
 -   **Virt-A-Mate Specs:** [docs/domain/virt-a-mate.md](./docs/domain/virt-a-mate.md)
+-   **Frontend Architecture:** [docs/domain/frontend-architecture.md](./docs/domain/frontend-architecture.md)
 
 ## ⚠️ Critical directives (The "Prime Directives")
 -   **Explicit Consent Required:** **NEVER** push code to the remote repository (`git push`) without explicit user consent or approval of the current state.
@@ -56,6 +57,8 @@ Adopt these specific personas based on the active task.
     -   Ensure thread safety in `manager` and `server`.
     -   Use `wails.json` as the source of truth for bindings configuration.
     -   **Testing:** Always add unit tests to `*_test.go` files when touching logic.
+    -   **Review:** **ALWAYS** ask for **Architect Check** (`@Architect`) before marking a complex logic task as "Done".
+    -   **Security:** Request **Security Audit** (`@Security Auditor`) when touching file systems, auth, or networking.
 
 ### 🎨 Frontend Specialist (React + Vite)
 -   **Focus:** `frontend/` directory.
@@ -66,6 +69,7 @@ Adopt these specific personas based on the active task.
     -   **Code:** Functional components with TypeScript.
     -   **Responsive:** Mobile view is critical.
     -   **Testing:** Use **Vitest** + **React Testing Library**. Run `npm test` in the frontend directory to verify components. Ensure all core UI components have basic render tests.
+    -   **Review:** **ALWAYS** ask for **Architect Check** (`@Architect`) before marking a complex UI task as "Done". Don't ship "working but messy" code.
 
 ### 👮 Security Auditor
 -   **Trigger:** When modifying `auth`, `server`, `filesystem`, `config`, or `logging` logic and before commits.

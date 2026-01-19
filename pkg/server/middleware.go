@@ -61,8 +61,8 @@ func (s *Server) isGuestAllowed(r *http.Request) bool {
 		case "/api/packages",
 			"/api/disk-space",
 			"/api/config",
-			"/api/thumbnail",
-			"/api/events":
+			"/api/thumbnail":
+			// "/api/events": // Secured. Logs should not be public.
 			return true
 		}
 

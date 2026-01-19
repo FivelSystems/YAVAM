@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -212,23 +210,8 @@ func (a *App) Login(username, password string) (string, error) {
 		return "", fmt.Errorf("auth service not initialized")
 	}
 
-	// 1. Initiate Login (Get Nonce)
-	nonce, err := a.auth.InitiateLogin(username)
-	if err != nil {
-		return "", err
-	}
-
-	// 2. Calculate Proof (Verify knowledge of password without sending it)
-	// H1 = SHA256(password)
-	h1 := sha256.Sum256([]byte(password))
-	h1Str := hex.EncodeToString(h1[:])
-
-	// Proof = SHA256(H1 + Nonce)
-	proofRaw := sha256.Sum256([]byte(h1Str + nonce))
-	proof := hex.EncodeToString(proofRaw[:])
-
-	// 3. Complete Login
-	return a.auth.CompleteLogin(username, nonce, proof, "Desktop Client")
+	// Simplified Login
+	return a.auth.Login(username, password, "Desktop Client")
 }
 
 // SetPassword updates the admin password

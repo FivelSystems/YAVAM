@@ -1,0 +1,4 @@
+    // Reset pagination when FILTERS change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery, currentFilter, selectedCreator, selectedType, selectedTags]);
