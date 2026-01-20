@@ -64,3 +64,33 @@ export const resolveDependency = (depId: string, allPackages: VarPackage[]): Res
 
     return { status: 'missing' };
 };
+
+/**
+ * Recursively resolves all dependencies for a list of packages (BFS).
+ * Returns a flat list of unique VarPackages, including the inputs.
+ */
+export const resolveRecursive = (startPackages: VarPackage[], allPackages: VarPackage[]): VarPackage[] => {
+    const seenFiles = new Set<string>();
+    const result: VarPackage[] = [];
+    const queue = [...startPackages];
+
+    while (queue.length > 0) {
+        const current = queue.shift()!;
+
+        if (seenFiles.has(current.fileName)) continue;
+        seenFiles.add(current.fileName);
+        result.push(current);
+
+        if (current.meta && current.meta.dependencies) {
+            for (const depId of Object.keys(current.meta.dependencies)) {
+                // Use the existing single-resolution logic
+                const res = resolveDependency(depId, allPackages);
+                if (res.pkg) {
+                    queue.push(res.pkg);
+                }
+            }
+        }
+    }
+
+    return result;
+};

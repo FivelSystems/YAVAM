@@ -8,12 +8,10 @@
 
 ## [1.3.10] - 2026-01-20
 
-### Added
-- **UI**: Implemented "Neon Flash" highlight animation to clearly identify located packages in the grid.
-- **Privacy**: Extended "Privacy Mode" (Blur) features to the details panel banner and content thumbnails.
-- **Privacy**: Added global `getBlurStyle` helper for consistent privacy logic across the application.
-
 ### Fixed
+- **Dependencies**: Fixed "Incomplete" dependency list in the Details Panel. It now uses Recursive Resolution to display the full flattened tree (Level 1 + Level 2 + ...), ensuring parity with the Install Modal.
+- **Selection**: Fixed `CTRL+A` (Select All) not visually highlighting "Corrupt" packages.
+- **Refactor**: Unified Recursive Logic between `InstallPackageModal` and `Details Panel`.
 - **Animation**: Fixed "Locate Package" animation to restart reliably on rapid clicks (spam-proofing) and handle interruptions correctly.
 - **Dependencies**: Fixed "False Missing" status in the Dependencies list by masking internal warnings (Mismatch/Root) as Valid (Green) if the package is found.
 - **Cleanup**: Restored "Package Cleanup" context menu option (upcoming).

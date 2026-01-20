@@ -87,31 +87,46 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
 
 
     // Visual State Logic
+    // Visual State Logic
     let statusClass = "border-gray-700 opacity-60 grayscale";
     let statusIcon = <Power size={14} className="text-gray-400" />;
 
+    // 1. Resolve Icon (Intrinsic State)
+    if (pkg.isCorrupt) {
+        statusIcon = <AlertTriangle size={14} className="text-red-500" />;
+    } else if (pkg.isEnabled) {
+        if (pkg.isExactDuplicate) {
+            statusIcon = <Copy size={16} className="text-purple-500" />;
+        } else if (pkg.isDuplicate) {
+            statusIcon = <AlertTriangle size={16} className="text-yellow-500" />;
+        } else if (pkg.missingDeps && pkg.missingDeps.length > 0) {
+            statusIcon = <AlertCircle size={16} className="text-red-500" />;
+        } else {
+            statusIcon = <Check size={16} className="text-green-500" />;
+        }
+    }
+
+    // 2. Resolve Styling (Interaction State > Intrinsic State)
     if (isAnchor) {
         statusClass = "border-white ring-2 ring-white/50 shadow-2xl z-20 grayscale-0 " + (viewMode === 'grid' ? "scale-[1.05]" : "");
+    } else if (isSelected) {
+        // Selection overrides Corrupt/Duplicate colors for the border/ring, 
+        // ensuring the user knows it is selected.
+        statusClass = "border-blue-500 ring-2 ring-blue-500/50 shadow-xl z-10 grayscale-0 " + (viewMode === 'grid' ? "scale-[1.02]" : "");
     } else {
+        // Not Selected/Anchor -> Show specific status colors
         if (pkg.isCorrupt) {
             statusClass = "border-red-600 ring-1 ring-red-600/50 shadow-[0_0_15px_rgba(220,38,38,0.4)] z-10 grayscale-0";
-            statusIcon = <AlertTriangle size={14} className="text-red-500" />;
-        } else if (isSelected) {
-            statusClass = "border-blue-500 ring-2 ring-blue-500/50 shadow-xl z-10 grayscale-0 " + (viewMode === 'grid' ? "scale-[1.02]" : "");
         } else if (pkg.isEnabled) {
             statusClass = "border-gray-600 grayscale-0";
             if (pkg.isExactDuplicate) {
                 statusClass = "border-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.3)]";
-                statusIcon = <Copy size={16} className="text-purple-500" />;
             } else if (pkg.isDuplicate) {
                 statusClass = "border-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.3)]";
-                statusIcon = <AlertTriangle size={16} className="text-yellow-500" />;
             } else if (pkg.missingDeps && pkg.missingDeps.length > 0) {
                 statusClass = "border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]";
-                statusIcon = <AlertCircle size={16} className="text-red-500" />;
             } else {
                 statusClass = "border-green-500/50 hover:border-green-400";
-                statusIcon = <Check size={16} className="text-green-500" />;
             }
         }
     }

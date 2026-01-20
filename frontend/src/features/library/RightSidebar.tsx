@@ -7,6 +7,7 @@ import { useThumbnail } from '../../hooks/useThumbnail';
 import { PACKAGE_STATUS } from '../../constants';
 import { usePackageContext } from '../../context/PackageContext';
 import { getPackageStatus, findBestPackageMatch, getBlurStyle } from './utils';
+import { resolveDependency, resolveRecursive } from '../../utils/dependency';
 
 export interface PackageContent {
     filePath: string;
@@ -244,68 +245,91 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                                 </h3>
 
                                 <div className="space-y-1">
-                                    {pkg.meta.dependencies && Object.keys(pkg.meta.dependencies).length > 0 ? (
-                                        Object.entries(pkg.meta.dependencies).map(([depId]) => {
-                                            // SIMPLIFIED LOGIC: Find best enabled match. Show IT.
-                                            const resolvedPkg = findBestPackageMatch(packages, depId);
-                                            let status = resolvedPkg ? getPackageStatus(resolvedPkg) : PACKAGE_STATUS.MISSING;
+                                    {(() => {
+                                        // Calculate flattened dependencies (Found Transitive + Missing Direct)
+                                        const directDepsKeys = pkg.meta.dependencies ? Object.keys(pkg.meta.dependencies) : [];
+                                        // Filter out the pkg itself, passing a new array to resolveRecursive
+                                        const foundRecursive = resolveRecursive([pkg], packages).filter(p => p.filePath !== pkg.filePath);
 
-                                            // Status Filtering (Mask Mismatch/Root -> Valid)
-                                            // @ts-ignore
-                                            if (status === PACKAGE_STATUS.MISMATCH || status === PACKAGE_STATUS.ROOT) {
-                                                status = PACKAGE_STATUS.VALID;
-                                            }
+                                        // Find Missing Direct Dependencies (since recursive only returns found ones)
+                                        const missingDirectIds = directDepsKeys.filter(key => {
+                                            const res = resolveDependency(key, packages);
+                                            return res.status === 'missing';
+                                        });
 
-                                            // Navigation Target
-                                            const targetId = resolvedPkg ? resolvedPkg.filePath : depId;
-                                            const displayName = resolvedPkg?.meta
-                                                ? `${resolvedPkg.meta.creator}.${resolvedPkg.meta.packageName}.${resolvedPkg.meta.version}`
-                                                : depId;
+                                        const sortedFound = [...foundRecursive].sort((a, b) => a.fileName.localeCompare(b.fileName));
+                                        const totalCount = sortedFound.length + missingDirectIds.length;
 
-                                            // Status Coloring
-                                            let bgClass = "bg-red-500/10 border-red-500/20 text-red-300 hover:bg-red-500/20"; // Default Missing
+                                        if (totalCount === 0) {
+                                            return <div className="text-xs text-gray-600 italic">No dependencies listed.</div>;
+                                        }
 
-                                            if (resolvedPkg) {
-                                                if (status === PACKAGE_STATUS.VALID) {
-                                                    bgClass = "bg-green-500/10 border-green-500/20 text-green-300 hover:bg-green-500/20";
-                                                } else if (status === PACKAGE_STATUS.OBSOLETE) {
-                                                    bgClass = "bg-yellow-500/10 border-yellow-500/20 text-yellow-300 hover:bg-yellow-500/20";
-                                                } else if (status === PACKAGE_STATUS.DUPLICATE) {
-                                                    bgClass = "bg-purple-500/10 border-purple-500/20 text-purple-300 hover:bg-purple-500/20";
-                                                } else if (status === PACKAGE_STATUS.CORRUPT) {
-                                                    bgClass = "bg-red-900/40 border-red-500 text-red-500 hover:bg-red-900/60";
-                                                } else if (status === PACKAGE_STATUS.DISABLED) {
-                                                    bgClass = "bg-gray-800 border-gray-600 text-gray-400 hover:bg-gray-700";
-                                                } else if (status === PACKAGE_STATUS.SYSTEM) {
-                                                    bgClass = "bg-gray-800/50 border-gray-700 text-gray-500 hover:bg-gray-800";
-                                                }
-                                            }
+                                        return (
+                                            <>
+                                                {/* Render Missing Direct First */}
+                                                {/* Render Missing Direct First */}
+                                                {missingDirectIds.map(depId => (
+                                                    <div
+                                                        key={depId}
+                                                        className="flex items-center gap-3 p-2 rounded-lg text-xs border transition-colors cursor-pointer group bg-red-500/10 border-red-500/20 text-red-300 hover:bg-red-500/20"
+                                                        title={`Missing Dependency: ${depId}`}
+                                                    >
+                                                        <X size={14} className="text-red-500 shrink-0" />
+                                                        <span className="truncate flex-1 font-mono">{depId}</span>
+                                                    </div>
+                                                ))}
 
-                                            return (
-                                                <div
-                                                    key={depId}
-                                                    onClick={() => onDependencyClick(targetId)}
-                                                    className={clsx(
-                                                        "flex items-center gap-3 p-2 rounded-lg text-xs border transition-colors cursor-pointer group",
-                                                        bgClass
-                                                    )}
-                                                    title={resolvedPkg?.obsoletedBy ? resolvedPkg.obsoletedBy : displayName}
-                                                >
-                                                    {status === PACKAGE_STATUS.VALID ? <Check size={14} className="text-green-500 shrink-0" /> :
-                                                        status === PACKAGE_STATUS.OBSOLETE ? <AlertCircle size={14} className="text-yellow-500 shrink-0" /> :
-                                                            status === PACKAGE_STATUS.DUPLICATE ? <Copy size={14} className="text-purple-500 shrink-0" /> :
-                                                                status === PACKAGE_STATUS.CORRUPT ? <AlertTriangle size={14} className="text-red-500 shrink-0" /> :
-                                                                    status === PACKAGE_STATUS.DISABLED ? <Power size={14} className="text-gray-400 shrink-0" /> :
-                                                                        status === PACKAGE_STATUS.SYSTEM ? <Box size={14} className="text-gray-500 shrink-0" /> :
-                                                                            <X size={14} className="text-red-500 shrink-0" />
+                                                {/* Render Found Recursive */}
+                                                {sortedFound.map(resolvedPkg => {
+                                                    let status = getPackageStatus(resolvedPkg);
+                                                    // Status Masking (False Red Fix)
+                                                    // @ts-ignore
+                                                    if (status === PACKAGE_STATUS.MISMATCH || status === PACKAGE_STATUS.ROOT) {
+                                                        status = PACKAGE_STATUS.VALID;
                                                     }
-                                                    <span className="truncate flex-1">{displayName}</span>
-                                                </div>
-                                            );
-                                        })
-                                    ) : (
-                                        <div className="text-xs text-gray-600 italic">No dependencies listed.</div>
-                                    )}
+
+                                                    const displayName = `${resolvedPkg.meta.creator}.${resolvedPkg.meta.packageName}.${resolvedPkg.meta.version}`;
+
+                                                    let bgClass = "bg-gray-800 border-gray-700";
+                                                    let icon = <Check size={14} className="text-green-500 shrink-0" />;
+
+                                                    if (status === PACKAGE_STATUS.VALID) {
+                                                        bgClass = "bg-green-500/10 border-green-500/20 text-green-300 hover:bg-green-500/20";
+                                                    } else if (status === PACKAGE_STATUS.OBSOLETE) {
+                                                        bgClass = "bg-yellow-500/10 border-yellow-500/20 text-yellow-300 hover:bg-yellow-500/20";
+                                                        icon = <AlertCircle size={14} className="text-yellow-500 shrink-0" />;
+                                                    } else if (status === PACKAGE_STATUS.DUPLICATE) {
+                                                        bgClass = "bg-purple-500/10 border-purple-500/20 text-purple-300 hover:bg-purple-500/20";
+                                                        icon = <Copy size={14} className="text-purple-500 shrink-0" />;
+                                                    } else if (status === PACKAGE_STATUS.CORRUPT) {
+                                                        bgClass = "bg-red-900/40 border-red-500 text-red-500 hover:bg-red-900/60";
+                                                        icon = <AlertTriangle size={14} className="text-red-500 shrink-0" />;
+                                                    } else if (status === PACKAGE_STATUS.DISABLED) {
+                                                        bgClass = "bg-gray-800 border-gray-600 text-gray-400 hover:bg-gray-700";
+                                                        icon = <Power size={14} className="text-gray-400 shrink-0" />;
+                                                    } else if (status === PACKAGE_STATUS.SYSTEM) {
+                                                        bgClass = "bg-gray-800/50 border-gray-700 text-gray-500 hover:bg-gray-800";
+                                                        icon = <Box size={14} className="text-gray-500 shrink-0" />;
+                                                    }
+
+                                                    return (
+                                                        <div
+                                                            key={resolvedPkg.filePath}
+                                                            onClick={() => onDependencyClick(resolvedPkg.filePath)}
+                                                            className={clsx(
+                                                                "flex items-center gap-3 p-2 rounded-lg text-xs border transition-colors cursor-pointer group",
+                                                                bgClass
+                                                            )}
+                                                            title={resolvedPkg.obsoletedBy ? resolvedPkg.obsoletedBy : displayName}
+                                                        >
+                                                            {icon}
+                                                            <span className="truncate flex-1 font-medium">{displayName}</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </>
+                                        );
+                                    })()}
                                 </div>
                             </div>
 

@@ -353,7 +353,11 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
 
                 const hasDisabled = packages.some(p => isPackageInContext(p) && !p.isEnabled);
                 const hasEnabled = packages.some(p => isPackageInContext(p) && p.isEnabled);
-                const hasConflicts = packages.some(p => isPackageInContext(p) && p.isDuplicate);
+                // Broaden conflict detection to include exact duplicates
+                const hasConflicts = packages.some(p => isPackageInContext(p) && (p.isDuplicate || p.isExactDuplicate));
+
+                // Show cleanup if there are actual conflicts OR if we are in a grouping mode (Creator/Type) where manual cleanup is useful
+                const showCleanup = hasConflicts || contextMenu.groupType === 'creator' || contextMenu.groupType === 'type';
 
                 return (
                     <div className="fixed z-50 bg-gray-800 border border-gray-700 rounded-lg shadow-xl py-1 min-w-[160px]" style={{ top: contextMenu.y, left: contextMenu.x }} onClick={(e) => e.stopPropagation()}>
@@ -369,7 +373,7 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
                             </button>
                         )}
                         <div className="border-b border-gray-700/50 my-1"></div>
-                        {hasConflicts && (
+                        {showCleanup && (
                             <button onClick={() => { handleSidebarAction('resolve-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
                                 <Sparkles size={14} className="text-purple-400" /> Package Cleanup
                             </button>
