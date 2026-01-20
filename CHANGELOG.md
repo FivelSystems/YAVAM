@@ -17,7 +17,7 @@
 - **Refactor**: Unified Recursive Logic between `InstallPackageModal` and `Details Panel`.
 - **Animation**: Fixed "Locate Package" animation to restart reliably on rapid clicks (spam-proofing) and handle interruptions correctly.
 - **Dependencies**: Fixed "False Missing" status in the Dependencies list by masking internal warnings (Mismatch/Root) as Valid (Green) if the package is found.
-- **Cleanup**: Restored "Package Cleanup" context menu option (upcoming).
+- **Cleanup**: Restored "Package Cleanup" context menu option.
 - **Status**: Fixed duplicate detection logic to correctly identify duplicates even if they are disabled.
 - **Status**: Prioritized status checks to ensure disabled packages are marked as `DISABLED` (Gray) instead of `OBSOLETE` or `DUPLICATE`.
 - **Status**: Fixed "Obsolete" status logic by using natural numeric version sorting (`1.10 > 1.2`), preventing newer versions from being incorrectly flagged.
@@ -110,7 +110,15 @@
 - **Login Redirect**: Fixed issue where successful login via modal would not redirect to the dashboard.
 - **Modal Layout**: Fixed modal title crowding by moving titles to top-left and increasing spacing from the close button.
 - **Factory Reset**: Fixed "Reset Database" confirmation not appearing (implemented generic confirmation handler).
-- **Z-Index**: Fixed confirmation modals appearing behind the settings menu (upcoming fix).
+- **Z-Index**: Fixed confirmation modals appearing behind the settings menu.
+- **Linting**: Resolved unused variable warnings in Settings and Dashboard components.
+- **Open App Data**: Fixed the button logic to explicitly enter the directory instead of just selecting it in the parent folder.
+- **Merge**: Fixed duplicates not being moved to library root on Web Clients.
+- **Upload**: Fixed file list persisting in Upload Modal when reopened.
+- **Restore**: Fixed application crash when restoring backup settings.
+- **Scanning**: Fixed a race condition where packages from a previous library scan could infiltrate the current view.
+
+### Security
 - **Linting**: Resolved unused variable warnings in Settings and Dashboard components.
 - **Open App Data**: Fixed the button logic to explicitly enter the directory instead of just selecting it in the parent folder.
 - **Merge**: Fixed duplicates not being moved to library root on Web Clients.
