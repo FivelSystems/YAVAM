@@ -12,6 +12,7 @@ interface ScanProgress {
 
 export const usePackages = (activeLibraryPath: string) => {
     const [packages, setPackages] = useState<VarPackage[]>([]);
+    const [scanError, setScanError] = useState<string | null>(null);
     const [filteredPkgs, setFilteredPkgs] = useState<VarPackage[]>([]); // This might move to useFilters later, but for now scanPackages clears it.
     const [availableTags, setAvailableTags] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
@@ -253,6 +254,7 @@ export const usePackages = (activeLibraryPath: string) => {
 
         const currentId = ++scanSessionId.current;
         setLoading(true);
+        setScanError(null);
         setPackages([]);
         setFilteredPkgs([]);
         setScanProgress({ current: 0, total: 0 });
@@ -367,6 +369,7 @@ export const usePackages = (activeLibraryPath: string) => {
                 if (scanSessionId.current !== currentId) return;
                 if (err && err.includes("canceled")) return;
                 console.error("Scan error:", err);
+                setScanError(err);
                 setLoading(false);
             });
         }
@@ -375,8 +378,9 @@ export const usePackages = (activeLibraryPath: string) => {
         if (window.go) {
             try {
                 await window.go.main.App.ScanPackages(activeLibraryPath);
-            } catch (e) {
+            } catch (e: any) {
                 console.error(e);
+                setScanError(e.message || String(e));
                 setLoading(false);
             }
         } else {
@@ -464,6 +468,7 @@ export const usePackages = (activeLibraryPath: string) => {
     return {
         packages,
         setPackages,
+        scanError, // Expose Error
         filteredPkgs,
         setFilteredPkgs,
         availableTags,

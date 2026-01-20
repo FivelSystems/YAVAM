@@ -1,13 +1,11 @@
 package auth
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"path/filepath"
 	"testing"
 )
 
-func TestChallengeResponseFlow(t *testing.T) {
+func TestLoginFlow(t *testing.T) {
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "auth.json")
 
@@ -19,34 +17,16 @@ func TestChallengeResponseFlow(t *testing.T) {
 	password := "secret"
 	svc.SetPassword(password)
 
-	// 1. Initiate Login
-	nonce, err := svc.InitiateLogin("admin")
+	// 1. Direct Login
+	token, err := svc.Login("admin", password, "test-device")
 	if err != nil {
-		t.Fatalf("InitiateLogin failed: %v", err)
-	}
-	if nonce == "" {
-		t.Fatal("Expected nonce, got empty")
-	}
-
-	// 2. Calculate Proof (Client Side Logic)
-	// H1 = SHA256(password)
-	h1 := sha256.Sum256([]byte(password))
-	h1Str := hex.EncodeToString(h1[:])
-
-	// Proof = SHA256(H1 + Nonce)
-	proofRaw := sha256.Sum256([]byte(h1Str + nonce))
-	proof := hex.EncodeToString(proofRaw[:])
-
-	// 3. Complete Login
-	token, err := svc.CompleteLogin("admin", nonce, proof, "test-device")
-	if err != nil {
-		t.Fatalf("CompleteLogin failed: %v", err)
+		t.Fatalf("Login failed: %v", err)
 	}
 	if token == "" {
 		t.Fatal("Expected token, got empty")
 	}
 
-	// 4. Validate Token
+	// 2. Validate Token
 	user, err := svc.ValidateToken(token)
 	if err != nil {
 		t.Fatalf("ValidateToken failed: %v", err)
@@ -56,7 +36,7 @@ func TestChallengeResponseFlow(t *testing.T) {
 	}
 }
 
-func TestReplayAttack(t *testing.T) {
+func TestInvalidCredentials(t *testing.T) {
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "auth.json")
 
@@ -64,37 +44,16 @@ func TestReplayAttack(t *testing.T) {
 	password := "secret"
 	svc.SetPassword(password)
 
-	nonce, _ := svc.InitiateLogin("admin")
+	// Invalid Pass
+	_, err := svc.Login("admin", "wrongpasswd", "test-device")
+	if err == nil {
+		t.Fatal("Expected error on invalid password, got nil")
+	}
 
-	h1 := sha256.Sum256([]byte(password))
-	h1Str := hex.EncodeToString(h1[:])
-	proofRaw := sha256.Sum256([]byte(h1Str + nonce))
-	proof := hex.EncodeToString(proofRaw[:])
-
-	// First Login (Success)
-	_, err := svc.CompleteLogin("admin", nonce, proof, "test-device")
+	// Valid Pass
+	_, err = svc.Login("admin", password, "test-device")
 	if err != nil {
-		t.Fatalf("First login failed: %v", err)
-	}
-
-	// Replay (Fail)
-	_, err = svc.CompleteLogin("admin", nonce, proof, "test-device")
-	if err == nil {
-		t.Fatal("Expected error on replay attack, got nil")
-	}
-}
-
-func TestInvalidProof(t *testing.T) {
-	tempDir := t.TempDir()
-	configPath := filepath.Join(tempDir, "auth.json")
-
-	svc, _ := NewSimpleAuthService(configPath)
-	svc.SetPassword("secret")
-	nonce, _ := svc.InitiateLogin("admin")
-
-	_, err := svc.CompleteLogin("admin", nonce, "badproof", "test-device")
-	if err == nil {
-		t.Fatal("Expected error for invalid proof")
+		t.Fatalf("Login failed with valid pass: %v", err)
 	}
 }
 
@@ -103,7 +62,8 @@ func TestUnknownUser(t *testing.T) {
 	configPath := filepath.Join(tempDir, "auth.json")
 
 	svc, _ := NewSimpleAuthService(configPath)
-	_, err := svc.InitiateLogin("hacker")
+	// Try login with non-admin
+	_, err := svc.Login("hacker", "whatever", "dev")
 	if err == nil {
 		t.Fatal("Expected error for unknown user")
 	}
@@ -116,14 +76,7 @@ func TestPersistence(t *testing.T) {
 	// 1. Create Service & Login
 	svc1, _ := NewSimpleAuthService(configPath)
 	svc1.SetPassword("secret")
-	nonce, _ := svc1.InitiateLogin("admin")
-
-	h1 := sha256.Sum256([]byte("secret"))
-	h1Str := hex.EncodeToString(h1[:])
-	proofRaw := sha256.Sum256([]byte(h1Str + nonce))
-	proof := hex.EncodeToString(proofRaw[:])
-
-	token, _ := svc1.CompleteLogin("admin", nonce, proof, "persist-device")
+	token, _ := svc1.Login("admin", "secret", "persist-device")
 
 	// 2. Re-create Service (Simulate Restart)
 	svc2, err := NewSimpleAuthService(configPath)
@@ -152,12 +105,7 @@ func TestRevocationPersistence(t *testing.T) {
 	svc1.SetPassword("secret")
 
 	// Login
-	nonce, _ := svc1.InitiateLogin("admin")
-	h1 := sha256.Sum256([]byte("secret"))
-	h1Str := hex.EncodeToString(h1[:])
-	proofRaw := sha256.Sum256([]byte(h1Str + nonce))
-	proof := hex.EncodeToString(proofRaw[:])
-	token, _ := svc1.CompleteLogin("admin", nonce, proof, "revoke-device")
+	token, _ := svc1.Login("admin", "secret", "revoke-device")
 
 	// Revoke
 	svc1.RevokeToken(token)

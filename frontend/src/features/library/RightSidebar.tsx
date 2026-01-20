@@ -23,7 +23,7 @@ interface RightSidebarProps {
     onResolve: (pkg: VarPackage) => void;
     activeTab: 'details' | 'contents';
     onTabChange: (tab: 'details' | 'contents') => void;
-    onFilterByCreator: (creator: string) => void;
+    onFilterByCreator: (creator: string | null) => void;
     onDependencyClick: (depId: string) => void;
     onTitleClick: () => void;
     getDependencyStatus: (depId: string) => 'valid' | 'mismatch' | 'missing' | 'scanning' | 'system' | 'corrupt' | 'disabled';
@@ -131,7 +131,11 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        onFilterByCreator(pkg.meta.creator);
+                                        if (selectedCreator === pkg.meta.creator) {
+                                            onFilterByCreator(null);
+                                        } else {
+                                            onFilterByCreator(pkg.meta.creator);
+                                        }
                                     }}
                                     className={clsx(
                                         "px-2 py-0.5 rounded-full text-xs font-medium border transition-colors cursor-pointer",

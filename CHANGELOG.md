@@ -9,6 +9,9 @@
 ## [1.3.10] - 2026-01-20
 
 ### Fixed
+- **UX**: Friendly Error Banner for library access failures (e.g. "Access Denied" or missing folders), replacing silent failures.
+- **UX**: "View Library" button in Install Modal now correctly triggers a library switch and re-scan.
+- **UX**: Clicking the active "Creator" filter pill in the Details Panel now toggles the filter off (Reset).
 - **Dependencies**: Fixed "Incomplete" dependency list in the Details Panel. It now uses Recursive Resolution to display the full flattened tree (Level 1 + Level 2 + ...), ensuring parity with the Install Modal.
 - **Selection**: Fixed `CTRL+A` (Select All) not visually highlighting "Corrupt" packages.
 - **Refactor**: Unified Recursive Logic between `InstallPackageModal` and `Details Panel`.
