@@ -43,6 +43,8 @@ This roadmap guides the evolution of YAVAM.
     -   **Action:** "Neon Flash" Highlight for better visibility.
     -   **Action:** (v1.3.10) Fixed "Locate" animation spam/interruption issues.
     -   **Action:** (v1.3.10) Fixed "False Missing" dependencies via Status Masking.
+    -   **Action:** (v1.3.10) **Critical**: Fixed Recursive Dependency display in Sidebar (Details Panel).
+    -   **Action:** (v1.3.10) **UX**: Fixed Selection Logic (`CTRL+A`) for corrupt packages.
 - [ ] **Step 5.3: Graph Logic Migration (v1.4.0)**
     -   **Action:** Move Dependency Graph calculation (`packageDependencyAnalysis.ts`) to Go Backend for performance/caching.
 - [ ] **Step 5.4: Advanced Library Management**

@@ -3,7 +3,7 @@ import { X, Download, Library, CheckCircle, Loader2, AlertTriangle, ChevronDown,
 import { clsx } from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { VarPackage } from '../../types';
-import { resolveDependency } from '../../utils/dependency';
+import { resolveRecursive } from '../../utils/dependency';
 
 interface InstallPackageModalProps {
     isOpen: boolean;
@@ -63,30 +63,8 @@ export const InstallPackageModal = ({ isOpen, onClose, packages, allPackages, li
             });
         }
 
-        // Recursive Resolution
-        // BFS
-        const seenFiles = new Set<string>();
-        const result: VarPackage[] = [];
-        const queue = [...packages];
-
-        while (queue.length > 0) {
-            const current = queue.shift()!;
-
-            if (seenFiles.has(current.fileName)) continue;
-            seenFiles.add(current.fileName);
-            result.push(current);
-
-            if (current.meta && current.meta.dependencies) {
-                for (const depId of Object.keys(current.meta.dependencies)) {
-                    const res = resolveDependency(depId, allPackages);
-                    if (res.pkg) {
-                        queue.push(res.pkg);
-                    }
-                }
-            }
-        }
-
-        return result;
+        // Recursive Resolution via Shared Utility
+        return resolveRecursive(packages, allPackages);
     }, [packages, includeDeps, allPackages, isOpen]);
 
 
