@@ -35,9 +35,9 @@ This roadmap guides the evolution of YAVAM.
     -   **Action:** Detect "Unreferenced" packages (Orphans). (Fixed: Indigo Status)
     -   **Action:** Fix "Used By" / Reverse Dependency graph logic. (Fixed: Robust Dependency Parsing)
     -   **Action:** Improve "Duplicate" detection to handle exact vs loose matches. (Fixed: Global Map & Status Priority)
-- [ ] **Step 5.1: Corrupt Package Detection**
+- [x] **Step 5.1: Corrupt Package Detection**
     -   **Action:** Enhance `pkg/scanner` to detect invalid header/EOF in zip files.
-    -   **UI:** Display "Corrupt" badge. (Partially implemented in v1.3.2)
+    -   **UI:** Display "Corrupt" badge. (Implemented in v1.3.2)
 - [x] **Step 5.2: Privacy & UX (v1.3.10)**
     -   **Action:** Granular Privacy (Details Panel Censor).
     -   **Action:** "Neon Flash" Highlight for better visibility.
@@ -45,6 +45,8 @@ This roadmap guides the evolution of YAVAM.
     -   **Action:** (v1.3.10) Fixed "False Missing" dependencies via Status Masking.
     -   **Action:** (v1.3.10) **Critical**: Fixed Recursive Dependency display in Sidebar (Details Panel).
     -   **Action:** (v1.3.10) **UX**: Fixed Selection Logic (`CTRL+A`) for corrupt packages.
+    -   **Action:** (v1.3.10) **UX**: Friendly "Access Denied" Banner for library scanning errors.
+    -   **Action:** (v1.3.10) **UX**: "View Library" post-install navigation fix.
 - [ ] **Step 5.3: Graph Logic Migration (v1.4.0)**
     -   **Action:** Move Dependency Graph calculation (`packageDependencyAnalysis.ts`) to Go Backend for performance/caching.
 - [ ] **Step 5.4: Advanced Library Management**

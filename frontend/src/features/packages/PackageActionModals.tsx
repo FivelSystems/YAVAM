@@ -23,7 +23,7 @@ export const PackageActionModals: React.FC<PackageActionModalsProps> = ({
     // Consumer Logic for Install
     const { installModal, setInstallModal, deleteConfirm, setDeleteConfirm, handleExecuteDelete } = useActionContext();
     const { packages, scanPackages } = usePackageContext();
-    const { libraries, activeLibraryPath } = useLibraryContext();
+    const { libraries, activeLibraryPath, selectLibrary } = useLibraryContext();
     const { addToast } = useToasts();
 
     return (
@@ -38,7 +38,14 @@ export const PackageActionModals: React.FC<PackageActionModalsProps> = ({
                 currentLibrary={activeLibraryPath}
                 onSuccess={(res) => {
                     addToast(`Installed ${res.installed} packages to ${res.targetLib}` + (res.skipped > 0 ? ` (${res.skipped} skipped)` : ""), 'success');
-                    scanPackages();
+
+                    if (res.switchTo) {
+                        // User requested to switch libraries. Logic handles scan via Effect.
+                        selectLibrary(res.targetLib);
+                    } else if (res.targetLib === activeLibraryPath) {
+                        // Stayed on same lib, but it was the install target, so refresh.
+                        scanPackages();
+                    }
                 }}
             />
 

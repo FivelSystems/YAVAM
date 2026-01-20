@@ -12,7 +12,7 @@ interface InstallPackageModalProps {
     allPackages: VarPackage[];
     libraries: string[];
     currentLibrary: string; // To visually distinguishing or filtering
-    onSuccess: (result: { installed: number, skipped: number, targetLib: string }) => void;
+    onSuccess: (result: { installed: number, skipped: number, targetLib: string, switchTo?: boolean }) => void;
 }
 
 const formatBytes = (bytes: number) => {
@@ -480,15 +480,26 @@ export const InstallPackageModal = ({ isOpen, onClose, packages, allPackages, li
                     {!loading && (
                         <div className="p-4 border-t border-gray-700 bg-gray-900/50 flex gap-3">
                             {installResult ? (
-                                <button
-                                    onClick={() => {
-                                        onSuccess({ installed: installResult.installed, skipped: installResult.skipped, targetLib: selectedLib! });
-                                        onClose();
-                                    }}
-                                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors shadow-blue-900/20"
-                                >
-                                    Done
-                                </button>
+                                <div className="flex gap-3 w-full">
+                                    <button
+                                        onClick={() => {
+                                            onSuccess({ installed: installResult.installed, skipped: installResult.skipped, targetLib: selectedLib!, switchTo: true });
+                                            onClose();
+                                        }}
+                                        className="flex-1 py-2.5 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg font-medium transition-colors border border-gray-600"
+                                    >
+                                        View Library
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            onSuccess({ installed: installResult.installed, skipped: installResult.skipped, targetLib: selectedLib!, switchTo: false });
+                                            onClose();
+                                        }}
+                                        className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors shadow-blue-900/20"
+                                    >
+                                        Ok
+                                    </button>
+                                </div>
                             ) : (
                                 <button
                                     onClick={handleInstall}

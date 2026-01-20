@@ -13,6 +13,7 @@ interface PackageContextType {
     setAvailableTags: (tags: string[]) => void;
     loading: boolean;
     setLoading: (loading: boolean) => void;
+    scanError: string | null;
     scanProgress: { current: number; total: number };
     setScanProgress: (progress: { current: number; total: number }) => void;
     scanPackages: () => Promise<void>;

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
+import { AlertTriangle } from 'lucide-react';
 import { VarPackage } from '../../types';
 import CardGrid from '../library/CardGrid';
 import { Pagination } from '../../components/common/Pagination';
@@ -34,7 +35,7 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
     censorThumbnails, blurAmount, hidePackageNames, hideCreatorNames
 }) => {
     // Context Consumption
-    const { packages } = usePackageContext();
+    const { packages, scanError } = usePackageContext();
     const {
         filteredPkgs, currentPage, itemsPerPage, setCurrentPage,
         selectedCreator, setSelectedCreator
@@ -145,6 +146,13 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
     return (
         <div className="flex-1 flex overflow-hidden">
             <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
+                {scanError && (
+                    <div className="bg-red-500/10 border-b border-red-500/20 p-4 flex items-center justify-center text-red-400 gap-3 shrink-0">
+                        <AlertTriangle className="w-5 h-5" />
+                        <span className="font-medium">Library Access Error: {scanError}</span>
+                    </div>
+                )}
+
                 {/* CardGrid Container */}
                 <div ref={scrollContainerRef} className="flex-1 overflow-auto p-4 pb-24 custom-scrollbar">
                     <CardGrid
