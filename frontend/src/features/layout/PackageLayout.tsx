@@ -53,11 +53,32 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
     const [activeTab, setActiveTab] = useState<"details" | "contents">("details");
 
     // Scroll to top on page change
+    // Scroll Management (Top vs Locate)
     React.useEffect(() => {
-        if (scrollContainerRef.current) {
-            scrollContainerRef.current.scrollTo({ top: 0, behavior: 'auto' });
+        if (!scrollContainerRef.current) return;
+
+        // If we have a highlight request, try to scroll to it first
+        if (highlightedRequest) {
+            const el = document.getElementById(`pkg-${highlightedRequest.id}`);
+            if (el) {
+                // Found it! Scroll to it.
+                // We use a slight delay ensures layout is stable if this effect runs concurrently with render
+                // We use requestAnimationFrame to ensure we scroll immediately after browser paint
+                window.requestAnimationFrame(() => {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                });
+                return;
+            }
+            // If not found yet (maybe looking for it on another page?), fall through to scroll top 
+            // BUT, if we just switched pages to find it, it should be here.
         }
-    }, [currentPage, scrollContainerRef]);
+
+        // Default: Scroll to top on page switch
+        scrollContainerRef.current.scrollTo({ top: 0, behavior: 'auto' });
+
+        // Dependency Note: We include highlightedRequest to re-run if user clicks "Locate" again 
+        // even if page doesn't change.
+    }, [currentPage, scrollContainerRef, highlightedRequest]);
 
     const handleDependencyClick = (depId: string) => {
         const cleanDep = depId.replace(/\\/g, '/').toLowerCase();
@@ -154,7 +175,7 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
                 )}
 
                 {/* CardGrid Container */}
-                <div ref={scrollContainerRef} className="flex-1 overflow-auto p-4 pb-24 custom-scrollbar">
+                <div ref={scrollContainerRef} className="flex-1 overflow-auto p-4 pb-32 md:pb-24 custom-scrollbar">
                     <CardGrid
                         packages={filteredPkgs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)}
                         currentPath={activeLibraryPath}
