@@ -15,12 +15,14 @@
 ### Fixed
 #### UX & Interface
 - **Library Navigation**: "View Library" button in Install Modal now correctly triggers a library switch and re-scan.
+- **Navigation**: Fixed "Locate Package" requiring double-clicks when switching pages. It now correctly auto-scrolls to the target immediately after the page transition.
 - **Filters**: Clicking the active "Creator" filter pill in the Details Panel now toggles the filter off (Reset).
 - **Selection**: Fixed `CTRL+A` (Select All) not visually highlighting "Corrupt" packages.
 - **Animation**: Fixed "Locate Package" animation to restart reliably on rapid clicks (spam-proofing) and handle interruptions correctly.
 - **Cleanup**: Restored "Package Cleanup" context menu option.
 
 #### Core Logic & Status
+- **Web Client**: Fixed "Infinite Scanning" spinner on mobile/web clients by ensuring the server broadcasts the `scan:complete` event upon finish.
 - **Dependencies**: Fixed "Incomplete" dependency list in the Details Panel by unifying recursive logic with the Install Modal.
 - **Dependencies**: Fixed "False Missing" status by automatically masking internal warnings (Mismatch/Root) as Valid (Green) if the package exists.
 - **Dependencies**: Fixed discrepancy where valid dependencies appeared as "Missing" due to dot-notation or implicit `.latest` references.

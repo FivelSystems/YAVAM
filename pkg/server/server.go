@@ -432,9 +432,13 @@ func (s *Server) Start(port string, libraries []string) error {
 			})
 		})
 		if err != nil {
+			s.Broadcast("scan:error", err.Error())
 			s.writeError(w, err.Error(), 500)
 			return
 		}
+
+		// Notify completion so frontend stops spinner
+		s.Broadcast("scan:complete", true)
 
 		json.NewEncoder(w).Encode(pkgs)
 	})))
