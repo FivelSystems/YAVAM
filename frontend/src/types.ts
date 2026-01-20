@@ -22,4 +22,5 @@ export interface VarPackage {
     isCorrupt?: boolean;
     isOrphan?: boolean;
     referencedBy?: string[];
+    obsoletedBy?: string; // Diagnostic info: "vX.Y (filename)"
 }

@@ -347,11 +347,23 @@ export const usePackageActions = (
         if (lastDot > 0) {
             const baseId = cleanDep.substring(0, lastDot);
             // Verify if this baseId exists in our library
-            const matches = packages.some(p =>
+            // Verify if this baseId exists in our library
+            const candidates = packages.filter(p =>
                 `${p.meta.creator}.${p.meta.packageName}`.toLowerCase() === baseId
             );
 
-            if (matches) return 'mismatch'; // We have the package, just not this version.
+            if (candidates.length > 0) {
+                // If we have ANY enabled & healthy version, treat the dependency as VALID (Green).
+                // This resolves "False Obsolete" / "Yellow Warning" fatigue when you simply have a newer/different version.
+                const hasWorkingCandidate = candidates.some(p => p.isEnabled && !p.isCorrupt);
+                if (hasWorkingCandidate) return 'valid';
+
+                // If we have it but it's disabled
+                const hasDisabled = candidates.some(p => !p.isEnabled);
+                if (hasDisabled) return 'disabled';
+
+                return 'mismatch';
+            }
         }
 
         return 'missing';

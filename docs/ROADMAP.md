@@ -41,6 +41,8 @@ This roadmap guides the evolution of YAVAM.
 - [x] **Step 5.2: Privacy & UX (v1.3.10)**
     -   **Action:** Granular Privacy (Details Panel Censor).
     -   **Action:** "Neon Flash" Highlight for better visibility.
+    -   **Action:** (v1.3.10) Fixed "Locate" animation spam/interruption issues.
+    -   **Action:** (v1.3.10) Fixed "False Missing" dependencies via Status Masking.
 - [ ] **Step 5.3: Graph Logic Migration (v1.4.0)**
     -   **Action:** Move Dependency Graph calculation (`packageDependencyAnalysis.ts`) to Go Backend for performance/caching.
 - [ ] **Step 5.4: Advanced Library Management**

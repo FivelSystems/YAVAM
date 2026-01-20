@@ -18,10 +18,10 @@ interface CardGridProps {
     blurAmount?: number;
     hidePackageNames?: boolean;
     hideCreatorNames?: boolean;
-    highlightedPackageId?: string | null;
+    highlightedRequest?: { id: string; ts: number } | null;
 }
 
-const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, selectedPkgId, selectedIds, viewMode, gridSize = 150, censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false, highlightedPackageId }: CardGridProps) => {
+const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, selectedPkgId, selectedIds, viewMode, gridSize = 150, censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false, highlightedRequest }: CardGridProps) => {
 
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -103,7 +103,8 @@ const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, 
                                 blurAmount={blurAmount}
                                 hidePackageNames={hidePackageNames}
                                 hideCreatorNames={hideCreatorNames}
-                                isHighlighted={pkg.filePath === highlightedPackageId}
+                                isHighlighted={highlightedRequest?.id === pkg.filePath}
+                                startAnimationTs={highlightedRequest?.id === pkg.filePath ? highlightedRequest.ts : undefined}
                             />
                         </motion.div>
                     ))}

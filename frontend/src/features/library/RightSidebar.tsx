@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Check, AlertCircle, AlertTriangle, Box, FileImage, User, Scissors, Copy, Power } from 'lucide-react';
+import { X, Check, AlertCircle, AlertTriangle, Box, FileImage, User, Scissors, Copy, Power, Unlink } from 'lucide-react';
 import clsx from 'clsx';
 import { motion } from 'framer-motion';
 import { VarPackage } from '../../types';
@@ -31,7 +31,7 @@ interface RightSidebarProps {
     blurAmount?: number;
 }
 
-const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilterByCreator, onDependencyClick, onTitleClick, getDependencyStatus, selectedCreator, censorThumbnails = false, blurAmount = 10 }: RightSidebarProps) => {
+const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilterByCreator, onDependencyClick, onTitleClick, selectedCreator, censorThumbnails = false, blurAmount = 10 }: RightSidebarProps) => {
 
     const [contents, setContents] = useState<PackageContent[]>([]);
     const [loading, setLoading] = useState(false);
@@ -174,9 +174,9 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                                     {pkg.isExactDuplicate ? "Duplicate Detected" : "Obsolete Version"}
                                 </h4>
                                 <p className="text-xs text-gray-400 mb-2">
-                                    {pkg.isExactDuplicate
+                                    {pkg.obsoletedBy || (pkg.isExactDuplicate
                                         ? "The same package has been found somewhere else across the library."
-                                        : "A newer version of this package is available."}
+                                        : "A newer version of this package is available.")}
                                 </p>
                                 <button
                                     onClick={() => onResolve(pkg)}
@@ -246,51 +246,60 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                                 <div className="space-y-1">
                                     {pkg.meta.dependencies && Object.keys(pkg.meta.dependencies).length > 0 ? (
                                         Object.entries(pkg.meta.dependencies).map(([depId]) => {
-                                            const status = getDependencyStatus(depId);
+                                            // SIMPLIFIED LOGIC: Find best enabled match. Show IT.
+                                            const resolvedPkg = findBestPackageMatch(packages, depId);
+                                            let status = resolvedPkg ? getPackageStatus(resolvedPkg) : PACKAGE_STATUS.MISSING;
 
-                                            // Status Logic for legacy getDependencyStatus
-                                            let bgClass = "bg-red-500/10 border-red-500/20 text-red-300 hover:bg-red-500/20"; // Missing/Default
+                                            // Status Filtering (Mask Mismatch/Root -> Valid)
+                                            // @ts-ignore
+                                            if (status === PACKAGE_STATUS.MISMATCH || status === PACKAGE_STATUS.ROOT) {
+                                                status = PACKAGE_STATUS.VALID;
+                                            }
 
-                                            if (status === PACKAGE_STATUS.VALID) {
-                                                bgClass = "bg-green-500/10 border-green-500/20 text-green-300 hover:bg-green-500/20";
-                                            } else if (status === PACKAGE_STATUS.MISMATCH) {
-                                                bgClass = "bg-yellow-500/10 border-yellow-500/20 text-yellow-300 hover:bg-yellow-500/20";
-                                            } else if (status === PACKAGE_STATUS.SCANNING) {
-                                                bgClass = "bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-750";
-                                            } else if (status === PACKAGE_STATUS.SYSTEM) {
-                                                bgClass = "bg-blue-500/10 border-blue-500/20 text-blue-300 hover:bg-blue-500/20";
-                                            } else if (status === PACKAGE_STATUS.CORRUPT) {
-                                                bgClass = "bg-red-900/40 border-red-500 text-red-500 hover:bg-red-900/60";
-                                            } else if (status === PACKAGE_STATUS.DISABLED) {
-                                                bgClass = "bg-gray-800 border-gray-600 text-gray-400 hover:bg-gray-700";
+                                            // Navigation Target
+                                            const targetId = resolvedPkg ? resolvedPkg.filePath : depId;
+                                            const displayName = resolvedPkg?.meta
+                                                ? `${resolvedPkg.meta.creator}.${resolvedPkg.meta.packageName}.${resolvedPkg.meta.version}`
+                                                : depId;
+
+                                            // Status Coloring
+                                            let bgClass = "bg-red-500/10 border-red-500/20 text-red-300 hover:bg-red-500/20"; // Default Missing
+
+                                            if (resolvedPkg) {
+                                                if (status === PACKAGE_STATUS.VALID) {
+                                                    bgClass = "bg-green-500/10 border-green-500/20 text-green-300 hover:bg-green-500/20";
+                                                } else if (status === PACKAGE_STATUS.OBSOLETE) {
+                                                    bgClass = "bg-yellow-500/10 border-yellow-500/20 text-yellow-300 hover:bg-yellow-500/20";
+                                                } else if (status === PACKAGE_STATUS.DUPLICATE) {
+                                                    bgClass = "bg-purple-500/10 border-purple-500/20 text-purple-300 hover:bg-purple-500/20";
+                                                } else if (status === PACKAGE_STATUS.CORRUPT) {
+                                                    bgClass = "bg-red-900/40 border-red-500 text-red-500 hover:bg-red-900/60";
+                                                } else if (status === PACKAGE_STATUS.DISABLED) {
+                                                    bgClass = "bg-gray-800 border-gray-600 text-gray-400 hover:bg-gray-700";
+                                                } else if (status === PACKAGE_STATUS.SYSTEM) {
+                                                    bgClass = "bg-gray-800/50 border-gray-700 text-gray-500 hover:bg-gray-800";
+                                                }
                                             }
 
                                             return (
                                                 <div
                                                     key={depId}
-                                                    onClick={() => onDependencyClick(depId)}
+                                                    onClick={() => onDependencyClick(targetId)}
                                                     className={clsx(
                                                         "flex items-center gap-3 p-2 rounded-lg text-xs border transition-colors cursor-pointer group",
                                                         bgClass
-                                                    )}>
-
-                                                    {status === PACKAGE_STATUS.VALID ? (
-                                                        <Check size={14} className="text-green-500 shrink-0" />
-                                                    ) : status === PACKAGE_STATUS.MISMATCH ? (
-                                                        <AlertCircle size={14} className="text-yellow-500 shrink-0" />
-                                                    ) : status === PACKAGE_STATUS.SYSTEM ? (
-                                                        <Box size={14} className="text-blue-500 shrink-0" />
-                                                    ) : status === PACKAGE_STATUS.SCANNING ? (
-                                                        <div className="w-3.5 h-3.5 rounded-full border-2 border-gray-600 border-t-white animate-spin shrink-0" />
-                                                    ) : status === PACKAGE_STATUS.CORRUPT ? (
-                                                        <AlertTriangle size={14} className="text-red-500 shrink-0" />
-                                                    ) : status === PACKAGE_STATUS.DISABLED ? (
-                                                        <Power size={14} className="text-gray-400 shrink-0" />
-                                                    ) : (
-                                                        <X size={14} className="text-red-500 shrink-0" />
                                                     )}
-
-                                                    <span className="truncate flex-1" title={depId}>{depId}</span>
+                                                    title={resolvedPkg?.obsoletedBy ? resolvedPkg.obsoletedBy : displayName}
+                                                >
+                                                    {status === PACKAGE_STATUS.VALID ? <Check size={14} className="text-green-500 shrink-0" /> :
+                                                        status === PACKAGE_STATUS.OBSOLETE ? <AlertCircle size={14} className="text-yellow-500 shrink-0" /> :
+                                                            status === PACKAGE_STATUS.DUPLICATE ? <Copy size={14} className="text-purple-500 shrink-0" /> :
+                                                                status === PACKAGE_STATUS.CORRUPT ? <AlertTriangle size={14} className="text-red-500 shrink-0" /> :
+                                                                    status === PACKAGE_STATUS.DISABLED ? <Power size={14} className="text-gray-400 shrink-0" /> :
+                                                                        status === PACKAGE_STATUS.SYSTEM ? <Box size={14} className="text-gray-500 shrink-0" /> :
+                                                                            <X size={14} className="text-red-500 shrink-0" />
+                                                    }
+                                                    <span className="truncate flex-1">{displayName}</span>
                                                 </div>
                                             );
                                         })
@@ -309,42 +318,41 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                                 <div className="space-y-1">
                                     {pkg.referencedBy && pkg.referencedBy.length > 0 ? (
                                         pkg.referencedBy.map((refId) => {
-                                            // 1. Resolve Consumer
-                                            // refId is the Package ID (Creator.Pkg.Version).
-                                            // We use findBestPackageMatch to get the ENABLED version if it exists.
-                                            const consumerPkg = findBestPackageMatch(packages, refId);
+                                            // SIMPLIFIED LOGIC: Find best enabled match. Show IT.
+                                            const resolvedPkg = findBestPackageMatch(packages, refId);
 
-                                            // 2. Centralized Status Logic
-                                            const status = getPackageStatus(consumerPkg);
-
-                                            // 3. Styling (Green for Valid/Enabled, etc.)
-                                            let bgClass = "bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-750"; // Default
-
-                                            if (status === PACKAGE_STATUS.VALID) {
-                                                bgClass = "bg-green-500/10 border-green-500/20 text-green-300 hover:bg-green-500/20";
-                                            } else if (status === PACKAGE_STATUS.MISMATCH) {
-                                                bgClass = "bg-yellow-500/10 border-yellow-500/20 text-yellow-300 hover:bg-yellow-500/20";
-                                            } else if (status === PACKAGE_STATUS.DUPLICATE) {
-                                                bgClass = "bg-purple-500/10 border-purple-500/20 text-purple-300 hover:bg-purple-500/20";
-                                            } else if (status === PACKAGE_STATUS.OBSOLETE) {
-                                                bgClass = "bg-orange-500/10 border-orange-500/20 text-orange-300 hover:bg-orange-500/20";
-                                            } else if (status === PACKAGE_STATUS.CORRUPT) {
-                                                bgClass = "bg-red-900/40 border-red-500 text-red-500 hover:bg-red-900/60";
-                                            } else if (status === PACKAGE_STATUS.ROOT) {
-                                                bgClass = "bg-blue-500/10 border-blue-500/20 text-blue-300 hover:bg-blue-500/20";
+                                            // Status Filtering (Mask Mismatch/Root -> Valid)
+                                            // This explicitly prevents "Red" status for valid packages with internal warnings.
+                                            let status = resolvedPkg ? getPackageStatus(resolvedPkg) : PACKAGE_STATUS.MISSING;
+                                            if (status === PACKAGE_STATUS.MISMATCH || status === PACKAGE_STATUS.ROOT) {
+                                                status = PACKAGE_STATUS.VALID;
                                             }
 
-                                            // 4. Display Name (Full ID)
-                                            const displayName = consumerPkg?.meta
-                                                ? `${consumerPkg.meta.creator}.${consumerPkg.meta.packageName}.${consumerPkg.meta.version}`
-                                                : (consumerPkg?.fileName || refId);
+                                            // Navigation Target
+                                            const targetId = resolvedPkg ? resolvedPkg.filePath : refId;
+                                            const displayName = resolvedPkg?.meta
+                                                ? `${resolvedPkg.meta.creator}.${resolvedPkg.meta.packageName}.${resolvedPkg.meta.version}`
+                                                : (resolvedPkg?.fileName || refId);
 
-                                            // 5. Click Handler
-                                            // Must navigate to the RESOLVED package ID (consumerPkg id), not just the ref string.
-                                            // If consumer matches, use its specific ID.
-                                            const targetId = consumerPkg
-                                                ? consumerPkg.filePath // Use Path for exact lookup in PackageLayout
-                                                : refId;
+                                            // Status Coloring
+                                            let bgClass = "bg-red-500/10 border-red-500/20 text-red-300 hover:bg-red-500/20"; // Default Missing
+
+                                            if (resolvedPkg) {
+                                                if (status === PACKAGE_STATUS.VALID) {
+                                                    bgClass = "bg-green-500/10 border-green-500/20 text-green-300 hover:bg-green-500/20";
+                                                } else if (status === PACKAGE_STATUS.OBSOLETE) {
+                                                    bgClass = "bg-yellow-500/10 border-yellow-500/20 text-yellow-300 hover:bg-yellow-500/20";
+                                                } else if (status === PACKAGE_STATUS.DUPLICATE) {
+                                                    bgClass = "bg-purple-500/10 border-purple-500/20 text-purple-300 hover:bg-purple-500/20";
+                                                } else if (status === PACKAGE_STATUS.CORRUPT) {
+                                                    bgClass = "bg-red-900/40 border-red-500 text-red-500 hover:bg-red-900/60";
+                                                } else if (status === PACKAGE_STATUS.DISABLED) {
+                                                    bgClass = "bg-gray-800 border-gray-600 text-gray-400 hover:bg-gray-700";
+                                                    // @ts-ignore
+                                                } else if (status === PACKAGE_STATUS.ROOT) {
+                                                    bgClass = "bg-violet-500/10 border-violet-500/20 text-violet-300 hover:bg-violet-500/20";
+                                                }
+                                            }
 
                                             return (
                                                 <div
@@ -353,25 +361,19 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                                                     className={clsx(
                                                         "flex items-center gap-3 p-2 rounded-lg text-xs border transition-colors cursor-pointer group",
                                                         bgClass
-                                                    )}>
-
-                                                    {status === PACKAGE_STATUS.VALID ? (
-                                                        <Check size={14} className="text-green-500 shrink-0" />
-                                                    ) : status === PACKAGE_STATUS.MISMATCH ? (
-                                                        <AlertCircle size={14} className="text-yellow-500 shrink-0" />
-                                                    ) : status === PACKAGE_STATUS.DUPLICATE ? (
-                                                        <Copy size={14} className="text-purple-500 shrink-0" />
-                                                    ) : status === PACKAGE_STATUS.OBSOLETE ? (
-                                                        <AlertCircle size={14} className="text-orange-500 shrink-0" />
-                                                    ) : status === PACKAGE_STATUS.CORRUPT ? (
-                                                        <AlertTriangle size={14} className="text-red-500 shrink-0" />
-                                                    ) : status === PACKAGE_STATUS.DISABLED ? (
-                                                        <Power size={14} className="text-gray-400 shrink-0" />
-                                                    ) : (
-                                                        <Box size={14} className="text-gray-500 shrink-0" />
                                                     )}
-
-                                                    <span className="truncate flex-1" title={displayName}>{displayName}</span>
+                                                    title={resolvedPkg?.obsoletedBy ? resolvedPkg.obsoletedBy : displayName}
+                                                >
+                                                    {status === PACKAGE_STATUS.VALID ? <Check size={14} className="text-green-500 shrink-0" /> :
+                                                        status === PACKAGE_STATUS.OBSOLETE ? <AlertCircle size={14} className="text-yellow-500 shrink-0" /> :
+                                                            status === PACKAGE_STATUS.DUPLICATE ? <Copy size={14} className="text-purple-500 shrink-0" /> :
+                                                                status === PACKAGE_STATUS.CORRUPT ? <AlertTriangle size={14} className="text-red-500 shrink-0" /> :
+                                                                    status === PACKAGE_STATUS.DISABLED ? <Power size={14} className="text-gray-400 shrink-0" /> :
+                                                                        // @ts-ignore
+                                                                        status === PACKAGE_STATUS.ROOT ? <Unlink size={14} className="text-violet-500 shrink-0" /> :
+                                                                            <X size={14} className="text-red-500 shrink-0" />
+                                                    }
+                                                    <span className="truncate flex-1">{displayName}</span>
                                                 </div>
                                             );
                                         })

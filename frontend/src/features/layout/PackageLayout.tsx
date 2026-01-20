@@ -17,7 +17,7 @@ interface PackageLayoutProps {
     gridSize: number;
 
     // Locating
-    highlightedPackageId?: string;
+    highlightedRequest?: { id: string; ts: number } | null;
     onLocatePackage: (pkg: VarPackage) => void;
     scrollContainerRef: React.RefObject<HTMLDivElement>;
 
@@ -30,7 +30,7 @@ interface PackageLayoutProps {
 
 export const PackageLayout: React.FC<PackageLayoutProps> = ({
     viewMode, gridSize,
-    highlightedPackageId, onLocatePackage, scrollContainerRef,
+    highlightedRequest, onLocatePackage, scrollContainerRef,
     censorThumbnails, blurAmount, hidePackageNames, hideCreatorNames
 }) => {
     // Context Consumption
@@ -61,7 +61,7 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
     const handleDependencyClick = (depId: string) => {
         const cleanDep = depId.replace(/\\/g, '/').toLowerCase();
 
-        // 1. Try Path Match First (For "Used By" lookups)
+        // 1. Try Path Match First (For "Used By" lookups where path is known)
         let found = packages.find(p => p.filePath.replace(/\\/g, '/').toLowerCase() === cleanDep);
 
         // 2. Try Exact ID Match (For "Dependency" lookups)
@@ -72,24 +72,51 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
             });
         }
 
-        // 2. If not found, find Latest Available
+        // 3. Fallback / "Latest" Resolution
         if (!found) {
-            const parts = cleanDep.split('.');
-            if (parts.length >= 2) {
-                const creator = parts[0];
-                const pkgName = parts[1];
+            let searchCreator = "";
+            let searchPkg = "";
+            let searchVersion = "";
 
+            // Parsing Logic: Handle names with dots (e.g. Creator.My.Package.Name.1)
+            // Strategy: Assume format is Creator.PackageName.Version
+            // We split by FIRST dot for Creator, and LAST dot for Version.
+            // Everything in between is PackageName.
+
+            const firstDot = cleanDep.indexOf('.');
+            const lastDot = cleanDep.lastIndexOf('.');
+
+            if (firstDot > 0 && lastDot > firstDot) {
+                searchCreator = cleanDep.substring(0, firstDot);
+                searchPkg = cleanDep.substring(firstDot + 1, lastDot);
+                searchVersion = cleanDep.substring(lastDot + 1);
+            } else if (firstDot > 0) {
+                // Fallback: Creator.Package (No version or latest implied)
+                searchCreator = cleanDep.substring(0, firstDot);
+                searchPkg = cleanDep.substring(firstDot + 1);
+            }
+
+            // Only attempt fallback if we successfully parsed a Creator and Package
+            if (searchCreator && searchPkg) {
+                // Determine if we should allow vague matching (finding ANY version)
+                // We allow it ONLY if version is 'latest' or ambiguous.
+                // We BLOCK it if a specific numeric version was requested but not found (Step 2 failed).
+                const isExplicitVersion = !isNaN(parseInt(searchVersion)) && searchVersion !== 'latest';
+
+                if (isExplicitVersion) {
+                    addToast(`Specific version not found: ${depId}`, "error");
+                    return; // STRICT MODE: Do not jump to different version
+                }
+
+                // If loose/latest, find best candidate
                 const candidates = packages.filter(p =>
-                    (p.meta.creator || "").toLowerCase() === creator &&
-                    (p.meta.packageName || "").toLowerCase() === pkgName
+                    (p.meta.creator || "").toLowerCase() === searchCreator &&
+                    (p.meta.packageName || "").toLowerCase() === searchPkg
                 );
 
                 if (candidates.length > 0) {
-                    // Sort Descending
+                    // Sort Descending (Newest First)
                     candidates.sort((a, b) => {
-                        const vA = parseInt(a.meta.version);
-                        const vB = parseInt(b.meta.version);
-                        if (!isNaN(vA) && !isNaN(vB)) return vB - vA;
                         return (b.meta.version || "").localeCompare(a.meta.version || "", undefined, { numeric: true });
                     });
                     found = candidates[0];
@@ -97,7 +124,7 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
             }
         }
 
-        // 3. System check
+        // 4. System check
         if (!found && cleanDep.startsWith("vam.core")) {
             addToast(`System Dependency: ${depId}`, "info");
             return;
@@ -105,6 +132,7 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
 
         if (found) {
             const foundId = `${found.meta.creator}.${found.meta.packageName}.${found.meta.version}`;
+            // If we found a match via Fuzzy/Latest logic, let the user know
             if (foundId.toLowerCase() !== cleanDep) {
                 addToast(`Located latest available version: v${found.meta.version}`, "info");
             }
@@ -133,7 +161,7 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
                         blurAmount={blurAmount}
                         hidePackageNames={censorThumbnails && hidePackageNames}
                         hideCreatorNames={censorThumbnails && hideCreatorNames}
-                        highlightedPackageId={highlightedPackageId}
+                        highlightedRequest={highlightedRequest}
                     />
                 </div>
 

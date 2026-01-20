@@ -41,23 +41,42 @@ export const findBestPackageMatch = (allPackages: VarPackage[], targetId: string
 
     const targetLower = targetId.toLowerCase();
 
-    // 1. Filter all matches
-    const candidates = allPackages.filter(p =>
+    // 1. Filter all matches (Exact ID)
+    let candidates = allPackages.filter(p =>
         `${p.meta.creator}.${p.meta.packageName}.${p.meta.version}`.toLowerCase() === targetLower
     );
 
+    // 2. Fallback: If no exact match, look for ANY version of this package (Creator.Package)
+    // This aligns with the "Relaxed Analysis" logic.
+    if (candidates.length === 0) {
+        // Parse Base ID. This handles "Creator.Package.Version" -> "Creator.Package"
+        // We use the same recursive strip logic or just strict parsing if standard.
+        // Given we don't know the exact split, we'll try to find packages that START with the Creator.Package part?
+        // No, that's risky.
+        // Better: We iterate all packages and check if targetId *starts with* their Creator.Package base?
+        // Or we aggressively try to match Creator.Package.
+
+        // Let's assume standard Creator.Name.Version format for the fallback.
+        // We can just check matches on Creator + PackageName.
+        candidates = allPackages.filter(p => {
+            const pkgBase = `${p.meta.creator}.${p.meta.packageName}`.toLowerCase();
+            // Does the targetId start with this base?
+            // e.g. target "A.B.1" starts with "A.B"?
+            return targetLower.startsWith(pkgBase);
+        });
+    }
+
     if (candidates.length === 0) return undefined;
-    if (candidates.length === 1) return candidates[0];
 
-    // 2. Prioritize Enabled & Valid
-    const enabledAndValid = candidates.find(p => p.isEnabled && !p.isCorrupt);
-    if (enabledAndValid) return enabledAndValid;
+    // Sort Candidates: Enabled First, then Version Descending
+    candidates.sort((a, b) => {
+        if (a.isEnabled && !b.isEnabled) return -1;
+        if (!a.isEnabled && b.isEnabled) return 1;
+        // Version Sort (Simple String Compare is "Okay" for fallback, but ideally SemVer)
+        return (b.meta.version || "").localeCompare(a.meta.version || "", undefined, { numeric: true });
+    });
 
-    // 3. Prioritize Valid (even if disabled)
-    const valid = candidates.find(p => !p.isCorrupt);
-    if (valid) return valid;
-
-    // 4. Fallback to first found
+    // Return best candidate
     return candidates[0];
 };
 

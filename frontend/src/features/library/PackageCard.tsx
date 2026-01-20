@@ -16,9 +16,10 @@ interface PackageCardProps {
     hidePackageNames?: boolean;
     hideCreatorNames?: boolean;
     isHighlighted?: boolean;
+    startAnimationTs?: number; // Timestamp to force animation restart (used as key)
 }
 
-const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, viewMode = 'grid', censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false, isHighlighted = false }: PackageCardProps) => {
+const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, viewMode = 'grid', censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false, isHighlighted = false, startAnimationTs }: PackageCardProps) => {
     const cardRef = useRef<HTMLDivElement>(null);
     const [thumbSrc, setThumbSrc] = useState<string | undefined>(
         pkg.thumbnailBase64 ? `data:image/jpeg;base64,${pkg.thumbnailBase64}` : undefined
@@ -124,6 +125,7 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
     if (viewMode === 'list') {
         return (
             <div
+                key={startAnimationTs} // Force re-render on new highlight request to restart animation
                 id={`package-${pkg.filePath}`}
                 ref={cardRef}
                 onClick={handleClick}
@@ -183,6 +185,7 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
     // Default Grid View
     return (
         <motion.div
+            key={startAnimationTs} // Force re-render on new highlight request to restart animation
             layout
             id={`package-${pkg.filePath}`}
             ref={cardRef}
@@ -250,10 +253,16 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
                     <div className="text-[10px] text-gray-400 mt-2 border-t border-gray-700/50 pt-2 flex justify-between">
                         <span>{(pkg.size / 1024 / 1024).toFixed(1)} MB</span>
                         {pkg.isEnabled && pkg.missingDeps && pkg.missingDeps.length > 0 && <span className="text-red-400 font-bold">{pkg.missingDeps.length} Missing</span>}
-                        {pkg.isEnabled && pkg.isExactDuplicate && <span className="text-purple-400 font-bold">Duplicate</span>}
-                        {pkg.isEnabled && !pkg.isExactDuplicate && pkg.isDuplicate && <span className="text-yellow-400 font-bold">Obsolete</span>}
+                        {pkg.isEnabled && pkg.isExactDuplicate && <span className="text-purple-400 font-bold truncate" title={pkg.obsoletedBy || "Duplicate"}>Duplicate</span>}
+                        {pkg.isEnabled && !pkg.isExactDuplicate && pkg.isDuplicate && <span className="text-yellow-400 font-bold truncate" title={pkg.obsoletedBy || "Obsolete"}>Obsolete</span>}
                         {!pkg.isEnabled && <span>Disabled</span>}
                     </div>
+                    {/* Explicit Reason Line */}
+                    {(pkg.obsoletedBy) && (
+                        <div className="text-[9px] text-yellow-500/80 px-1 pb-1 truncate border-t border-gray-700/30 mt-1 select-text cursor-text" title={pkg.obsoletedBy}>
+                            {pkg.obsoletedBy}
+                        </div>
+                    )}
                 </div>
             </div>
         </motion.div>

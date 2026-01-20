@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -70,10 +71,18 @@ func (a *App) GetLibraryCounts(libraries []string) map[string]int {
 	return a.manager.GetLibraryCounts(libraries)
 }
 
+// Log writes a message to the persistent application log
+func (a *App) Log(level string, message string) {
+	log.Printf("[%s] %s\n", level, message)
+}
+
 // startup is called when the app starts. The context is saved
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+
+	// Initialize Logger
+
 	updater.CleanupOld()
 
 	// Sub into frontend/dist
@@ -85,7 +94,6 @@ func (a *App) startup(ctx context.Context) {
 		subAssets = a.assets
 	}
 
-	// Initialize Auth Service
 	// Initialize Auth Service
 	configDir, _ := os.UserConfigDir()
 	authConfigPath := filepath.Join(configDir, "YAVAM", "auth.json")

@@ -68,6 +68,8 @@ export function IsServerRunning():Promise<boolean>;
 
 export function ListSessions():Promise<Array<auth.User>>;
 
+export function Log(arg1:string,arg2:string):Promise<void>;
+
 export function Login(arg1:string,arg2:string):Promise<string>;
 
 export function OpenAppDataFolder():Promise<void>;
