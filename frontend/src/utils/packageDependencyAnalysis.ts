@@ -26,6 +26,11 @@ export interface GraphAnalysisResult {
  * @param packages Full list of packages from the library.
  * @returns {GraphAnalysisResult} Contains the set of orphan filePaths and the reverse dependency map.
  */
+/**
+ * Analyzes the entire package set to build a dependency graph and identify orphans.
+ * @param packages Full list of packages from the library.
+ * @returns {GraphAnalysisResult} Contains the set of orphan filePaths and the reverse dependency map.
+ */
 export const analyzeGraph = (packages: VarPackage[]): GraphAnalysisResult => {
     const reverseDeps = new Map<string, Set<string>>();
     // pkgIdMap is local for orphan lookup, also key by lower
@@ -58,7 +63,7 @@ export const analyzeGraph = (packages: VarPackage[]): GraphAnalysisResult => {
 
         const verNum = parseInt(p.meta.version, 10);
         if (!isNaN(verNum)) {
-            versionMap.get(baseId)?.push({ fullId, version: verNum });
+            versionMap.get(baseId)?.push({ fullId: fullIdLower, version: verNum });
         }
     });
 
@@ -74,8 +79,6 @@ export const analyzeGraph = (packages: VarPackage[]): GraphAnalysisResult => {
         if (!consumer.meta.dependencies) return;
 
         // CRITICAL FIX: Use Package ID for Consumer (Deduplication).
-        // By using ID, we collapse multiple versions/clones of the same package into one "Concept".
-        // This solves "Used By" showing duplicates.
         const consumerId = `${consumer.meta.creator}.${consumer.meta.packageName}.${consumer.meta.version}`;
 
         Object.keys(consumer.meta.dependencies).forEach(depId => {
@@ -89,14 +92,34 @@ export const analyzeGraph = (packages: VarPackage[]): GraphAnalysisResult => {
 
             // Handle "latest" or missing version resolution
             if (depIdLower.endsWith('.latest')) {
-                // ... assuming format Creator.Package.latest
                 const baseDep = depIdLower.slice(0, -7);
-
                 const versions = versionMap.get(baseDep);
                 if (versions && versions.length > 0) {
-                    // The "latest" is the first one after sort
                     const latestId = versions[0].fullId.toLowerCase();
                     reverseDeps.get(latestId)?.add(consumerId);
+                }
+            } else {
+                // RECURSIVE BASE LOOKUP (Unified Logic)
+                // If exact match fails, try stripping segments to find a Base ID.
+                let tempBase = depIdLower;
+                while (tempBase.includes('.')) {
+                    const lastDot = tempBase.lastIndexOf('.');
+                    if (lastDot === -1) break;
+                    tempBase = tempBase.substring(0, lastDot);
+
+                    // Check if this matches a known Base ID (Creator.Package)
+                    const versions = versionMap.get(tempBase);
+                    if (versions && versions.length > 0) {
+                        // Matched a base! 
+                        // Logic: If referencing "Creator.Pkg", we assume it maps to the Latest Available Version for "Used By" purposes.
+                        // Or should we map to ALL versions? 
+                        // User Benefit: "Latest" is the most likely functionality.
+                        // And `usePackages` generally resolves to "Any" enabled.
+                        // Let's map to the LATEST version to keep the graph clean.
+                        const latestId = versions[0].fullId.toLowerCase();
+                        reverseDeps.get(latestId)?.add(consumerId);
+                        break; // Stop once matched
+                    }
                 }
             }
         });

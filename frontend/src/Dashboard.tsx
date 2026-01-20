@@ -79,8 +79,10 @@ const DashboardContent = () => {
     } = useDragDrop(activeLibraryPath);
 
     // -- Logic: Scroll to Package --
+    // -- Logic: Scroll to Package --
     const scrollContainerRef = useRef<HTMLDivElement>(null);
-    const [highlightedPackageId, setHighlightedPackageId] = useState<string>();
+    const [highlightedRequest, setHighlightedRequest] = useState<{ id: string; ts: number } | null>(null);
+    const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const handleLocatePackage = (targetPkg: VarPackage) => {
         // 1. Check if visible in current filter
@@ -133,12 +135,19 @@ const DashboardContent = () => {
 
         // 4. Highlight & Scroll
         const id = targetPkg.filePath;
-        setHighlightedPackageId(id);
+
+        // INTERRUPT LOGIC: Clear existing timer to prevent premature "off" switch
+        if (timerRef.current) {
+            clearTimeout(timerRef.current);
+        }
+
+        // Set new request with current timestamp (Forces animation restart via key change)
+        setHighlightedRequest({ id, ts: Date.now() });
 
         // Auto-clear highlight after 3 seconds (animation duration)
-        // Clear any existing timeout if we could (simplified here)
-        setTimeout(() => {
-            setHighlightedPackageId(undefined);
+        timerRef.current = setTimeout(() => {
+            setHighlightedRequest(null);
+            timerRef.current = null;
         }, 3000);
 
         // Timeout to allow render then Scroll
@@ -189,7 +198,7 @@ const DashboardContent = () => {
                     <PackageLayout
                         viewMode={viewMode}
                         gridSize={gridSize}
-                        highlightedPackageId={highlightedPackageId}
+                        highlightedRequest={highlightedRequest}
                         onLocatePackage={handleLocatePackage}
                         scrollContainerRef={scrollContainerRef}
                         censorThumbnails={censorThumbnails}

@@ -6,7 +6,7 @@
 
 # Changelog
 
-## [1.3.10] - 2026-01-19
+## [1.3.10] - 2026-01-20
 
 ### Added
 - **UI**: Implemented "Neon Flash" highlight animation to clearly identify located packages in the grid.
@@ -14,11 +14,17 @@
 - **Privacy**: Added global `getBlurStyle` helper for consistent privacy logic across the application.
 
 ### Fixed
+- **Animation**: Fixed "Locate Package" animation to restart reliably on rapid clicks (spam-proofing) and handle interruptions correctly.
+- **Dependencies**: Fixed "False Missing" status in the Dependencies list by masking internal warnings (Mismatch/Root) as Valid (Green) if the package is found.
+- **Cleanup**: Restored "Package Cleanup" context menu option (upcoming).
 - **Status**: Fixed duplicate detection logic to correctly identify duplicates even if they are disabled.
 - **Status**: Prioritized status checks to ensure disabled packages are marked as `DISABLED` (Gray) instead of `OBSOLETE` or `DUPLICATE`.
 - **Status**: Fixed "Obsolete" status logic by using natural numeric version sorting (`1.10 > 1.2`), preventing newer versions from being incorrectly flagged.
 - **Status**: Changed "Root" package status color from Blue (System) to Indigo to clarify they are top-level user content, not system files.
 - **Dependencies**: Fixed critical discrepancy where valid dependencies appeared as "Missing". Logic now correctly handles package names with dots and explicitly resolves `.latest` references.
+- **Ghost Duplicates**: Resolved duplicate package detection issues on Windows by enforcing strict lower-case path normalization.
+- **Status Logic**: Distinguish "Older Version" (Yellow/Obsolete) from "Redundant Copy" (Purple/Duplicate) to reduce false positives.
+- **Diagnostics**: Added "Obsoleted By" inspector to the Right Sidebar, showing exactly which package caused an "Obsolete" status.
 
 ## [1.3.2] - 2026-01-15
 

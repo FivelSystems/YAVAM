@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -22,8 +23,12 @@ func setupLogging() (*os.File, error) {
 	logPath := filepath.Join(configDir, "YAVAM", "application.log")
 	os.MkdirAll(filepath.Dir(logPath), 0755)
 
+	fmt.Printf("[DEBUG] Attempting to create log file at: %s\n", logPath)
+	os.WriteFile("debug_startup.txt", []byte(fmt.Sprintf("Attempting to create log at: %s\n", logPath)), 0644)
+
 	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
+		fmt.Printf("[ERROR] Failed to create log file: %v\n", err)
 		return nil, err
 	}
 

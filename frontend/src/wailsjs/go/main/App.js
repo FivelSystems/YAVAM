@@ -126,6 +126,10 @@ export function ListSessions() {
   return window['go']['main']['App']['ListSessions']();
 }
 
+export function Log(arg1, arg2) {
+  return window['go']['main']['App']['Log'](arg1, arg2);
+}
+
 export function Login(arg1, arg2) {
   return window['go']['main']['App']['Login'](arg1, arg2);
 }
