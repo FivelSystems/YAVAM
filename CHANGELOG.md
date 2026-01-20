@@ -13,22 +13,23 @@
 - **UX**: Added Friendly Error Banner for library access failures (e.g. "Access Denied" or missing folders).
 
 ### Fixed
-- **UX**: "View Library" button in Install Modal now correctly triggers a library switch and re-scan.
-- **UX**: Clicking the active "Creator" filter pill in the Details Panel now toggles the filter off (Reset).
-- **Dependencies**: Fixed "Incomplete" dependency list in the Details Panel. It now uses Recursive Resolution to display the full flattened tree (Level 1 + Level 2 + ...), ensuring parity with the Install Modal.
+#### UX & Interface
+- **Library Navigation**: "View Library" button in Install Modal now correctly triggers a library switch and re-scan.
+- **Filters**: Clicking the active "Creator" filter pill in the Details Panel now toggles the filter off (Reset).
 - **Selection**: Fixed `CTRL+A` (Select All) not visually highlighting "Corrupt" packages.
-- **Refactor**: Unified Recursive Logic between `InstallPackageModal` and `Details Panel`.
 - **Animation**: Fixed "Locate Package" animation to restart reliably on rapid clicks (spam-proofing) and handle interruptions correctly.
-- **Dependencies**: Fixed "False Missing" status in the Dependencies list by masking internal warnings (Mismatch/Root) as Valid (Green) if the package is found.
 - **Cleanup**: Restored "Package Cleanup" context menu option.
-- **Status**: Fixed duplicate detection logic to correctly identify duplicates even if they are disabled.
-- **Status**: Prioritized status checks to ensure disabled packages are marked as `DISABLED` (Gray) instead of `OBSOLETE` or `DUPLICATE`.
-- **Status**: Fixed "Obsolete" status logic by using natural numeric version sorting (`1.10 > 1.2`), preventing newer versions from being incorrectly flagged.
-- **Status**: Changed "Root" package status color from Blue (System) to Indigo to clarify they are top-level user content, not system files.
-- **Dependencies**: Fixed critical discrepancy where valid dependencies appeared as "Missing". Logic now correctly handles package names with dots and explicitly resolves `.latest` references.
-- **Ghost Duplicates**: Resolved duplicate package detection issues on Windows by enforcing strict lower-case path normalization.
-- **Status Logic**: Distinguish "Older Version" (Yellow/Obsolete) from "Redundant Copy" (Purple/Duplicate) to reduce false positives.
-- **Status Logic**: Distinguish "Older Version" (Yellow/Obsolete) from "Redundant Copy" (Purple/Duplicate) to reduce false positives.
+
+#### Core Logic & Status
+- **Dependencies**: Fixed "Incomplete" dependency list in the Details Panel by unifying recursive logic with the Install Modal.
+- **Dependencies**: Fixed "False Missing" status by automatically masking internal warnings (Mismatch/Root) as Valid (Green) if the package exists.
+- **Dependencies**: Fixed discrepancy where valid dependencies appeared as "Missing" due to dot-notation or implicit `.latest` references.
+- **Status Accuracy**: Prioritized status checks to ensure disabled packages are explicitly marked `DISABLED` (Gray) rather than `OBSOLETE` or `DUPLICATE`.
+- **Status Accuracy**: Changed "Root" package status color from Blue (System) to Indigo to clarify distinction from system files.
+- **Obsolete Logic**: Fixed "False Obsolete" flags by implementing natural numeric version sorting (`1.10 > 1.2`).
+- **Duplicate Logic**: Resolved duplicate detection on Windows by enforcing strict lower-case path normalization.
+- **Duplicate Logic**: Distinguish "Older Version" (Yellow/Obsolete) from "Redundant Copy" (Purple/Duplicate) to reduce false positives.
+- **Refactor**: Unified Recursive Logic between `InstallPackageModal` and `Details Panel`.
 
 ## [1.3.2] - 2026-01-15
 
