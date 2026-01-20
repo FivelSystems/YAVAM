@@ -8,8 +8,11 @@
 
 ## [1.3.10] - 2026-01-20
 
+### Added
+- **Diagnostics**: Added "Obsoleted By" inspector to the Right Sidebar, showing exactly which package caused an "Obsolete" status.
+- **UX**: Added Friendly Error Banner for library access failures (e.g. "Access Denied" or missing folders).
+
 ### Fixed
-- **UX**: Friendly Error Banner for library access failures (e.g. "Access Denied" or missing folders), replacing silent failures.
 - **UX**: "View Library" button in Install Modal now correctly triggers a library switch and re-scan.
 - **UX**: Clicking the active "Creator" filter pill in the Details Panel now toggles the filter off (Reset).
 - **Dependencies**: Fixed "Incomplete" dependency list in the Details Panel. It now uses Recursive Resolution to display the full flattened tree (Level 1 + Level 2 + ...), ensuring parity with the Install Modal.
@@ -25,7 +28,7 @@
 - **Dependencies**: Fixed critical discrepancy where valid dependencies appeared as "Missing". Logic now correctly handles package names with dots and explicitly resolves `.latest` references.
 - **Ghost Duplicates**: Resolved duplicate package detection issues on Windows by enforcing strict lower-case path normalization.
 - **Status Logic**: Distinguish "Older Version" (Yellow/Obsolete) from "Redundant Copy" (Purple/Duplicate) to reduce false positives.
-- **Diagnostics**: Added "Obsoleted By" inspector to the Right Sidebar, showing exactly which package caused an "Obsolete" status.
+- **Status Logic**: Distinguish "Older Version" (Yellow/Obsolete) from "Redundant Copy" (Purple/Duplicate) to reduce false positives.
 
 ## [1.3.2] - 2026-01-15
 
