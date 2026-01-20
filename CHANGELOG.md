@@ -9,6 +9,7 @@
 ## [1.3.10] - 2026-01-20
 
 ### Added
+- **Sidebar**: Added a search/filter button to the "Creators" section header. It expands into an input field to quickly find specific creators and collapses when focus is lost.
 - **Diagnostics**: Added "Obsoleted By" inspector to the Right Sidebar, showing exactly which package caused an "Obsolete" status.
 - **UX**: Added Friendly Error Banner for library access failures (e.g. "Access Denied" or missing folders).
 

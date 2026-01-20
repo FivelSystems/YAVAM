@@ -1,13 +1,15 @@
-import { ChevronDown, ChevronRight, Layers, Package, Settings, CheckCircle2, CircleOff, Power, Sparkles, Trash2, GripVertical, Download, AlertCircle, AlertTriangle, Copy, Unlink } from 'lucide-react';
+import { ChevronDown, ChevronRight, Layers, Package, Settings, CheckCircle2, CircleOff, Power, Sparkles, Trash2, GripVertical, Download, AlertCircle, AlertTriangle, Copy, Unlink, Search } from 'lucide-react';
 import { VarPackage } from '../../types';
 import clsx from 'clsx';
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { Reorder, useDragControls } from "framer-motion";
 import { usePackageContext } from '../../context/PackageContext';
 import { useFilterContext } from '../../context/FilterContext';
 import { useLibraryContext } from '../../context/LibraryContext';
 import { useActionContext } from '../../context/ActionContext';
 import { STATUS_FILTERS } from '../../constants';
+
+
 
 // Simple Library Item Component
 const SidebarLibraryItem = ({ lib, isActive, count, onSelect, onRemove }: { lib: string, isActive: boolean, count?: number, onSelect: () => void, onRemove?: (lib: string) => void }) => {
@@ -77,6 +79,18 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
     const [isLibDropdownOpen, setIsLibDropdownOpen] = useState(false);
     const [contextMenu, setContextMenu] = useState<{ open: boolean, x: number, y: number, groupType: 'creator' | 'type' | 'status', key: string } | null>(null);
     const [libraryCounts, setLibraryCounts] = useState<Record<string, number>>({});
+
+    // Creator Search State
+    const [creatorSearch, setCreatorSearch] = useState("");
+    const [isCreatorSearchOpen, setIsCreatorSearchOpen] = useState(false);
+    const searchInputRef = useRef<HTMLInputElement>(null);
+
+    // Auto-focus search input
+    useEffect(() => {
+        if (isCreatorSearchOpen && searchInputRef.current) {
+            searchInputRef.current.focus();
+        }
+    }, [isCreatorSearchOpen]);
 
     useEffect(() => {
         if (window.go && window.go.main && window.go.main.App && libraries.length > 0) {
@@ -288,23 +302,62 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
 
                 {/* CREATORS */}
                 <div className="p-4 border-b border-gray-700/50">
-                    <button onClick={() => toggleSection('creators')} className="w-full flex items-center justify-between text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2 hover:text-gray-300">
-                        <span>Creators</span>
-                        {!collapsed.creators ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    </button>
+                    {!isCreatorSearchOpen ? (
+                        <div className="flex items-center justify-between mb-2 px-2 group/header">
+                            <button onClick={() => toggleSection('creators')} className="flex-1 flex items-center justify-between text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-300">
+                                <span>Creators</span>
+                                {!collapsed.creators ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            </button>
+                            {!collapsed.creators && (
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); setIsCreatorSearchOpen(true); }}
+                                    className="ml-2 text-gray-500 hover:text-white opacity-0 group-hover/header:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-700"
+                                    title="Search Creators"
+                                >
+                                    <Search size={12} />
+                                </button>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="mb-2 px-1 relative">
+                            <input
+                                ref={searchInputRef}
+                                type="text"
+                                className="w-full bg-gray-900 border border-blue-500/50 rounded px-2 py-0.5 text-xs text-white focus:outline-none placeholder-gray-600 transition-all"
+                                placeholder="Filter creators..."
+                                value={creatorSearch}
+                                onChange={e => setCreatorSearch(e.target.value)}
+                                onBlur={() => {
+                                    // Delay to allow click events on items to fire before closing/clearing
+                                    setTimeout(() => {
+                                        setIsCreatorSearchOpen(false);
+                                        setCreatorSearch(""); // Clear filter on close
+                                    }, 200);
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Escape' || e.key === 'Enter') {
+                                        setIsCreatorSearchOpen(false);
+                                        setCreatorSearch("");
+                                    }
+                                }}
+                            />
+                        </div>
+                    )}
                     {!collapsed.creators && (
                         <div className="space-y-1">
-                            {creators.map(([name, count]) => (
-                                <button
-                                    key={name}
-                                    onClick={() => setSelectedCreator(selectedCreator === name ? null : name)}
-                                    onContextMenu={(e) => handleContextMenu(e, 'creator', name)}
-                                    className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", selectedCreator === name ? "bg-blue-600/10 text-blue-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
-                                >
-                                    <span className="truncate text-left flex-1">{name}</span>
-                                    <span className={clsx("text-xs px-1.5 py-0.5 rounded-full transition-colors border border-transparent", getStatusClasses(creatorStatus[name], selectedCreator === name))}>{count}</span>
-                                </button>
-                            ))}
+                            {creators
+                                .filter(([name]) => !creatorSearch || name.toLowerCase().includes(creatorSearch.toLowerCase()))
+                                .map(([name, count]) => (
+                                    <button
+                                        key={name}
+                                        onClick={() => setSelectedCreator(selectedCreator === name ? null : name)}
+                                        onContextMenu={(e) => handleContextMenu(e, 'creator', name)}
+                                        className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", selectedCreator === name ? "bg-blue-600/10 text-blue-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
+                                    >
+                                        <span className="truncate text-left flex-1">{name}</span>
+                                        <span className={clsx("text-xs px-1.5 py-0.5 rounded-full transition-colors border border-transparent", getStatusClasses(creatorStatus[name], selectedCreator === name))}>{count}</span>
+                                    </button>
+                                ))}
                         </div>
                     )}
                 </div>
