@@ -35,72 +35,82 @@ func (s *defaultLibraryService) Install(files []string, targetLib string, overwr
 	totalFiles := len(files)
 
 	for i, f := range files {
-		fileName := filepath.Base(f)
-		// Emit Progress
-		if onProgress != nil {
-			onProgress(i+1, totalFiles, fileName)
-		}
-
-		if filepath.Ext(strings.ToLower(f)) != ".var" {
-			ignored = append(ignored, fileName)
-			continue
-		}
-
-		destPath := filepath.Join(destDir, fileName)
-
-		// Check for collision if overwrite is false
-		if !overwrite {
-			if info, err := os.Stat(destPath); err == nil && !info.IsDir() {
-				// Collision found, check if it's the exact same file first to avoid false alarm
-				if srcInfo, err := os.Stat(f); err == nil {
-					if os.SameFile(srcInfo, info) {
-						continue // Same file, skip
-					}
+		func() {
+			fileName := filepath.Base(f)
+			// Emit Progress at the END of processing this file
+			defer func() {
+				if onProgress != nil {
+					onProgress(i+1, totalFiles, fileName)
 				}
-				// Skip
-				ignored = append(ignored, fmt.Sprintf("%s (skipped: exists)", fileName))
-				continue
+			}()
+
+			lowerName := strings.ToLower(fileName)
+			if !strings.HasSuffix(lowerName, ".var") && !strings.HasSuffix(lowerName, ".var.disabled") {
+				ignored = append(ignored, fileName)
+				return // continue loop
 			}
-		} else {
-			// Self-overwrite prevention (Desktop Issue #12)
-			if pkgInfo, err := os.Stat(f); err == nil {
-				if destInfo, err := os.Stat(destPath); err == nil {
-					if os.SameFile(pkgInfo, destInfo) {
-						// fmt.Printf("[Skipping] Source and destination are the same file: %s\n", fileName)
-						continue
+
+			destPath := filepath.Join(destDir, fileName)
+
+			// Check for collision if overwrite is false
+			if !overwrite {
+				if info, err := os.Stat(destPath); err == nil && !info.IsDir() {
+					// Collision found, check if it's the exact same file first to avoid false alarm
+					if srcInfo, err := os.Stat(f); err == nil {
+						if os.SameFile(srcInfo, info) {
+							return // continue
+						}
 					}
+					// Skip
+					ignored = append(ignored, fmt.Sprintf("%s (skipped: exists)", fileName))
+					return // continue
 				}
-			}
-		}
-
-		// COPY OPERATION
-		srcFile, err := os.Open(f)
-		if err != nil {
-			ignored = append(ignored, fmt.Sprintf("%s (read error: %v)", fileName, err))
-			continue
-		}
-
-		destFile, err := os.Create(destPath)
-		if err != nil {
-			srcFile.Close()
-			if strings.Contains(err.Error(), "Access is denied") || strings.Contains(err.Error(), "user name or password") {
-				ignored = append(ignored, fmt.Sprintf("%s (Access Denied. Please log in to the folder.)", fileName))
 			} else {
-				ignored = append(ignored, fmt.Sprintf("%s (create error: %v)", fileName, err))
+				// Self-overwrite prevention
+				if pkgInfo, err := os.Stat(f); err == nil {
+					if destInfo, err := os.Stat(destPath); err == nil {
+						if os.SameFile(pkgInfo, destInfo) {
+							return // continue
+						}
+					}
+				}
 			}
-			continue
-		}
 
-		_, err = io.Copy(destFile, srcFile)
-		srcFile.Close()
-		destFile.Close()
+			// COPY OPERATION
+			srcFile, err := os.Open(f)
+			if err != nil {
+				ignored = append(ignored, fmt.Sprintf("%s (read error: %v)", fileName, err))
+				return // continue
+			}
 
-		if err != nil {
-			ignored = append(ignored, fmt.Sprintf("%s (copy error: %v)", fileName, err))
-			continue
-		}
+			// Ensure we close srcFile if we return early (failed create)
+			// But we defer progress... wait, srcFile needs to be closed inside this scope.
+			// defer srcFile.Close() is dangerous if we return early? No, it runs on return.
+			// We handle explicit Close in code, let's stick to that or use defer carefully.
+			// Existing code uses manual Close(). Let's adapt.
 
-		installed = append(installed, destPath)
+			destFile, err := os.Create(destPath)
+			if err != nil {
+				srcFile.Close()
+				if strings.Contains(err.Error(), "Access is denied") || strings.Contains(err.Error(), "user name or password") {
+					ignored = append(ignored, fmt.Sprintf("%s (Access Denied. Please log in to the folder.)", fileName))
+				} else {
+					ignored = append(ignored, fmt.Sprintf("%s (create error: %v)", fileName, err))
+				}
+				return // continue
+			}
+
+			_, err = io.Copy(destFile, srcFile)
+			srcFile.Close()
+			destFile.Close()
+
+			if err != nil {
+				ignored = append(ignored, fmt.Sprintf("%s (copy error: %v)", fileName, err))
+				return // continue
+			}
+
+			installed = append(installed, destPath)
+		}()
 	}
 
 	if len(ignored) > 0 {

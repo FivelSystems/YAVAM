@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { VarPackage } from '../types';
 import { ManualPlan } from '../features/settings/OptimizationModal';
+import { fetchWithAuth } from '../services/api';
 
 export const usePackageActions = (
     packages: VarPackage[],
@@ -60,7 +61,7 @@ export const usePackageActions = (
                 newPath = await window.go.main.App.TogglePackage(pkg.filePath, !pkg.isEnabled, activeLibraryPath, merge);
             } else {
                 // Web Mode
-                const res = await fetch('/api/toggle', {
+                const res = await fetchWithAuth('/api/toggle', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ filePath: pkg.filePath, enable: !pkg.isEnabled, merge: merge, libraryPath: activeLibraryPath })
@@ -141,7 +142,7 @@ export const usePackageActions = (
                     // @ts-ignore
                     await window.go.main.App.DeleteFileToRecycleBin(filePath);
                 } else {
-                    const res = await fetch('/api/delete', {
+                    const res = await fetchWithAuth('/api/delete', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ filePath: filePath, libraryPath: activeLibraryPath })
@@ -393,7 +394,7 @@ export const usePackageActions = (
                     // @ts-ignore
                     await window.go.main.App.DeleteFileToRecycleBin(d.filePath);
                 } else {
-                    const res = await fetch('/api/delete', {
+                    const res = await fetchWithAuth('/api/delete', {
                         method: 'POST',
                         body: JSON.stringify({ filePath: d.filePath, libraryPath: activeLibraryPath })
                     }).then(r => r.json());
@@ -553,7 +554,7 @@ export const usePackageActions = (
                                 // @ts-ignore
                                 await window.go.main.App.DeleteFileToRecycleBin(keep.filePath);
                             } else {
-                                const res = await fetch('/api/install', {
+                                const res = await fetchWithAuth('/api/install', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({
@@ -566,7 +567,7 @@ export const usePackageActions = (
                                     const errData = await res.json();
                                     throw new Error(errData.error || "Web copy failed");
                                 }
-                                await fetch('/api/delete', {
+                                await fetchWithAuth('/api/delete', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ filePath: keep.filePath, libraryPath: activeLibraryPath })
@@ -585,7 +586,7 @@ export const usePackageActions = (
                                 // @ts-ignore
                                 await window.go.main.App.DeleteFileToRecycleBin(d.filePath);
                             } else {
-                                await fetch('/api/delete', {
+                                await fetchWithAuth('/api/delete', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ filePath: d.filePath, libraryPath: activeLibraryPath })
@@ -636,7 +637,7 @@ export const usePackageActions = (
                                             // @ts-ignore
                                             await window.go.main.App.DeleteFileToRecycleBin(p.filePath);
                                         } else {
-                                            await fetch('/api/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: p.filePath, libraryPath: activeLibraryPath }) });
+                                            await fetchWithAuth('/api/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: p.filePath, libraryPath: activeLibraryPath }) });
                                         }
                                         savedBytes += p.size;
                                     } else {

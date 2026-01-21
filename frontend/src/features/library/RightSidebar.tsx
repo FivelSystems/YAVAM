@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Check, AlertCircle, AlertTriangle, Box, FileImage, User, Scissors, Copy, Power, Unlink } from 'lucide-react';
+import { X, Check, AlertCircle, AlertTriangle, Box, FileImage, User, Scissors, Copy, Power, Unlink, CornerDownRight } from 'lucide-react';
 import clsx from 'clsx';
 import { motion } from 'framer-motion';
 import { VarPackage } from '../../types';
@@ -25,14 +25,15 @@ interface RightSidebarProps {
     onTabChange: (tab: 'details' | 'contents') => void;
     onFilterByCreator: (creator: string | null) => void;
     onDependencyClick: (depId: string) => void;
-    onTitleClick: () => void;
+    onTitleClick: (pkg: VarPackage) => void;
     getDependencyStatus: (depId: string) => 'valid' | 'mismatch' | 'missing' | 'scanning' | 'system' | 'corrupt' | 'disabled';
     selectedCreator?: string | null;
     censorThumbnails?: boolean;
     blurAmount?: number;
+    isOffScreen?: boolean;
 }
 
-const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilterByCreator, onDependencyClick, onTitleClick, selectedCreator, censorThumbnails = false, blurAmount = 10 }: RightSidebarProps) => {
+const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilterByCreator, onDependencyClick, onTitleClick, selectedCreator, censorThumbnails = false, blurAmount = 10, isOffScreen = false }: RightSidebarProps) => {
 
     const [contents, setContents] = useState<PackageContent[]>([]);
     const [loading, setLoading] = useState(false);
@@ -89,12 +90,21 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
             <div className="p-4 border-b border-gray-800 flex justify-between items-start bg-gray-900/50 backdrop-blur-sm sticky top-0 z-10">
                 <div
                     className="flex-1 mr-2 cursor-pointer group"
-                    onClick={onTitleClick}
-                    title="Click to locate in grid"
+                    onClick={() => onTitleClick(pkg)}
+                    title={isOffScreen ? "Package is on another page - Click to Locate" : "Locate in grid"}
                 >
-                    <h2 className="text-lg font-bold text-white truncate group-hover:text-blue-400 transition-colors">
+                    <motion.h2
+                        className={clsx(
+                            "text-lg font-bold truncate transition-colors",
+                            isOffScreen ? "text-blue-300" : "text-white group-hover:text-blue-400"
+                        )}
+                        animate={isOffScreen ? {
+                            textShadow: ["0 0 0px rgba(96, 165, 250, 0)", "0 0 15px rgba(96, 165, 250, 0.8)", "0 0 0px rgba(96, 165, 250, 0)"],
+                        } : { textShadow: "none" }}
+                        transition={isOffScreen ? { duration: 1.5, repeat: Infinity, repeatType: "reverse" } : {}}
+                    >
                         {pkg.meta.packageName || pkg.fileName}
-                    </h2>
+                    </motion.h2>
                 </div>
                 <button
                     onClick={onClose}
@@ -252,8 +262,9 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                                     {(() => {
                                         // Calculate flattened dependencies (Found Transitive + Missing Direct)
                                         const directDepsKeys = pkg.meta.dependencies ? Object.keys(pkg.meta.dependencies) : [];
-                                        // Filter out the pkg itself, passing a new array to resolveRecursive
-                                        const foundRecursive = resolveRecursive([pkg], packages).filter(p => p.filePath !== pkg.filePath);
+
+                                        // Get Nodes with Depth
+                                        const foundNodes = resolveRecursive([pkg], packages).filter(n => n.pkg.filePath !== pkg.filePath);
 
                                         // Find Missing Direct Dependencies (since recursive only returns found ones)
                                         const missingDirectIds = directDepsKeys.filter(key => {
@@ -261,8 +272,14 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                                             return res.status === 'missing';
                                         });
 
-                                        const sortedFound = [...foundRecursive].sort((a, b) => a.fileName.localeCompare(b.fileName));
-                                        const totalCount = sortedFound.length + missingDirectIds.length;
+                                        // Sort: Depth ascending (0, 1, 2) then Alphabetical
+                                        // This groups Direct deps first, then Subs.
+                                        const sortedNodes = [...foundNodes].sort((a, b) => {
+                                            if (a.depth !== b.depth) return a.depth - b.depth;
+                                            return a.pkg.fileName.localeCompare(b.pkg.fileName);
+                                        });
+
+                                        const totalCount = sortedNodes.length + missingDirectIds.length;
 
                                         if (totalCount === 0) {
                                             return <div className="text-xs text-gray-600 italic">No dependencies listed.</div>;
@@ -270,7 +287,6 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
 
                                         return (
                                             <>
-                                                {/* Render Missing Direct First */}
                                                 {/* Render Missing Direct First */}
                                                 {missingDirectIds.map(depId => (
                                                     <div
@@ -284,7 +300,8 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                                                 ))}
 
                                                 {/* Render Found Recursive */}
-                                                {sortedFound.map(resolvedPkg => {
+                                                {sortedNodes.map(node => {
+                                                    const resolvedPkg = node.pkg;
                                                     let status = getPackageStatus(resolvedPkg);
                                                     // Status Masking (False Red Fix)
                                                     // @ts-ignore
@@ -316,6 +333,8 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                                                         icon = <Box size={14} className="text-gray-500 shrink-0" />;
                                                     }
 
+                                                    const indentLevel = Math.max(0, node.depth - 1);
+
                                                     return (
                                                         <div
                                                             key={resolvedPkg.filePath}
@@ -324,8 +343,14 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                                                                 "flex items-center gap-3 p-2 rounded-lg text-xs border transition-colors cursor-pointer group",
                                                                 bgClass
                                                             )}
+                                                            style={{ marginLeft: `${indentLevel * 16}px` }}
                                                             title={resolvedPkg.obsoletedBy ? resolvedPkg.obsoletedBy : displayName}
                                                         >
+                                                            {indentLevel > 0 && (
+                                                                <div className="text-gray-600 shrink-0">
+                                                                    <CornerDownRight size={12} />
+                                                                </div>
+                                                            )}
                                                             {icon}
                                                             <span className="truncate flex-1 font-medium">{displayName}</span>
                                                         </div>

@@ -14,6 +14,10 @@ export const useDragDrop = (activeLibraryPath: string) => {
 
     // Web Native Drop Handler (via DragDropOverlay combined)
     const handleWebDrop = useCallback((files: FileList | File[]) => {
+        // IGNORE if in Wails Desktop mode (handled by native OnFileDrop)
+        // @ts-ignore
+        if (window.go) return;
+
         if (!files || files.length === 0) return;
         const fileArray = files instanceof FileList ? Array.from(files) : files;
 

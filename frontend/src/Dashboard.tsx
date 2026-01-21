@@ -54,7 +54,7 @@ const DashboardContent = () => {
 
     // -- Data / Hooks --
     const {
-        loading, isCancelling, packages
+        loading, isCancelling, packages, scanPackages
     } = usePackageContext();
     const {
         activeLibraryPath
@@ -64,7 +64,7 @@ const DashboardContent = () => {
         filteredPkgs, setSearchQuery, setTagSearchQuery, setSelectedTags, setSelectedType, setSelectedCreator, setCurrentPage, currentPage, setCurrentFilter
     } = useFilterContext();
     const {
-        clearSelection, contextMenu, setContextMenu, selectedIds
+        clearSelection, contextMenu, setContextMenu, selectedIds, selectedPackage, setSelectedPackage, setIsDetailsPanelOpen
     } = useSelectionContext();
 
     const {
@@ -85,8 +85,30 @@ const DashboardContent = () => {
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const handleLocatePackage = (targetPkg: VarPackage) => {
+        let finalPkg = targetPkg;
+
         // 1. Check if visible in current filter
-        const isVisible = filteredPkgs.some(p => p.filePath === targetPkg.filePath);
+        let isVisible = filteredPkgs.some(p => p.filePath === finalPkg.filePath);
+
+        // 1b. Fallback: ID Match (Cross-Library Support)
+        // If strictly path-matching fails, checking if we have the "same" package (by ID) in the current library.
+        if (!isVisible) {
+            const targetId = `${targetPkg.meta.creator}.${targetPkg.meta.packageName}.${targetPkg.meta.version}`;
+            // Find equivalent in the FULL loaded list
+            const equivalent = packages.find(p => `${p.meta.creator}.${p.meta.packageName}.${p.meta.version}` === targetId);
+
+            if (equivalent) {
+                // Switch target to the local instance
+                finalPkg = equivalent;
+
+                // Update selection to match local instance (Fixes "Ghost Selection" from other lib)
+                if (selectedPackage?.filePath !== equivalent.filePath) {
+                    setSelectedPackage(equivalent);
+                }
+                // Re-check visibility
+                isVisible = filteredPkgs.some(p => p.filePath === finalPkg.filePath);
+            }
+        }
 
         if (!isVisible) {
             // 2. if not visible, CLEAR ALL FILTERS (Reset to "All Packages" view)
@@ -102,20 +124,23 @@ const DashboardContent = () => {
             // We replicate the sort logic here to find the index immediately
             const allPkgs = [...packages];
             allPkgs.sort((a, b) => {
+                let cmp = 0;
                 switch (sortMode) {
-                    case 'name-asc': return (a.fileName || "").localeCompare(b.fileName || "");
-                    case 'name-desc': return (b.fileName || "").localeCompare(a.fileName || "");
-                    case 'size-asc': return a.size - b.size;
-                    case 'size-desc': return b.size - a.size;
+                    case 'name-asc': cmp = (a.fileName || "").localeCompare(b.fileName || ""); break;
+                    case 'name-desc': cmp = (b.fileName || "").localeCompare(a.fileName || ""); break;
+                    case 'size-asc': cmp = a.size - b.size; break;
+                    case 'size-desc': cmp = b.size - a.size; break;
                     // @ts-ignore
-                    case 'date-newest': return new Date(b.creationDate || 0).getTime() - new Date(a.creationDate || 0).getTime();
+                    case 'date-newest': cmp = new Date(b.creationDate || 0).getTime() - new Date(a.creationDate || 0).getTime(); break;
                     // @ts-ignore
-                    case 'date-oldest': return new Date(a.creationDate || 0).getTime() - new Date(b.creationDate || 0).getTime();
-                    default: return 0;
+                    case 'date-oldest': cmp = new Date(a.creationDate || 0).getTime() - new Date(b.creationDate || 0).getTime(); break;
+                    default: cmp = 0;
                 }
+                if (cmp === 0) return a.filePath.localeCompare(b.filePath);
+                return cmp;
             });
 
-            const index = allPkgs.findIndex(p => p.filePath === targetPkg.filePath);
+            const index = allPkgs.findIndex(p => p.filePath === finalPkg.filePath);
             if (index !== -1) {
                 const targetPage = Math.ceil((index + 1) / itemsPerPage);
                 setCurrentPage(targetPage);
@@ -124,7 +149,7 @@ const DashboardContent = () => {
             }
         } else {
             // 3. If Visible (in filtered list), check Pagination
-            const index = filteredPkgs.findIndex(p => p.filePath === targetPkg.filePath);
+            const index = filteredPkgs.findIndex(p => p.filePath === finalPkg.filePath);
             if (index !== -1) {
                 const targetPage = Math.ceil((index + 1) / itemsPerPage);
                 if (targetPage !== currentPage) {
@@ -134,7 +159,7 @@ const DashboardContent = () => {
         }
 
         // 4. Highlight & Scroll
-        const id = targetPkg.filePath;
+        const id = finalPkg.filePath;
 
         // INTERRUPT LOGIC: Clear existing timer to prevent premature "off" switch
         if (timerRef.current) {
@@ -149,27 +174,22 @@ const DashboardContent = () => {
             setHighlightedRequest(null);
             timerRef.current = null;
         }, 3000);
-
-        // Timeout to allow render then Scroll
-        setTimeout(() => {
-            // Note: CardGrid uses id={`pkg-${pkg.filePath}`}
-            const el = document.getElementById(`pkg-${id}`);
-            if (el && scrollContainerRef.current) {
-                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                // We rely on React state + CSS animation for the visual effect now.
-            } else {
-                console.warn("Could not scroll to package", id);
-            }
-        }, 100);
     };
 
     // -- Keybinds --
     useKeybindSubscription('toggle_sidebar', () => setIsSidebarOpen(prev => !prev), [setIsSidebarOpen]);
     useKeybindSubscription('toggle_settings', () => setIsSettingsOpen(prev => !prev), [setIsSettingsOpen]);
+    useKeybindSubscription('random_pkg', () => {
+        if (filteredPkgs.length === 0) return;
+        const randomIndex = Math.floor(Math.random() * filteredPkgs.length);
+        const randomPkg = filteredPkgs[randomIndex];
+        setSelectedPackage(randomPkg);
+        setIsDetailsPanelOpen(true);
+    }, [filteredPkgs, setSelectedPackage, setIsDetailsPanelOpen]);
 
     // -- Render --
     return (
-        <div className="flex flex-col h-screen bg-gray-900 text-gray-100 overflow-hidden font-sans selection:bg-blue-500/30"
+        <div className="flex flex-col h-screen supports-[height:100dvh]:h-[100dvh] bg-gray-900 text-gray-100 overflow-hidden font-sans selection:bg-blue-500/30"
             onDragOver={(e) => { e.preventDefault(); consumeDrag(e); }}
             onDragLeave={(e) => consumeDragLeave(e)}
             onDrop={async (e) => { e.preventDefault(); if (e.dataTransfer.files.length > 0) handleWebDrop(e.dataTransfer.files); }}
@@ -273,7 +293,7 @@ const DashboardContent = () => {
                 setIsUploadModalOpen={setIsUploadModalOpen}
                 uploadQueue={uploadQueue}
                 setUploadQueue={setUploadQueue}
-                onUploadSuccess={() => { clearSelection(); /* Refresh? Context does it? */ }}
+                onUploadSuccess={() => { clearSelection(); scanPackages(); }}
             />
 
             <GlobalDialogs

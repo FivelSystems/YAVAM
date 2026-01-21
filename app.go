@@ -247,6 +247,10 @@ func (a *App) GetDiskSpace(path string) (manager.DiskSpaceInfo, error) {
 	return a.manager.GetDiskSpace(path)
 }
 
+func (a *App) GetFileDetails(paths []string) ([]models.FileDetail, error) {
+	return a.manager.GetFileDetails(paths)
+}
+
 // CancelScan signals the running scan to stop
 // and waits for it to finish
 func (a *App) CancelScan() {

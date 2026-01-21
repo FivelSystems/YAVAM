@@ -10,8 +10,13 @@
 
 ### Added
 - **Sidebar**: Added a search/filter button to the "Creators" section header. It expands into an input field to quickly find specific creators and collapses when focus is lost.
+- **UX**: Added "Random Package" keybind (Default: `R`). Selects a random package from the current filtered view and opens the Details Panel. (Does not auto-scroll for performance).
 - **Diagnostics**: Added "Obsoleted By" inspector to the Right Sidebar, showing exactly which package caused an "Obsolete" status.
 - **UX**: Added Friendly Error Banner for library access failures (e.g. "Access Denied" or missing folders).
+- **UX**: Added visual indentation and hierarchy indicators to the Dependency List in the Right Sidebar to clearly distinguish direct vs. nested dependencies.
+- **UX**: Suppressed intrusive "Located Package" status (Success/Info) toasts when clicking dependencies. Toasts now only appear if the target package cannot be found (Error).
+- **UX**: Implemented a "Title Glow" animation in the Right Sidebar when the selected package is off-screen, providing a clear visual cue to click the title to relocate it.
+- **UX**: Decoupled "Locate Package" from strict file path matching. It now intelligently falls back to Package ID (`Creator.Name.Version`) lookup, enabling seamless navigation to the same package across different libraries.
 
 ### Fixed
 #### UX & Interface
@@ -21,18 +26,27 @@
 - **Selection**: Fixed `CTRL+A` (Select All) not visually highlighting "Corrupt" packages.
 - **Animation**: Fixed "Locate Package" animation to restart reliably on rapid clicks (spam-proofing) and handle interruptions correctly.
 - **Cleanup**: Restored "Package Cleanup" context menu option.
+- **UX**: Improved Install Feedback. Upload and Install modals now show a summary screen (Installed/Skipped/Failed) instead of closing immediately.
+- **UX**: Upload Modal now automatically refreshes the library view upon successful completion.
 
 #### Core Logic & Status
+- **Web Client**: Fixed "Unauthorized" error when engaging in package actions (Toggle/Delete) by ensuring the authorization token is correctly attached to API requests.
+- **Web Client**: Fixed "Storage Unavailable" error in Upload Modal by protecting disk space & collision checks with authentication.
+- **Web Client**: Fixed missing file size display in Upload Modal for empty or special files.
+- **Desktop Client**: Fixed "0 B" file size display in Upload Queue by implementing a backend bridge to retrieve file metadata for dragged files.
 - **Web Client**: Fixed "Infinite Scanning" spinner on mobile/web clients by ensuring the server broadcasts the `scan:complete` event upon finish.
 - **Dependencies**: Fixed "Incomplete" dependency list in the Details Panel by unifying recursive logic with the Install Modal.
 - **Dependencies**: Fixed "False Missing" status by automatically masking internal warnings (Mismatch/Root) as Valid (Green) if the package exists.
 - **Dependencies**: Fixed discrepancy where valid dependencies appeared as "Missing" due to dot-notation or implicit `.latest` references.
+- **Dependencies**: Fixed incomplete "Used By" lists by implementing fuzzy version matching (e.g. mapping `v1` to `1` when exact match fails).
+- **Cascade Delete**: Fixed a critical bug in `getImpact` logic where dependency cascade simulation was failing due to mismatched ID formats.
 - **Status Accuracy**: Prioritized status checks to ensure disabled packages are explicitly marked `DISABLED` (Gray) rather than `OBSOLETE` or `DUPLICATE`.
 - **Status Accuracy**: Changed "Root" package status color from Blue (System) to Indigo to clarify distinction from system files.
 - **Obsolete Logic**: Fixed "False Obsolete" flags by implementing natural numeric version sorting (`1.10 > 1.2`).
 - **Duplicate Logic**: Resolved duplicate detection on Windows by enforcing strict lower-case path normalization.
 - **Duplicate Logic**: Distinguish "Older Version" (Yellow/Obsolete) from "Redundant Copy" (Purple/Duplicate) to reduce false positives.
 - **Refactor**: Unified Recursive Logic between `InstallPackageModal` and `Details Panel`.
+- **Selection**: Fixed "Grid Selection Mismatch" / Jitter. Enforced deterministic sorting (tie-breaking by filePath) to prevent packages from changing positions during re-renders, ensuring clicks always land on the correct item.
 
 ## [1.3.2] - 2026-01-15
 
@@ -58,6 +72,7 @@
     - Added `Shift+Left/Right` to switch pages instantly.
 - **Testing**: Added Frontend Unit Testing infrastructure (`vitest` + `react-testing-library`).
 - **Dev**: Added `npm test` script.
+- **Testing**: Added unit tests for dependency analysis (`packageDependencyAnalysis.test.ts`) to ensure accurate version resolution.
 
 ### Changed
 - **Privacy**: 'V' hotkey now directly toggles "Blur Thumbnails" setting instead of a temporary view state.

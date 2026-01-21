@@ -1,4 +1,4 @@
-import { getStoredToken } from './auth';
+import { getStoredToken, logout } from './auth';
 
 export async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
     const token = getStoredToken();
@@ -13,5 +13,13 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}): Pro
         headers
     };
 
-    return fetch(url, config);
+    const response = await fetch(url, config);
+
+    if (response.status === 401) {
+        // Token expired or invalid
+        logout();
+        window.location.reload(); // Force reload to clear state/redirect to login
+    }
+
+    return response;
 }

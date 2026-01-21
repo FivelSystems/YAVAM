@@ -78,6 +78,10 @@ export function GetDiskSpace(arg1) {
   return window['go']['main']['App']['GetDiskSpace'](arg1);
 }
 
+export function GetFileDetails(arg1) {
+  return window['go']['main']['App']['GetFileDetails'](arg1);
+}
+
 export function GetFilters(arg1) {
   return window['go']['main']['App']['GetFilters'](arg1);
 }
