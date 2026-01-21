@@ -2,8 +2,11 @@ package system
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"yavam/pkg/fs"
+	"yavam/pkg/models"
 )
 
 // DiskSpaceInfo holds space information
@@ -20,6 +23,7 @@ type SystemService interface {
 	DeleteToTrash(path string) error
 	CopyFileToClipboard(path string) error
 	CutFileToClipboard(path string) error
+	GetFileDetails(paths []string) ([]models.FileDetail, error)
 }
 
 type defaultSystemService struct {
@@ -64,4 +68,28 @@ func (s *defaultSystemService) CopyFileToClipboard(path string) error {
 
 func (s *defaultSystemService) CutFileToClipboard(path string) error {
 	return nil
+}
+
+func (s *defaultSystemService) GetFileDetails(paths []string) ([]models.FileDetail, error) {
+	var details []models.FileDetail
+	for _, path := range paths {
+		info, err := os.Stat(path)
+		if err != nil {
+			// If file not found or error, we stick with 0 size or skip?
+			// Let's return 0 size but keep the entry so UI knows it exists but maybe error.
+			// Or just set size 0.
+			details = append(details, models.FileDetail{
+				Name: filepath.Base(path),
+				Path: path,
+				Size: 0,
+			})
+			continue
+		}
+		details = append(details, models.FileDetail{
+			Name: info.Name(),
+			Path: path,
+			Size: info.Size(),
+		})
+	}
+	return details, nil
 }

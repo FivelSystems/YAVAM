@@ -107,6 +107,22 @@ export namespace manager {
 
 export namespace models {
 	
+	export class FileDetail {
+	    name: string;
+	    size: number;
+	    path: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FileDetail(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.size = source["size"];
+	        this.path = source["path"];
+	    }
+	}
 	export class PackageContent {
 	    filePath: string;
 	    fileName: string;

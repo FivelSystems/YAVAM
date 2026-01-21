@@ -90,5 +90,11 @@ export const DEFAULT_KEYBINDS: KeybindDefinition[] = [
         label: "Next Page",
         category: "navigation",
         defaultKeys: ["SHIFT", "RIGHT"]
+    },
+    {
+        id: "random_pkg",
+        label: "Random Package",
+        category: "navigation",
+        defaultKeys: ["R"]
     }
 ];

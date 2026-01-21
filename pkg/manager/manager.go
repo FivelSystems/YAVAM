@@ -290,3 +290,7 @@ func (m *Manager) GetDiskSpace(path string) (DiskSpaceInfo, error) {
 func (m *Manager) CheckCollisions(filePaths []string, destLibPath string) ([]string, error) {
 	return m.library.CheckCollisions(filePaths, destLibPath)
 }
+
+func (m *Manager) GetFileDetails(paths []string) ([]models.FileDetail, error) {
+	return m.system.GetFileDetails(paths)
+}

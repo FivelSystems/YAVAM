@@ -76,24 +76,36 @@ export const useFilters = (packages: VarPackage[]) => {
 
         // 6. Sorting
         res.sort((a, b) => {
+            let cmp = 0;
             switch (sortMode) {
                 case 'name-asc':
-                    return (a.fileName || "").localeCompare(b.fileName || "");
+                    cmp = (a.fileName || "").localeCompare(b.fileName || "");
+                    break;
                 case 'name-desc':
-                    return (b.fileName || "").localeCompare(a.fileName || "");
+                    cmp = (b.fileName || "").localeCompare(a.fileName || "");
+                    break;
                 case 'size-asc':
-                    return a.size - b.size;
+                    cmp = a.size - b.size;
+                    break;
                 case 'size-desc':
-                    return b.size - a.size;
+                    cmp = b.size - a.size;
+                    break;
                 case 'date-newest':
                     // @ts-ignore
-                    return new Date(b.creationDate || 0).getTime() - new Date(a.creationDate || 0).getTime();
+                    cmp = new Date(b.creationDate || 0).getTime() - new Date(a.creationDate || 0).getTime();
+                    break;
                 case 'date-oldest':
                     // @ts-ignore
-                    return new Date(a.creationDate || 0).getTime() - new Date(b.creationDate || 0).getTime();
+                    cmp = new Date(a.creationDate || 0).getTime() - new Date(b.creationDate || 0).getTime();
+                    break;
                 default:
-                    return 0;
+                    cmp = 0;
             }
+            // Deterministic Tie-Breaker: filePath is unique
+            if (cmp === 0) {
+                return a.filePath.localeCompare(b.filePath);
+            }
+            return cmp;
         });
 
         return res;

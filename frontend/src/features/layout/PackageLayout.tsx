@@ -54,31 +54,28 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
 
     // Scroll to top on page change
     // Scroll Management (Top vs Locate)
+    // -- Scroll Management --
+
+    // 1. Scroll to Top on Page Change
     React.useEffect(() => {
-        if (!scrollContainerRef.current) return;
-
-        // If we have a highlight request, try to scroll to it first
-        if (highlightedRequest) {
-            const el = document.getElementById(`pkg-${highlightedRequest.id}`);
-            if (el) {
-                // Found it! Scroll to it.
-                // We use a slight delay ensures layout is stable if this effect runs concurrently with render
-                // We use requestAnimationFrame to ensure we scroll immediately after browser paint
-                window.requestAnimationFrame(() => {
-                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                });
-                return;
-            }
-            // If not found yet (maybe looking for it on another page?), fall through to scroll top 
-            // BUT, if we just switched pages to find it, it should be here.
+        if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTo({ top: 0, behavior: 'auto' });
         }
+    }, [currentPage, scrollContainerRef]);
 
-        // Default: Scroll to top on page switch
-        scrollContainerRef.current.scrollTo({ top: 0, behavior: 'auto' });
+    // 2. Scroll to Highlighted Package
+    React.useEffect(() => {
+        if (!highlightedRequest || !scrollContainerRef.current) return;
 
-        // Dependency Note: We include highlightedRequest to re-run if user clicks "Locate" again 
-        // even if page doesn't change.
-    }, [currentPage, scrollContainerRef, highlightedRequest]);
+        const el = document.getElementById(`pkg-${highlightedRequest.id}`);
+        if (el) {
+            // Found it! Scroll to it.
+            // We use requestAnimationFrame to ensure we scroll immediately after browser paint
+            window.requestAnimationFrame(() => {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            });
+        }
+    }, [highlightedRequest, scrollContainerRef]);
 
     const handleDependencyClick = (depId: string) => {
         const cleanDep = depId.replace(/\\/g, '/').toLowerCase();
@@ -153,16 +150,17 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
         }
 
         if (found) {
-            const foundId = `${found.meta.creator}.${found.meta.packageName}.${found.meta.version}`;
-            // If we found a match via Fuzzy/Latest logic, let the user know
-            if (foundId.toLowerCase() !== cleanDep) {
-                addToast(`Located latest available version: v${found.meta.version}`, "info");
-            }
+            // Found it! No toast for success/fuzzy match as per user request.
             onLocatePackage(found);
         } else {
             addToast(`Package not found in library: ${depId}`, "error");
         }
     };
+
+    // Calculate View Slice & Off-Screen Status
+    const currentSlice = filteredPkgs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+    // Specifically check if selected package is visible in the CURRENT PAGE of the grid
+    const isOffScreen = !!(selectedPackage && !currentSlice.some(p => p.filePath === selectedPackage.filePath));
 
     return (
         <div className="flex-1 flex overflow-hidden">
@@ -177,7 +175,7 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
                 {/* CardGrid Container */}
                 <div ref={scrollContainerRef} className="flex-1 overflow-auto p-4 pb-32 md:pb-24 custom-scrollbar">
                     <CardGrid
-                        packages={filteredPkgs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)}
+                        packages={currentSlice}
                         currentPath={activeLibraryPath}
                         totalCount={packages.length}
                         onContextMenu={handleContextMenu}
@@ -221,11 +219,12 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
                         onTabChange={setActiveTab}
                         onFilterByCreator={(c) => setSelectedCreator(c)}
                         onDependencyClick={handleDependencyClick}
-                        onTitleClick={() => selectedPackage && onLocatePackage(selectedPackage)}
+                        onTitleClick={onLocatePackage}
                         getDependencyStatus={handleGetDependencyStatus}
                         selectedCreator={selectedCreator}
                         censorThumbnails={censorThumbnails}
                         blurAmount={blurAmount}
+                        isOffScreen={isOffScreen}
                     />
                 )}
             </AnimatePresence>

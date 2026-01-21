@@ -110,14 +110,25 @@ export const analyzeGraph = (packages: VarPackage[]): GraphAnalysisResult => {
                     // Check if this matches a known Base ID (Creator.Package)
                     const versions = versionMap.get(tempBase);
                     if (versions && versions.length > 0) {
-                        // Matched a base! 
-                        // Logic: If referencing "Creator.Pkg", we assume it maps to the Latest Available Version for "Used By" purposes.
-                        // Or should we map to ALL versions? 
-                        // User Benefit: "Latest" is the most likely functionality.
-                        // And `usePackages` generally resolves to "Any" enabled.
-                        // Let's map to the LATEST version to keep the graph clean.
-                        const latestId = versions[0].fullId.toLowerCase();
-                        reverseDeps.get(latestId)?.add(consumerId);
+                        // Matched a base!
+                        // Logic: Identify if the user likely requested a specific version (fuzzy match)
+                        // If so, map to that specific version. Otherwise, fallback to Latest.
+
+                        const suffix = depIdLower.substring(tempBase.length + 1);
+                        // Matches "v1", "version1", "1", "1.0", etc.
+                        const verMatch = suffix.match(/^(?:v|version)?(\d+)/);
+
+                        let matchedId = versions[0].fullId; // Default to Latest
+
+                        if (verMatch) {
+                            const requestedVer = parseInt(verMatch[1], 10);
+                            const specificPkg = versions.find(v => v.version === requestedVer);
+                            if (specificPkg) {
+                                matchedId = specificPkg.fullId;
+                            }
+                        }
+
+                        reverseDeps.get(matchedId)?.add(consumerId);
                         break; // Stop once matched
                     }
                 }
@@ -182,11 +193,28 @@ export const getImpact = (targets: string[], packages: VarPackage[], reverseDeps
 
             // Check if all consumers are gone
             let allConsumersDeleted = true;
-            for (const consumerPath of consumerPaths) {
-                if (!deletedFiles.has(consumerPath)) {
-                    allConsumersDeleted = false;
-                    break;
+            for (const consumerIdRaw of consumerPaths) {
+                // Resolve Consumer ID to its File Paths
+                const consumerId = consumerIdRaw.toLowerCase();
+                const providingFiles = idToFiles.get(consumerId);
+
+                if (providingFiles) {
+                    // If ANY file providing this Consumer ID is NOT deleted, then the Consumer is still alive.
+                    let consumerAlive = false;
+                    for (const file of providingFiles) {
+                        if (!deletedFiles.has(file)) {
+                            consumerAlive = true;
+                            break;
+                        }
+                    }
+                    if (consumerAlive) {
+                        allConsumersDeleted = false;
+                        break;
+                    }
                 }
+                // If providingFiles is missing, it means the consumer package is somehow gone from the library
+                // but still in the graph? Unlikely if 'packages' is consistent. 
+                // We treat it as 'deleted' (or rather, non-existent).
             }
 
             if (allConsumersDeleted) {
