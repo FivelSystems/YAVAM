@@ -392,7 +392,7 @@ export const usePackages = (activeLibraryPath: string) => {
             try {
                 // Fire and forget fetch? No, we await it to catch initial errors.
                 // But the events drive the UI.
-                const res = await fetchWithAuth(`/api/packages?path=${encodeURIComponent(activeLibraryPath)}`, {
+                const res = await fetchWithAuth(`/api/packages?path=${encodeURIComponent(activeLibraryPath)}&_t=${Date.now()}`, {
                     signal: controller.signal
                 });
                 if (!res.ok) throw new Error("Failed to fetch");

@@ -80,6 +80,7 @@ func (a *App) Log(level string, message string) {
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	log.Println("[App] Startup lifecycle begin...")
 
 	// Initialize Logger
 
@@ -103,7 +104,7 @@ func (a *App) startup(ctx context.Context) {
 		// Log or Panic? For now, we panic as auth is critical if it fails to init store
 		// But in prod we might just log and fallback to memory?
 		// Let's print for now
-		fmt.Printf("Failed to initialize auth service: %v\n", authErr)
+		log.Printf("[App] Failed to initialize auth service: %v\n", authErr)
 	}
 
 	a.server = server.NewServer(ctx, a.manager, a.auth, subAssets, a.GetAppVersion(), func() {
@@ -427,26 +428,34 @@ func (a *App) SetMinimizeOnClose(val bool) {
 }
 
 // Shutdown performs clean cleanup of all resources
+// Shutdown performs clean cleanup of all resources
 func (a *App) Shutdown() {
+	log.Println("[App] Shutdown started...")
 	if a.server != nil && a.server.IsRunning() {
+		log.Println("[App] Stopping server...")
 		a.server.Stop()
+		log.Println("[App] Server stopped.")
 	}
 	if a.manager != nil {
+		log.Println("[App] Closing manager...")
 		a.manager.Close()
+		log.Println("[App] Manager closed.")
 	}
 	// Cancel any running scans
 	a.CancelScan()
+	log.Println("[App] Shutdown complete.")
 }
 
 func (a *App) onBeforeClose(ctx context.Context) (prevent bool) {
-	// If doing factory reset, force quit immediately
-	if a.pendingFactoryReset {
+	// If doing factory reset OR restarting (isQuitting), force quit immediately
+	log.Printf("[App] onBeforeClose called. isQuitting=%v, pendingFactoryReset=%v", a.isQuitting, a.pendingFactoryReset)
+	if a.pendingFactoryReset || a.isQuitting {
 		a.Shutdown()
 		return false
 	}
 
 	// Minimize to tray if option enabled
-	if a.minimizeOnClose && !a.isQuitting {
+	if a.minimizeOnClose {
 		runtime.WindowHide(ctx)
 		if !a.trayRunning {
 			a.trayRunning = true
@@ -459,7 +468,7 @@ func (a *App) onBeforeClose(ctx context.Context) (prevent bool) {
 		return true
 	}
 
-	// Normal Close or Quit
+	// Normal Close (User clicked X, and NOT minimizing)
 	if a.server != nil && a.server.IsRunning() {
 		res, err := runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
 			Type:          runtime.QuestionDialog,
@@ -473,7 +482,6 @@ func (a *App) onBeforeClose(ctx context.Context) (prevent bool) {
 			return false // On error, just close?
 		}
 		if res == "No" {
-			a.isQuitting = false
 			return true // Prevent close
 		}
 	}
@@ -483,6 +491,7 @@ func (a *App) onBeforeClose(ctx context.Context) (prevent bool) {
 }
 
 func (a *App) onSecondInstanceLaunch(secondInstanceData options.SecondInstanceData) {
+	log.Printf("[App] Second Instance Launched! Args: %v", secondInstanceData.Args)
 	runtime.WindowShow(a.ctx)
 	if runtime.WindowIsMinimised(a.ctx) {
 		runtime.WindowUnminimise(a.ctx)
@@ -681,6 +690,7 @@ func (a *App) IsServerRunning() bool {
 
 // RestartApp restarts the application
 func (a *App) RestartApp() {
+	a.isQuitting = true // Force quit mode for restart
 	var args []string
 	if a.pendingFactoryReset {
 		args = append(args, "--factory-reset")

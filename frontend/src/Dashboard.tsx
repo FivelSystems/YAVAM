@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import TitleBar from './components/layout/TitleBar';
 import Sidebar from './features/library/Sidebar';
 import { SidebarContainer } from './features/layout/SidebarContainer';
@@ -11,6 +11,7 @@ import { ToastContainer } from './features/layout/ToastContainer';
 import DragDropOverlay from './features/upload/DragDropOverlay';
 import ContextMenu from './components/ui/ContextMenu';
 import { useActionContext } from './context/ActionContext';
+import { useToasts } from './context/ToastContext';
 
 // Contexts
 import { useKeybindSubscription } from './context/KeybindContext';
@@ -47,12 +48,69 @@ const DashboardContent = () => {
     // -- Modal State --
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [showUpdateModal, setShowUpdateModal] = useState(false);
+    const [updateInfo, setUpdateInfo] = useState<any>(null);
+    const [isUpdating, setIsUpdating] = useState(false);
     const [whatsNew, setWhatsNew] = useState({ open: false, content: "", version: "" });
     const [confirmationState, setConfirmationState] = useState<{
         isOpen: boolean; title: string; message: string; onConfirm: () => void; confirmText?: string; confirmStyle?: 'danger' | 'primary' | 'warning';
     }>({ isOpen: false, title: "", message: "", onConfirm: () => { } });
 
     // -- Data / Hooks --
+    const { addToast } = useToasts();
+
+    // -- Startup Checks (Updates & What's New) --
+    useEffect(() => {
+        const checkStartup = async () => {
+            if (typeof window === 'undefined' || !('go' in window)) return; // Web mode skip
+
+            try {
+                // 1. Check for "What's New" (Version Change)
+                // @ts-ignore
+                const currentVersion = await window.go.main.App.GetAppVersion();
+                const lastSeen = localStorage.getItem('last_seen_version');
+
+                if (currentVersion !== lastSeen) {
+                    // @ts-ignore
+                    const changelog = await window.go.main.App.GetChangelog();
+                    setWhatsNew({ open: true, content: changelog, version: currentVersion });
+                    // Note: We only update localStorage when they close the modal (in SystemModals)
+                }
+
+                // 2. Check for Updates (Remote)
+                // @ts-ignore
+                const update = await window.go.main.App.CheckForUpdates();
+                if (update) {
+                    setUpdateInfo(update);
+                    setShowUpdateModal(true);
+                }
+            } catch (err) {
+                console.error("Startup check failed:", err);
+            }
+        };
+
+        checkStartup();
+    }, []);
+
+    const handleUpdate = async () => {
+        if (!updateInfo) return;
+        setIsUpdating(true);
+        try {
+            // @ts-ignore
+            await window.go.main.App.ApplyUpdate(updateInfo.downloadUrl);
+            addToast("Update installed! Restarting...", "success");
+            // Give UI a moment to show toast then restart
+            setTimeout(() => {
+                // @ts-ignore
+                window.go.main.App.RestartApp();
+            }, 1000);
+        } catch (err) {
+            console.error("Update failed:", err);
+            addToast("Update failed: " + err, "error");
+            setIsUpdating(false);
+            setShowUpdateModal(false);
+        }
+    };
+
     const {
         loading, isCancelling, packages, scanPackages
     } = usePackageContext();
@@ -284,7 +342,7 @@ const DashboardContent = () => {
                 hideCreatorNames={hideCreatorNames} setHideCreatorNames={setHideCreatorNames}
                 // Update
                 showUpdateModal={showUpdateModal} setShowUpdateModal={setShowUpdateModal}
-                updateInfo={null} isUpdating={false} handleUpdate={() => { }}
+                updateInfo={updateInfo} isUpdating={isUpdating} handleUpdate={handleUpdate}
                 whatsNew={whatsNew} setWhatsNew={setWhatsNew}
             />
 

@@ -318,6 +318,38 @@ func (s *Server) Start(port string, libraries []string) error {
 		json.NewEncoder(w).Encode(sessions)
 	})))
 
+	// Library Counts Endpoint
+	mux.Handle("/api/library/counts", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			Libraries []string `json:"libraries"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.writeError(w, "Invalid request body", 400)
+			return
+		}
+
+		// Security Check: Ensure all requested paths are allowed?
+		// Actually, if client requests counts for arbitrary path, it might be info leak.
+		// We should validate each path against s.libraries?
+		// Or trust Manager? Manager gets counts for whatever path.
+		// Let's validate.
+		for _, lib := range req.Libraries {
+			if err := s.manager.ValidatePath(lib); err != nil {
+				s.writeError(w, "Access denied: Invalid library path", 403)
+				return
+			}
+		}
+
+		counts := s.manager.GetLibraryCounts(req.Libraries)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(counts)
+	})))
+
 	// Verify Endpoint
 	mux.Handle("/api/auth/verify", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
@@ -351,8 +383,10 @@ func (s *Server) Start(port string, libraries []string) error {
 		json.NewEncoder(w).Encode(map[string]bool{"success": true})
 	})))
 
-	// API Endpoint
 	mux.Handle("/api/packages", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
 		w.Header().Set("Content-Type", "application/json")
 
 		// Allow client to request a specific library, default to activePath
@@ -420,6 +454,9 @@ func (s *Server) Start(port string, libraries []string) error {
 
 	// Disk Space Endpoint
 	mux.Handle("/api/disk-space", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
 		targetPath := r.URL.Query().Get("path")
 
 		if targetPath == "" {
@@ -951,7 +988,7 @@ func (s *Server) Stop() error {
 	}
 
 	s.log("Stopping server...")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
 	err := s.httpSrv.Shutdown(ctx)

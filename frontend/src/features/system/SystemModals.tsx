@@ -137,7 +137,10 @@ export const SystemModals: React.FC<SystemModalsProps> = ({
             {/* What's New Modal */}
             <WhatsNewModal
                 isOpen={whatsNew.open}
-                onClose={() => setWhatsNew({ ...whatsNew, open: false })}
+                onClose={() => {
+                    setWhatsNew({ ...whatsNew, open: false });
+                    localStorage.setItem('last_seen_version', whatsNew.version);
+                }}
                 content={whatsNew.content}
                 version={whatsNew.version}
             />
