@@ -50,7 +50,7 @@ export const useSelection = (filteredPkgs: VarPackage[], itemsPerPage: number, s
                 setIsDetailsPanelOpen(true);
             }
         }
-    }, [filteredPkgs, selectedPackage, selectedIds]);
+    }, [filteredPkgs, selectedPackage, selectedIds, currentPage, itemsPerPage]);
 
     // Handle Context Menu
     const handleContextMenu = useCallback((e: React.MouseEvent, pkg: VarPackage) => {
