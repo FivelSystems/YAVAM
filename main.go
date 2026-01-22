@@ -42,6 +42,7 @@ func main() {
 	if f != nil {
 		defer f.Close()
 	}
+	log.Printf("[Main] Process started. PID: %d\n", os.Getpid())
 
 	// User Config Dir
 	configDir, _ := os.UserConfigDir()

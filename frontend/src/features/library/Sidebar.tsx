@@ -92,13 +92,44 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
         }
     }, [isCreatorSearchOpen]);
 
+    // Fetch Library Counts (Unified)
     useEffect(() => {
-        if (window.go && window.go.main && window.go.main.App && libraries.length > 0) {
-            window.go.main.App.GetLibraryCounts(libraries).then(counts => {
+        if (!libraries || libraries.length === 0) return;
+
+        const fetchCounts = async () => {
+            try {
+                let counts: Record<string, number> = {};
+                // @ts-ignore
+                if (window.go && window.go.main && window.go.main.App) {
+                    // Desktop
+                    // @ts-ignore
+                    counts = await window.go.main.App.GetLibraryCounts(libraries);
+                } else {
+                    // Web
+                    const res = await fetch('/api/library/counts', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
+                        },
+                        body: JSON.stringify({ libraries })
+                    });
+                    if (res.ok) {
+                        counts = await res.json();
+                    }
+                }
                 setLibraryCounts(counts);
-            });
-        }
-    }, [libraries]);
+            } catch (e) {
+                console.error("Failed to fetch library counts:", e);
+            }
+        };
+
+        // Fetch on mount, and whenever library list changes
+        fetchCounts();
+
+        // Also fetch whenever package list updates (implies scan/action finished)
+        // This ensures counts stay largely in sync with operations
+    }, [libraries, packages]); // Added packages dependency to trigger refresh on scan completion
 
     const currentLibPath = libraries && libraries[activeLibIndex] ? libraries[activeLibIndex] : "No Library Selected";
     const currentLibName = currentLibPath.split(/[/\\]/).pop() || "Library";
