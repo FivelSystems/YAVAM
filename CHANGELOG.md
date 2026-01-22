@@ -11,7 +11,6 @@
 ### Added
 - **Sidebar**: Added a search/filter button to the "Creators" section header. It expands into an input field to quickly find specific creators and collapses when focus is lost.
 - **UX**: Added "Random Package" keybind (Default: `R`). Selects a random package from the current filtered view and opens the Details Panel. (Does not auto-scroll for performance).
-- **Diagnostics**: Added "Obsoleted By" inspector to the Right Sidebar, showing exactly which package caused an "Obsolete" status.
 - **UX**: Added Friendly Error Banner for library access failures (e.g. "Access Denied" or missing folders).
 - **UX**: Added visual indentation and hierarchy indicators to the Dependency List in the Right Sidebar to clearly distinguish direct vs. nested dependencies.
 - **UX**: Decoupled "Locate Package" from strict file path matching. It now intelligently falls back to Package ID (`Creator.Name.Version`) lookup, enabling seamless navigation to the same package across different libraries.
