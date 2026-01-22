@@ -14,9 +14,11 @@
 - **Diagnostics**: Added "Obsoleted By" inspector to the Right Sidebar, showing exactly which package caused an "Obsolete" status.
 - **UX**: Added Friendly Error Banner for library access failures (e.g. "Access Denied" or missing folders).
 - **UX**: Added visual indentation and hierarchy indicators to the Dependency List in the Right Sidebar to clearly distinguish direct vs. nested dependencies.
-- **UX**: Suppressed intrusive "Located Package" status (Success/Info) toasts when clicking dependencies. Toasts now only appear if the target package cannot be found (Error).
-- **UX**: Implemented a "Title Glow" animation in the Right Sidebar when the selected package is off-screen, providing a clear visual cue to click the title to relocate it.
 - **UX**: Decoupled "Locate Package" from strict file path matching. It now intelligently falls back to Package ID (`Creator.Name.Version`) lookup, enabling seamless navigation to the same package across different libraries.
+- **Dependency Management**: Implemented **Recursive Installer**. The Install Modal now intelligently resolves and lists all missing dependencies, allowing one-click installation of complex packages.
+- **Dependency Management**: Added **Cascade Delete** support. When deleting a package, the system now analyzes and offers to purge orphaned dependencies that are no longer used by any other package.
+- **Dependency Management**: Added **Reverse Dependency Lookup** ("Used By"). You can now inspect a package to see exactly which Scenes or Presets depend on it.
+- **Dependency Management**: Implemented **Fuzzy Package Lookup**. The system can now locate packages even if the version number varies slightly (e.g. mapping `v1` to `v1.0`), significantly improving "Missing" status accuracy.
 
 ### Changed
 - **Status Colors**: Changed "Root" package status color from Blue (System) to Indigo to clarify distinction from system files.
@@ -34,6 +36,8 @@
 - **Cleanup**: Restored "Package Cleanup" context menu option.
 - **UX**: Improved Install Feedback. Upload and Install modals now show a summary screen (Installed/Skipped/Failed) instead of closing immediately.
 - **UX**: Upload Modal now automatically refreshes the library view upon successful completion.
+- **UX**: Suppressed intrusive "Located Package" status (Success/Info) toasts when clicking dependencies. Toasts now only appear if the target package cannot be found (Error).
+- **UX**: Implemented a "Title Glow" animation in the Right Sidebar when the selected package is off-screen.
 
 #### Core Logic & Status
 - **Web Client**: Fixed "Unauthorized" error when engaging in package actions (Toggle/Delete) by ensuring the authorization token is correctly attached to API requests.
@@ -45,8 +49,6 @@
 - **Dependencies**: Fixed "Incomplete" dependency list in the Details Panel by unifying recursive logic with the Install Modal.
 - **Dependencies**: Fixed "False Missing" status by automatically masking internal warnings (Mismatch/Root) as Valid (Green) if the package exists.
 - **Dependencies**: Fixed discrepancy where valid dependencies appeared as "Missing" due to dot-notation or implicit `.latest` references.
-- **Dependencies**: Fixed incomplete "Used By" lists by implementing fuzzy version matching (e.g. mapping `v1` to `1` when exact match fails).
-- **Cascade Delete**: Fixed a critical bug in `getImpact` logic where dependency cascade simulation was failing due to mismatched ID formats.
 - **Duplicate Logic**: Resolved duplicate detection on Windows by enforcing strict lower-case path normalization.
 - **Selection**: Fixed "Grid Selection Mismatch" / Jitter. Enforced deterministic sorting (tie-breaking by filePath) to prevent packages from changing positions during re-renders, ensuring clicks always land on the correct item.
 - **Keybinds**: Fixed `DELETE` keybind. It now correctly triggers the delete action (with multi-selection support) instead of being blocked by the details panel logic.
