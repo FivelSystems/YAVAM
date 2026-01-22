@@ -18,6 +18,12 @@
 - **UX**: Implemented a "Title Glow" animation in the Right Sidebar when the selected package is off-screen, providing a clear visual cue to click the title to relocate it.
 - **UX**: Decoupled "Locate Package" from strict file path matching. It now intelligently falls back to Package ID (`Creator.Name.Version`) lookup, enabling seamless navigation to the same package across different libraries.
 
+### Changed
+- **Status Colors**: Changed "Root" package status color from Blue (System) to Indigo to clarify distinction from system files.
+- **Status Priority**: Prioritized status checks to ensure disabled packages are explicitly marked `DISABLED` (Gray) rather than `OBSOLETE` (Yellow) or `DUPLICATE` (Purple).
+- **Duplicate Logic**: Distinguish "Older Version" (Yellow/Obsolete) from "Redundant Copy" (Purple/Duplicate) to reduce false positives.
+- **Refactor**: Unified Recursive Logic between `InstallPackageModal` and `Details Panel`.
+
 ### Fixed
 #### UX & Interface
 - **Library Navigation**: "View Library" button in Install Modal now correctly triggers a library switch and re-scan.
@@ -41,12 +47,7 @@
 - **Dependencies**: Fixed discrepancy where valid dependencies appeared as "Missing" due to dot-notation or implicit `.latest` references.
 - **Dependencies**: Fixed incomplete "Used By" lists by implementing fuzzy version matching (e.g. mapping `v1` to `1` when exact match fails).
 - **Cascade Delete**: Fixed a critical bug in `getImpact` logic where dependency cascade simulation was failing due to mismatched ID formats.
-- **Status Accuracy**: Prioritized status checks to ensure disabled packages are explicitly marked `DISABLED` (Gray) rather than `OBSOLETE` or `DUPLICATE`.
-- **Status Accuracy**: Changed "Root" package status color from Blue (System) to Indigo to clarify distinction from system files.
-- **Obsolete Logic**: Fixed "False Obsolete" flags by implementing natural numeric version sorting (`1.10 > 1.2`).
 - **Duplicate Logic**: Resolved duplicate detection on Windows by enforcing strict lower-case path normalization.
-- **Duplicate Logic**: Distinguish "Older Version" (Yellow/Obsolete) from "Redundant Copy" (Purple/Duplicate) to reduce false positives.
-- **Refactor**: Unified Recursive Logic between `InstallPackageModal` and `Details Panel`.
 - **Selection**: Fixed "Grid Selection Mismatch" / Jitter. Enforced deterministic sorting (tie-breaking by filePath) to prevent packages from changing positions during re-renders, ensuring clicks always land on the correct item.
 - **Keybinds**: Fixed `DELETE` keybind. It now correctly triggers the delete action (with multi-selection support) instead of being blocked by the details panel logic.
 
@@ -140,24 +141,19 @@
 - **Merge**: Fixed duplicates not being moved to library root on Web Clients.
 - **Upload**: Fixed file list persisting in Upload Modal when reopened.
 - **Restore**: Fixed application crash when restoring backup settings.
+- **Start-up**: Fixed "What's New" modal not appearing after an update by implementing reliable version tracking in local storage.
+- **Self-Update**: Fixed critical race condition where the application would fail to restart after an update (Old process blocking new process).
 - **Scanning**: Fixed a race condition where packages from a previous library scan could infiltrate the current view.
 
-### Security
-- **Linting**: Resolved unused variable warnings in Settings and Dashboard components.
-- **Open App Data**: Fixed the button logic to explicitly enter the directory instead of just selecting it in the parent folder.
-- **Merge**: Fixed duplicates not being moved to library root on Web Clients.
-- **Upload**: Fixed file list persisting in Upload Modal when reopened.
-- **Restore**: Fixed application crash when restoring backup settings.
-- **Scanning**: Fixed a race condition where packages from a previous library scan could infiltrate the current view.
 
 ### Security
 - **Hardening**: Added Ed25519 Digital Signatures (SHA256) to Auto-Updater.
+- **Process Safety**: Reverted unsafe `cmd /c` process spawning on Windows, replacing it with `SysProcAttr` for secure and reliable process detachment.
 - **DoS Protection**: Patched a potential Zip Bomb vulnerability in the package parser by enforcing strict read limits (Memory Safety).
 - **Authentication**: Passwords are never transmitted over the network (Challenge-Response).
 - **Protection**: Added sliding-window rate limiting (5 attempts/min) to login endpoints.
 - **Critical**: Removed dependencies on `powershell.exe` and `cmd.exe` to prevent Command Injection.
 - **Critical**: Strict `PathValidator` and binding internal server to `127.0.0.1` to prevent Local Network exploits.
-- **Hardening**: Added Ed25519 Digital Signatures (SHA256) to Auto-Updater.
 
 ## [v1.2.17] - 2026-01-12
 
