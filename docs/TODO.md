@@ -1,0 +1,3 @@
+### 1.3.10 Bug report:
+* [ ] Run in background toggle doesn't work (System tray toggle)
+* [ ] Fast navigation between packages causes 'contents' tab (from details panel) to show images from a previously selected package instead of the current one, probably due to a race condition (i.e. contents appear when they finish loading but there's a chance that the user has already selected another package before contents finished loading?)
