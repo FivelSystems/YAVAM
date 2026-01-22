@@ -135,11 +135,17 @@ func (a *App) startup(ctx context.Context) {
 }
 
 func (a *App) GetPackageContents(pkgPath string) ([]models.PackageContent, error) {
+	if err := a.manager.ValidatePath(pkgPath); err != nil {
+		return nil, err
+	}
 	return a.manager.GetPackageContents(pkgPath)
 }
 
 // GetPackageThumbnail returns the Base64 encoded thumbnail for a package
 func (a *App) GetPackageThumbnail(pkgPath string) (string, error) {
+	if err := a.manager.ValidatePath(pkgPath); err != nil {
+		return "", err
+	}
 	bytes, err := a.manager.GetThumbnail(pkgPath)
 	if err != nil {
 		return "", err
@@ -148,6 +154,10 @@ func (a *App) GetPackageThumbnail(pkgPath string) (string, error) {
 }
 
 func (a *App) OpenFolderInExplorer(path string) {
+	if err := a.manager.ValidatePath(path); err != nil {
+		fmt.Println("Security: OpenFolder access denied:", err)
+		return
+	}
 	err := a.manager.OpenFolder(path)
 	if err != nil {
 		fmt.Println("Error opening folder:", err)
@@ -155,6 +165,9 @@ func (a *App) OpenFolderInExplorer(path string) {
 }
 
 func (a *App) DeleteFileToRecycleBin(path string) error {
+	if err := a.manager.ValidatePath(path); err != nil {
+		return err
+	}
 	return a.manager.DeleteToTrash(path)
 }
 
@@ -244,6 +257,9 @@ func (a *App) GetAppVersion() string {
 }
 
 func (a *App) GetDiskSpace(path string) (manager.DiskSpaceInfo, error) {
+	if err := a.manager.ValidatePath(path); err != nil {
+		return manager.DiskSpaceInfo{}, err
+	}
 	return a.manager.GetDiskSpace(path)
 }
 
@@ -349,6 +365,9 @@ func (a *App) DisableOldVersions(creator string, pkgName string, vamPath string)
 
 // InstallFiles handles dropped files
 func (a *App) InstallFiles(files []string, vamPath string) ([]string, error) {
+	if err := a.manager.ValidatePath(vamPath); err != nil {
+		return nil, err
+	}
 	fmt.Printf("Backend received files to install: %v\n", files)
 	return a.manager.InstallPackage(files, vamPath, func(current, total int) {
 		runtime.EventsEmit(a.ctx, "scan:progress", map[string]int{"current": current, "total": total})

@@ -44,7 +44,7 @@ export const ActionProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         packages, analyzePackages, setPackages, setLoading,
         scanPackages, setScanProgress
     } = usePackageContext();
-    const { selectedIds, setSelectedIds, setSelectedPackage, isDetailsPanelOpen } = useSelectionContext();
+    const { selectedIds, setSelectedIds, setSelectedPackage, selectedPackage } = useSelectionContext();
     const { activeLibraryPath } = useLibraryContext();
     const { addToast } = useToasts();
 
@@ -66,16 +66,16 @@ export const ActionProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Keybind: Delete
     // Keybind: Delete
     useKeybindSubscription('delete_selected', () => {
-        // Can we delete?
-        if (selectedIds.size > 0 && !isDetailsPanelOpen) {
-            // Find a valid package to trigger the delete logic
-            // handleSidebarAction handles bulk? No, delete logic in usePackageActions uses handleDeleteClick(pkg).
-            // But handleDeleteClick takes a SINGLE package.
-            // If checking selection, it expands to all. So just pass the first one.
-            const first = packages.find(p => selectedIds.has(p.filePath));
-            if (first) actionLogic.handleDeleteClick(first);
+        if (selectedIds.size > 0) {
+            // Recycle existing logic: calling handleDeleteClick with ANY selected package triggers the bulk delete logic.
+            // If we have a selectedPackage (focused), use that. Otherwise find one.
+            const target = (selectedPackage && selectedIds.has(selectedPackage.filePath))
+                ? selectedPackage
+                : packages.find(p => selectedIds.has(p.filePath));
+
+            if (target) actionLogic.handleDeleteClick(target);
         }
-    });
+    }, [selectedIds, packages, actionLogic, selectedPackage]);
 
     return (
         <ActionContext.Provider value={actionLogic}>
