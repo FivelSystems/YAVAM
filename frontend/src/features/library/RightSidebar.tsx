@@ -41,40 +41,45 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
     const { packages } = usePackageContext();
 
     useEffect(() => {
-        if (pkg) {
-            fetchContents();
-        } else {
-            setContents([]);
-        }
-    }, [pkg]);
+        let isActive = true;
 
-    const fetchContents = async () => {
-        if (!pkg) return;
-        setLoading(true);
-        try {
-            // @ts-ignore
-            if (window.go) {
-                // @ts-ignore
-                const res = await window.go.main.App.GetPackageContents(pkg.filePath);
-                setContents(res || []);
-            } else {
-                // Web Mode Logic
-                const res = await fetch('/api/contents', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ filePath: pkg.filePath })
-                });
-                if (!res.ok) throw new Error("Failed to fetch contents");
-                const data = await res.json();
-                setContents(data || []);
+        const fetchContents = async () => {
+            if (!pkg) {
+                if (isActive) setContents([]);
+                return;
             }
-        } catch (e) {
-            console.error(e);
-            setContents([]);
-        } finally {
-            setLoading(false);
-        }
-    };
+            if (isActive) setLoading(true);
+            try {
+                // @ts-ignore
+                if (window.go) {
+                    // @ts-ignore
+                    const res = await window.go.main.App.GetPackageContents(pkg.filePath);
+                    if (isActive) setContents(res || []);
+                } else {
+                    // Web Mode Logic
+                    const res = await fetch('/api/contents', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ filePath: pkg.filePath })
+                    });
+                    if (!res.ok) throw new Error("Failed to fetch contents");
+                    const data = await res.json();
+                    if (isActive) setContents(data || []);
+                }
+            } catch (e) {
+                console.error(e);
+                if (isActive) setContents([]);
+            } finally {
+                if (isActive) setLoading(false);
+            }
+        };
+
+        fetchContents();
+
+        return () => {
+            isActive = false;
+        };
+    }, [pkg]);
 
     if (!pkg) return null;
 

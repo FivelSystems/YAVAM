@@ -9,6 +9,8 @@ export interface LayoutSettings {
     setIsSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
     isTagsVisible: boolean;
     setIsTagsVisible: (v: boolean) => void;
+    minimizeOnClose: boolean;
+    setMinimizeOnClose: (v: boolean) => void;
 }
 
 export const useLayoutSettings = (): LayoutSettings => {
@@ -32,6 +34,10 @@ export const useLayoutSettings = (): LayoutSettings => {
         return localStorage.getItem('layout_isTagsVisible') === 'true';
     });
 
+    const [minimizeOnClose, setMinimizeOnClose] = useState(() => {
+        return localStorage.getItem('app_minimizeOnClose') === 'true';
+    });
+
     // -- Persistence Effects --
     useEffect(() => {
         localStorage.setItem('layout_viewMode', viewMode);
@@ -49,10 +55,21 @@ export const useLayoutSettings = (): LayoutSettings => {
         localStorage.setItem('layout_isTagsVisible', String(isTagsVisible));
     }, [isTagsVisible]);
 
+    // Sync Minimize setting to Backend
+    useEffect(() => {
+        localStorage.setItem('app_minimizeOnClose', String(minimizeOnClose));
+        // @ts-ignore
+        if (window.go && window.go.main && window.go.main.App) {
+            // @ts-ignore
+            window.go.main.App.SetMinimizeOnClose(minimizeOnClose);
+        }
+    }, [minimizeOnClose]);
+
     return {
         viewMode, setViewMode,
         gridSize, setGridSize,
         isSidebarOpen, setIsSidebarOpen,
-        isTagsVisible, setIsTagsVisible
+        isTagsVisible, setIsTagsVisible,
+        minimizeOnClose, setMinimizeOnClose
     };
 };

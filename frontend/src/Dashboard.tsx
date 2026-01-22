@@ -34,7 +34,8 @@ const DashboardContent = () => {
         viewMode, setViewMode,
         gridSize, setGridSize,
         isSidebarOpen, setIsSidebarOpen,
-        isTagsVisible, setIsTagsVisible
+        isTagsVisible, setIsTagsVisible,
+        minimizeOnClose, setMinimizeOnClose
     } = useLayoutSettings();
 
     // Privacy Settings
@@ -326,7 +327,8 @@ const DashboardContent = () => {
                 setGridSize={setGridSize}
                 itemsPerPage={itemsPerPage}
                 setItemsPerPage={setItemsPerPage}
-                minimizeOnClose={false} handleSetMinimize={() => { }}
+                minimizeOnClose={minimizeOnClose}
+                handleSetMinimize={setMinimizeOnClose}
                 maxToasts={5} setMaxToasts={() => { }}
                 handleClearData={() => setConfirmationState({
                     isOpen: true,

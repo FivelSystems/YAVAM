@@ -181,8 +181,8 @@ const SettingsDialog = ({
         } else {
             fetch('/api/config')
                 .then(r => r.json())
-                .then(d => setAppVersion(d.version ? "v" + d.version + " (Web)" : "v1.1.4 (Web)"))
-                .catch(() => setAppVersion("v1.1.4 (Web)"));
+                .then(d => setAppVersion(d.version ? "v" + d.version + " (Web)" : "v1.3.11 (Web)"))
+                .catch(() => setAppVersion("v1.3.11 (Web)"));
         }
     }, [isOpen]);
 
