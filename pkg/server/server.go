@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 	"yavam/pkg/manager"
@@ -102,30 +101,6 @@ func (s *Server) writeError(w http.ResponseWriter, message string, code int) {
 		"success": false,
 		"message": message,
 	})
-}
-
-// IsPathAllowed checks if the given path is within activePath or any of the allowed libraries.
-// It is thread-safe.
-func (s *Server) IsPathAllowed(path string) bool {
-	if path == "" {
-		return false
-	}
-	cleanTarget := strings.ToLower(filepath.Clean(path))
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for _, lib := range s.libraries {
-		cleanLib := strings.ToLower(filepath.Clean(lib))
-		if cleanTarget == cleanLib {
-			return true
-		}
-		if strings.HasPrefix(cleanTarget, cleanLib+string(os.PathSeparator)) {
-			return true
-		}
-	}
-
-	return false
 }
 
 func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
@@ -396,8 +371,8 @@ func (s *Server) Start(port string, libraries []string) error {
 		s.log(fmt.Sprintf("Client requested packages for: %s", targetPath))
 
 		// Security: Ensure targetPath is in allowed libraries
-		if !s.IsPathAllowed(targetPath) {
-			s.log(fmt.Sprintf("Access denied. Target: %s", targetPath))
+		if err := s.manager.ValidatePath(targetPath); err != nil {
+			s.log(fmt.Sprintf("Access denied. Target: %s. Error: %v", targetPath, err))
 			s.writeError(w, "Access denied to this library path", 403)
 			return
 		}
@@ -458,7 +433,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		}
 
 		// Security: Ensure targetPath is in allowed libraries
-		if !s.IsPathAllowed(targetPath) {
+		if err := s.manager.ValidatePath(targetPath); err != nil {
 			s.writeError(w, "Access denied", 403)
 			return
 		}
@@ -487,7 +462,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		// So we MUST check if activePath is empty before allowing based on it.
 
 		// Security Check
-		if !s.IsPathAllowed(filePath) {
+		if err := s.manager.ValidatePath(filePath); err != nil {
 			s.writeError(w, "Access denied", 403)
 			return
 		}
@@ -518,7 +493,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		}
 
 		// Security Check
-		if !s.IsPathAllowed(req.FilePath) {
+		if err := s.manager.ValidatePath(req.FilePath); err != nil {
 			s.writeError(w, "Access denied", 403)
 			return
 		}
@@ -606,7 +581,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		}
 
 		// Security Check
-		if !s.IsPathAllowed(targetPath) {
+		if err := s.manager.ValidatePath(targetPath); err != nil {
 			s.writeError(w, "Access denied: Invalid library path", 403)
 			return
 		}
@@ -715,13 +690,13 @@ func (s *Server) Start(port string, libraries []string) error {
 
 		// Security Check
 		// Ensure targetLib is allowed library
-		if !s.IsPathAllowed(targetLib) {
+		if err := s.manager.ValidatePath(targetLib); err != nil {
 			s.writeError(w, "Security violation: Invalid library", 403)
 			return
 		}
 
 		// Ensure file path is allowed (redundant if checking parent, but safer)
-		if !s.IsPathAllowed(req.FilePath) {
+		if err := s.manager.ValidatePath(req.FilePath); err != nil {
 			s.writeError(w, "Security violation: Invalid file path", 403)
 			return
 		}
@@ -803,7 +778,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		// CopyPackagesToLibrary reads from src.
 		// We should validate sources are in s.libraries OR activePath.
 		for _, src := range req.FilePaths {
-			if !s.IsPathAllowed(src) {
+			if err := s.manager.ValidatePath(src); err != nil {
 				s.writeError(w, fmt.Sprintf("Access denied: Source file %s not in allowed libraries", src), 403)
 				return
 			}
@@ -858,7 +833,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		}
 
 		// Security Check
-		if !s.IsPathAllowed(targetPath) {
+		if err := s.manager.ValidatePath(targetPath); err != nil {
 			s.writeError(w, "Access denied: Invalid library path", 403)
 			return
 		}
@@ -920,7 +895,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		}
 
 		// Security Check: targetFile must be inside one of the libraries
-		if !s.IsPathAllowed(targetFile) {
+		if err := s.manager.ValidatePath(targetFile); err != nil {
 			s.writeError(w, "Access denied: File not in allowed libraries", 403)
 			return
 		}
@@ -999,47 +974,4 @@ func (s *Server) GetOutboundIP() string {
 	localAddr := conn.LocalAddr().(*net.UDPAddr)
 
 	return localAddr.IP.String()
-}
-
-// isSafePath checks if the requested path is within the allowed root directory
-// It resolves symlinks and absolute paths to prevent traversal attacks
-func (s *Server) isSafePath(requestedPath, root string) bool {
-	// 1. Get Absolute Path of Root (resolve symlinks)
-	absRoot, err := filepath.EvalSymlinks(root)
-	if err != nil {
-		// Fallback to simpler Abs if symlink eval fails
-		absRoot, err = filepath.Abs(root)
-		if err != nil {
-			return false
-		}
-	}
-
-	// 2. Get Absolute Path of Request
-	absPath, err := filepath.Abs(requestedPath)
-	if err != nil {
-		return false
-	}
-
-	// 3. Eval Symlinks of Request (if it exists)
-	if info, err := os.Lstat(absPath); err == nil {
-		if info.Mode()&os.ModeSymlink != 0 {
-			resolved, err := filepath.EvalSymlinks(absPath)
-			if err == nil {
-				absPath = resolved
-			}
-		}
-	}
-
-	// 4. Case Insensitive Compare on Windows
-	rel, err := filepath.Rel(strings.ToLower(absRoot), strings.ToLower(absPath))
-	if err != nil {
-		return false
-	}
-
-	// 5. Ensure no ".." in relative path
-	if strings.Contains(rel, "..") {
-		return false
-	}
-
-	return !strings.HasPrefix(rel, "..")
 }

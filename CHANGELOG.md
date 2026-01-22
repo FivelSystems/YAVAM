@@ -34,6 +34,7 @@
 - **Web Client**: Fixed "Storage Unavailable" error in Upload Modal by protecting disk space & collision checks with authentication.
 - **Web Client**: Fixed missing file size display in Upload Modal for empty or special files.
 - **Desktop Client**: Fixed "0 B" file size display in Upload Queue by implementing a backend bridge to retrieve file metadata for dragged files.
+- **Security**: Hardened Desktop file system bindings to enforce strict path validation, matching Web Client security rules.
 - **Web Client**: Fixed "Infinite Scanning" spinner on mobile/web clients by ensuring the server broadcasts the `scan:complete` event upon finish.
 - **Dependencies**: Fixed "Incomplete" dependency list in the Details Panel by unifying recursive logic with the Install Modal.
 - **Dependencies**: Fixed "False Missing" status by automatically masking internal warnings (Mismatch/Root) as Valid (Green) if the package exists.
@@ -47,6 +48,7 @@
 - **Duplicate Logic**: Distinguish "Older Version" (Yellow/Obsolete) from "Redundant Copy" (Purple/Duplicate) to reduce false positives.
 - **Refactor**: Unified Recursive Logic between `InstallPackageModal` and `Details Panel`.
 - **Selection**: Fixed "Grid Selection Mismatch" / Jitter. Enforced deterministic sorting (tie-breaking by filePath) to prevent packages from changing positions during re-renders, ensuring clicks always land on the correct item.
+- **Keybinds**: Fixed `DELETE` keybind. It now correctly triggers the delete action (with multi-selection support) instead of being blocked by the details panel logic.
 
 ## [1.3.2] - 2026-01-15
 
