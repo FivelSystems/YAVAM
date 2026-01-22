@@ -23,7 +23,6 @@
 - **Status Colors**: Changed "Root" package status color from Blue (System) to Indigo to clarify distinction from system files.
 - **Status Priority**: Prioritized status checks to ensure disabled packages are explicitly marked `DISABLED` (Gray) rather than `OBSOLETE` (Yellow) or `DUPLICATE` (Purple).
 - **Duplicate Logic**: Distinguish "Older Version" (Yellow/Obsolete) from "Redundant Copy" (Purple/Duplicate) to reduce false positives.
-- **Refactor**: Unified Recursive Logic between `InstallPackageModal` and `Details Panel`.
 
 ### Fixed
 #### UX & Interface
@@ -32,7 +31,6 @@
 - **Filters**: Clicking the active "Creator" filter pill in the Details Panel now toggles the filter off (Reset).
 - **Selection**: Fixed `CTRL+A` (Select All) not visually highlighting "Corrupt" packages.
 - **Animation**: Fixed "Locate Package" animation to restart reliably on rapid clicks (spam-proofing) and handle interruptions correctly.
-- **Cleanup**: Restored "Package Cleanup" context menu option.
 - **UX**: Improved Install Feedback. Upload and Install modals now show a summary screen (Installed/Skipped/Failed) instead of closing immediately.
 - **UX**: Upload Modal now automatically refreshes the library view upon successful completion.
 - **UX**: Suppressed intrusive "Located Package" status (Success/Info) toasts when clicking dependencies. Toasts now only appear if the target package cannot be found (Error).
