@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -83,4 +84,15 @@ func TestThumbnailPriority(t *testing.T) {
 		"Custom/Atom/Person/Appearance/Preset_Yasmin.jpg":     "yasmin_thumb",
 		"Custom/Atom/Person/Appearance/Preset_Yasmin.vap":     "{}",
 	}, "yasmin_thumb")
+	// Test 6: Alphabetical Tie-Breaker (Small A vs Large B)
+	// Both are Scenes (Priority 4). A is alphabetically first, but B is larger.
+	// Previous Logic: B wins (Size).
+	// New Logic: A wins (Alphabetical).
+	runTest("Alphabetical vs Size", map[string]string{
+		"meta.json":                "{}",
+		"Saves/scene/A_Scene.json": "{}",
+		"Saves/scene/A_Scene.jpg":  "a_thumb", // First alphabetically
+		"Saves/scene/B_Scene.json": "{}",
+		"Saves/scene/B_Scene.jpg":  strings.Repeat("b", 1000), // Larger file (1000 bytes vs ~7 bytes)
+	}, "a_thumb")
 }
