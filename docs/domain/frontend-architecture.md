@@ -122,4 +122,12 @@ This ensures that "Duplicate", "Obsolete", and "Root" statuses are visualized co
 - `DUPLICATE`: Exact copy of another package (Priority: High).
 - `OBSOLETE`: Older version of a package (Priority: High).
 - `CORRUPT`: Broken ZIP file (Priority: Critical).
-- `DISABLED`: Valid but disabled by user.
+
+## 7. Performance Constraints
+### Animation Strategy (Framer Motion)
+*   **Grid Layouts:** Do **NOT** use `layout` prop on `motion.div` items in large grids (Dashboard, Library).
+    *   *Reason:* It triggers `O(N^2)` layout recalculations for 100+ items during filtering, causing massive UI freeze.
+    *   *Alternative:* Use instant transitions (filters snap into place).
+*   **Page Transitions:** Avoid `AnimatePresence` for full-page grid transitions.
+    *   *Reason:* It keeps "Old Page" and "New Page" in memory simultaneously. If thumbnails are 40MB bitmaps (4K), this doubles RAM usage to >1.5GB, causing crash risks.
+    *   *Rule:* Snap transitions for heavy content; Fade transitions for small modals only.

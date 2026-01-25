@@ -21,9 +21,13 @@ interface PackageCardProps {
 
 const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, viewMode = 'grid', censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false, isHighlighted = false, startAnimationTs }: PackageCardProps) => {
     const cardRef = useRef<HTMLDivElement>(null);
-    const [thumbSrc, setThumbSrc] = useState<string | undefined>(
-        pkg.thumbnailBase64 ? `data:image/jpeg;base64,${pkg.thumbnailBase64}` : undefined
-    );
+
+    // optimize: Do not store base64 in state if it comes from props (prevents duplication)
+    const [asyncThumb, setAsyncThumb] = useState<string | undefined>(undefined);
+    const thumbSrc = pkg.thumbnailBase64
+        ? `data:image/jpeg;base64,${pkg.thumbnailBase64}`
+        : asyncThumb;
+
     const [isVisible, setIsVisible] = useState(false);
 
     // Scroll Into View when Anchor
@@ -39,22 +43,13 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
         onSelect(pkg, e);
     };
 
-    // Ensure state syncs if pkg data updates (e.g. from backend scan completion)
-    useEffect(() => {
-        if (pkg.thumbnailBase64) {
-            setThumbSrc(`data:image/jpeg;base64,${pkg.thumbnailBase64}`);
-        } else if (!pkg.hasThumbnail) {
-            setThumbSrc(undefined);
-        }
-    }, [pkg.thumbnailBase64, pkg.hasThumbnail]);
-
     // Lazy Loading Logic
     useEffect(() => {
         if (!window.go) {
             // Web Mode: Use API URL directly
             if (pkg.hasThumbnail && !pkg.thumbnailBase64) {
                 const token = localStorage.getItem('yavam_auth_token');
-                setThumbSrc(`/api/thumbnail?filePath=${encodeURIComponent(pkg.filePath)}&token=${token || ''}`);
+                setAsyncThumb(`/api/thumbnail?filePath=${encodeURIComponent(pkg.filePath)}&token=${token || ''}`);
             }
             return;
         }
@@ -79,14 +74,13 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
         if (window.go && isVisible && pkg.hasThumbnail && !thumbSrc) {
             window.go.main.App.GetPackageThumbnail(pkg.filePath)
                 .then((b64: string) => {
-                    if (b64) setThumbSrc(`data:image/jpeg;base64,${b64}`);
+                    if (b64) setAsyncThumb(`data:image/jpeg;base64,${b64}`);
                 })
                 .catch((e: any) => console.error("Thumb load failed:", e));
         }
     }, [isVisible, pkg.hasThumbnail, pkg.filePath, thumbSrc]);
 
 
-    // Visual State Logic
     // Visual State Logic
     let statusClass = "border-gray-700 opacity-60 grayscale";
     let statusIcon = <Power size={14} className="text-gray-400" />;
@@ -201,7 +195,7 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
     return (
         <motion.div
             key={startAnimationTs} // Force re-render on new highlight request to restart animation
-            layout
+            // Removed layout prop for performance
             id={`package-${pkg.filePath}`}
             ref={cardRef}
             initial={{ opacity: 0, scale: 0.9 }}
