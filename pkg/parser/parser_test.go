@@ -73,4 +73,14 @@ func TestThumbnailPriority(t *testing.T) {
 		"Custom/Preview.jpg": "meta_thumb",
 		"package.jpg":        "root_thumb",
 	}, "meta_thumb")
+
+	// Test 5: User Report Reproduction (Look vs Clothing Texture)
+	// LipRing (Clothing folder, .vab sibling) vs Yasmin (Appearance folder, .vap sibling)
+	runTest("User Look vs Clothing", map[string]string{
+		"meta.json": "{}",
+		"Custom/Clothing/Female/Jackaroo/LipRing/LipRing.png": "lipring_texture",
+		"Custom/Clothing/Female/Jackaroo/LipRing/LipRing.vab": "{}",
+		"Custom/Atom/Person/Appearance/Preset_Yasmin.jpg":     "yasmin_thumb",
+		"Custom/Atom/Person/Appearance/Preset_Yasmin.vap":     "{}",
+	}, "yasmin_thumb")
 }
