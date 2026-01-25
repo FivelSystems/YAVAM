@@ -240,8 +240,10 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 			candidate = f
 			candidatePriority = prio
 		} else if prio == candidatePriority && prio > 0 {
-			// Tie-breaker: Larger size
-			if candidate == nil || f.FileInfo().Size() > candidate.FileInfo().Size() {
+			// Tie-breaker: Alphabetical Order (A-Z)
+			// Compare normalized names to match the Visual "First Item" rule.
+			currentBestNorm := strings.ReplaceAll(strings.ToLower(candidate.Name), "\\", "/")
+			if candidate == nil || name < currentBestNorm {
 				candidate = f
 			}
 		}

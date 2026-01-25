@@ -17,6 +17,9 @@
 -   **Robustness:** Implemented In-Memory Token Caching to eliminate I/O race conditions for all API calls immediately after login.
 -   **System Tray**: Fixed "Run in Background" toggle not persisting or affecting the application's close behavior. It now correctly synchronizes user preference with the backend.
 -   **Thumbnails**: Refactored thumbnail detection to use the "Sibling File" rule (Suggested by gicstin/VPM), ensuring robust detection across all folder structures (#25).
+    -   Implemented **Category-Weighted Sibling Rule** (Scenes > Looks > Clothing > Assets).
+    -   Added **Alphabetical Tie-Breaker**: When priorities are equal, the first file alphabetically wins (Visual Consistency).
+    -   Added **Texture Filter**: Explicitly ignores images in `/textures/` or `/assets/` unless they have a direct content sibling.
 - **Library UX**: Fixed a race condition in the "Right Sidebar" where rapidly selecting packages would display the contents of a previously clicked package (stale data). The sidebar now reliably shows the currently selected package's content.
 - **Web Client**: Updated fallback version display to v1.3.11.
 
