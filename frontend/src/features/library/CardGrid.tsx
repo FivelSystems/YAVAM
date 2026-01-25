@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import { VarPackage } from '../../types';
 import PackageCard from './PackageCard';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { PackageSearch } from 'lucide-react';
 
 interface CardGridProps {
@@ -79,36 +79,34 @@ const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, 
                     gridTemplateColumns: `repeat(auto-fill, minmax(${gridSize}px, 1fr))`
                 } : undefined}
             >
-                <AnimatePresence mode="popLayout">
-                    {packages.map((pkg, i) => (
-                        <motion.div
-                            layout
-                            key={pkg.filePath}
-                            id={`pkg-${pkg.filePath}`}
-                            custom={i} // Pass index for stagger delay
-                            variants={itemVariants}
-                            initial="hidden"
-                            animate="visible"
-                            exit="exit"
-                            className=""
-                        >
-                            <PackageCard
-                                pkg={pkg}
-                                onContextMenu={onContextMenu}
-                                onSelect={onSelect}
-                                isSelected={selectedIds ? selectedIds.has(pkg.filePath) : pkg.filePath === selectedPkgId}
-                                isAnchor={pkg.filePath === selectedPkgId}
-                                viewMode={viewMode}
-                                censorThumbnails={censorThumbnails}
-                                blurAmount={blurAmount}
-                                hidePackageNames={hidePackageNames}
-                                hideCreatorNames={hideCreatorNames}
-                                isHighlighted={highlightedRequest?.id === pkg.filePath}
-                                startAnimationTs={highlightedRequest?.id === pkg.filePath ? highlightedRequest.ts : undefined}
-                            />
-                        </motion.div>
-                    ))}
-                </AnimatePresence>
+                {packages.map((pkg, i) => (
+                    <motion.div
+                        key={pkg.filePath}
+                        id={`pkg-${pkg.filePath}`}
+                        custom={i} // Pass index for stagger delay
+                        variants={itemVariants}
+                        initial="hidden"
+                        animate="visible"
+                        exit="exit"
+                        className=""
+                    // Removed layout prop for performance
+                    >
+                        <PackageCard
+                            pkg={pkg}
+                            onContextMenu={onContextMenu}
+                            onSelect={onSelect}
+                            isSelected={selectedIds ? selectedIds.has(pkg.filePath) : pkg.filePath === selectedPkgId}
+                            isAnchor={pkg.filePath === selectedPkgId}
+                            viewMode={viewMode}
+                            censorThumbnails={censorThumbnails}
+                            blurAmount={blurAmount}
+                            hidePackageNames={hidePackageNames}
+                            hideCreatorNames={hideCreatorNames}
+                            isHighlighted={highlightedRequest?.id === pkg.filePath}
+                            startAnimationTs={highlightedRequest?.id === pkg.filePath ? highlightedRequest.ts : undefined}
+                        />
+                    </motion.div>
+                ))}
             </motion.div>
         </div>
     );

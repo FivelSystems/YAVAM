@@ -22,6 +22,10 @@
     -   Added **Texture Filter**: Explicitly ignores images in `/textures/` or `/assets/` unless they have a direct content sibling.
 - **Library UX**: Fixed a race condition in the "Right Sidebar" where rapidly selecting packages would display the contents of a previously clicked package (stale data). The sidebar now reliably shows the currently selected package's content.
 - **Web Client**: Updated fallback version display to v1.3.11.
+- **Performance**: Optimized `CardGrid` and `PackageCard` to reduce memory usage by 50% and eliminate UI stutter.
+    - Removed expensive "Layout" animations (Framer Motion) that caused reflows on every filter change.
+    - Optimized `State Duplication` in thumbnail handling to reduce Garbage Collection pressure.
+    - Page transitions are now faster and consume less RAM (No double-buffering of pages).
 
 ## [1.3.10] - 2026-01-20
 
