@@ -241,9 +241,13 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 			candidatePriority = prio
 		} else if prio == candidatePriority && prio > 0 {
 			// Tie-breaker: Alphabetical Order (A-Z)
-			// Compare normalized names to match the Visual "First Item" rule.
-			currentBestNorm := strings.ReplaceAll(strings.ToLower(candidate.Name), "\\", "/")
-			if candidate == nil || name < currentBestNorm {
+			// Compare ORIGINAL names (Case Sensitive) to match Frontend 'read.go' behavior.
+			// Frontend: "Tentacle" < "tentacle" (T < t).
+			// Lowercase map key was causing "tentacle...asset" < "tentacle...scene".
+			currentNameNorm := filepath.Base(strings.ReplaceAll(f.Name, "\\", "/"))
+			candidateNameNorm := filepath.Base(strings.ReplaceAll(candidate.Name, "\\", "/"))
+
+			if candidate == nil || currentNameNorm < candidateNameNorm {
 				candidate = f
 			}
 		}

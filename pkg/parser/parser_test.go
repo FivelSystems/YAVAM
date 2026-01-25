@@ -95,4 +95,14 @@ func TestThumbnailPriority(t *testing.T) {
 		"Saves/scene/B_Scene.json": "{}",
 		"Saves/scene/B_Scene.jpg":  strings.Repeat("b", 1000), // Larger file (1000 bytes vs ~7 bytes)
 	}, "a_thumb")
+
+	// Test 7: Case Sensitive Tie-Breaker (Z vs a)
+	// Go Sort: 'Z' (90) < 'a' (97). Comparison should be Case Sensitive.
+	runTest("Case Sensitive", map[string]string{
+		"meta.json":                "{}",
+		"Saves/scene/Z_Scene.json": "{}",
+		"Saves/scene/Z_Scene.jpg":  "z_thumb",
+		"Saves/scene/a_scene.json": "{}",
+		"Saves/scene/a_scene.jpg":  "a_thumb",
+	}, "z_thumb")
 }
