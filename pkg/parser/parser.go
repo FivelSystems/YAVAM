@@ -62,7 +62,6 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 	candidatePriority := 0
 
 	var fallbackCandidate *zip.File
-	fallbackPriority := 0
 
 	// Helper for parsing .vam files
 	type VamItem struct {
@@ -72,6 +71,8 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 
 	// 1. Index files for fast lookup
 	fileMap := make(map[string]*zip.File)
+	contentPriority := make(map[string]int) // filePath -> priority (4=High, 3=Med, 2=Low)
+
 	for _, f := range r.File {
 		if !f.FileInfo().IsDir() {
 			fileMap[strings.ToLower(strings.ReplaceAll(f.Name, "\\", "/"))] = f
@@ -84,42 +85,41 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 		}
 
 		normName := strings.ReplaceAll(strings.ToLower(f.Name), "\\", "/")
-		isContent := false
 
-		// Category Detection & Content Identification
+		// Category Detection & Content Priority Assignment
 		if strings.HasPrefix(normName, "saves/scene/") && strings.HasSuffix(normName, ".json") {
 			categorySet["Scene"] = true
-			isContent = true
-		} else if strings.HasPrefix(normName, "saves/person/appearance/") && strings.HasSuffix(normName, ".vap") {
+			contentPriority[normName] = 4 // Highest
+		} else if (strings.HasPrefix(normName, "saves/person/appearance/") || strings.HasPrefix(normName, "custom/atom/person/appearance/")) && strings.HasSuffix(normName, ".vap") {
 			categorySet["Look"] = true
-			isContent = true
+			contentPriority[normName] = 4 // High (Look matches Scene)
 		} else if strings.HasPrefix(normName, "custom/clothing/") {
 			categorySet["Clothing"] = true
 			if strings.HasSuffix(normName, ".vam") || strings.HasSuffix(normName, ".json") || strings.HasSuffix(normName, ".vap") {
-				isContent = true
+				contentPriority[normName] = 3
 			}
 		} else if strings.HasPrefix(normName, "custom/hair/") {
 			categorySet["Hair"] = true
 			if strings.HasSuffix(normName, ".vam") || strings.HasSuffix(normName, ".json") || strings.HasSuffix(normName, ".vap") {
-				isContent = true
+				contentPriority[normName] = 3
 			}
 		} else if strings.HasPrefix(normName, "custom/atom/person/morphs/") {
 			categorySet["Morph"] = true
 			if strings.HasSuffix(normName, ".vmi") || strings.HasSuffix(normName, ".vmb") {
-				isContent = true
+				contentPriority[normName] = 2
 			}
 		} else if strings.HasPrefix(normName, "custom/atom/person/textures/") {
 			categorySet["Skin"] = true
-			isContent = false
+			// Textures are NOT content (Prio 0)
 		} else if strings.HasPrefix(normName, "custom/scripts/") {
 			categorySet["Script"] = true
 			if strings.HasSuffix(normName, ".cs") || strings.HasSuffix(normName, ".cslist") {
-				isContent = true
+				contentPriority[normName] = 2
 			}
 		} else if strings.HasPrefix(normName, "custom/assets/") {
 			categorySet["Asset"] = true
 			if strings.HasSuffix(normName, ".assetbundle") || strings.HasSuffix(normName, ".scene") {
-				isContent = true
+				contentPriority[normName] = 2
 			}
 		} else if strings.HasPrefix(normName, "custom/") {
 			parts := strings.Split(normName, "/")
@@ -128,6 +128,8 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 				if len(cat) > 0 {
 					cat = strings.ToUpper(cat[:1]) + cat[1:]
 					categorySet[cat] = true
+					// Unknown custom category content?
+					// Be conservative: Prio 0 unless we add generic detection
 				}
 			}
 		}
@@ -171,59 +173,88 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 				}
 			}
 		}
+	}
 
-		// Thumbnail Candidate Logic
-		if candidatePriority < 4 {
-			ext := filepath.Ext(normName)
-
-			// --- Fallback Logic: Capture any potential image ---
-			if ext == ".jpg" || ext == ".png" {
-				// Ignore textures and assets folders to avoid noise (too many small images)
-				if !strings.Contains(normName, "/textures/") && !strings.Contains(normName, "/assets/") {
-					prio := 1
-					// If it's in a known content category folder, bump priority
-					if strings.Contains(normName, "saves/scene") {
-						prio = 2
-					} else if strings.Contains(normName, "saves/person") {
-						prio = 2
-					} else if strings.Contains(normName, "custom/clothing") {
-						prio = 2
-					} else if strings.Contains(normName, "custom/hair") {
-						prio = 2
-					}
-
-					if prio > fallbackPriority {
-						fallbackCandidate = f
-						fallbackPriority = prio
-					} else if prio == fallbackPriority {
-						// Tie-breaker: Prefer larger files (likely higher quality preview)
-						if fallbackCandidate == nil || f.FileInfo().Size() > fallbackCandidate.FileInfo().Size() {
-							fallbackCandidate = f
-						}
-					}
+	// 2. Build Set of "Potential Content Basenames" (Files that are NOT images)
+	// 2. Thumbnail Detection Strategy (Sibling File Rule - Unified)
+	// Logic: An image is a valid thumbnail if its sibling is VALID CONTENT.
+	// We rely on contentPriority map populated above.
+	contentBasenames := make(map[string]string) // base -> full path of sibling
+	for name := range fileMap {
+		ext := filepath.Ext(name)
+		if ext == ".jpg" || ext == ".png" || ext == "" {
+			continue // Skip images
+		}
+		// Only consider files that are MARKED as Content
+		if _, isContent := contentPriority[name]; isContent {
+			base := name[:len(name)-len(ext)]
+			// Store the Highest Priority sibling if multiple exist?
+			// The map is base -> path.
+			// Check if we already have a sibling for this base.
+			if existing, ok := contentBasenames[base]; ok {
+				if contentPriority[name] > contentPriority[existing] {
+					contentBasenames[base] = name
 				}
+			} else {
+				contentBasenames[base] = name
 			}
-			// ---------------------------------------------------
+		}
+	}
 
-			if isContent {
-				base := normName[:len(normName)-len(ext)]
+	// 3. Scan Images
+	for name, f := range fileMap {
+		ext := filepath.Ext(name)
+		if ext != ".jpg" && ext != ".png" {
+			continue
+		}
 
-				// Priority 3: Preset Match (.vap -> .jpg)
-				// Priority 4: Scene Match (.json -> .jpg) for Scenes
-				matchPrio := 3
-				if strings.HasPrefix(normName, "saves/scene/") {
-					matchPrio = 4
-				}
+		base := name[:len(name)-len(ext)]
+		siblingPath, hasSibling := contentBasenames[base]
 
-				if matchPrio > candidatePriority {
-					if img, ok := fileMap[base+".jpg"]; ok {
-						candidate = img
-						candidatePriority = matchPrio
-					} else if img, ok := fileMap[base+".png"]; ok {
-						candidate = img
-						candidatePriority = matchPrio
-					}
-				}
+		// Texture/Asset Filter:
+		// Ignore images in textures/assets folders UNLESS they have a Strong Sibling (content).
+		// This prevents large texture files from winning the "Fallback Candidate" (Prio 0) race.
+		isTextureOrAsset := strings.Contains(name, "/textures/") || strings.Contains(name, "/assets/")
+		if isTextureOrAsset && !hasSibling {
+			continue
+		}
+
+		prio := 0
+		if hasSibling {
+			// Found a validated content sibling! Use its priority.
+			prio = contentPriority[siblingPath]
+
+			// Tie-breaker boost for Look/Scene to ensure they beat Clothes?
+			// Already handled by assigning 4 to Look/Scene and 3 to Clothing.
+		} else {
+			// No Content Sibling.
+			// Do we want Fallback logic?
+			// Prior code had: "Fallback if in saves/scene or saves/person".
+			if strings.Contains(name, "saves/scene") || strings.Contains(name, "saves/person") {
+				prio = 1
+			}
+		}
+
+		// Update Candidate
+		if prio > candidatePriority {
+			candidate = f
+			candidatePriority = prio
+		} else if prio == candidatePriority && prio > 0 {
+			// Tie-breaker: Larger size
+			if candidate == nil || f.FileInfo().Size() > candidate.FileInfo().Size() {
+				candidate = f
+			}
+		}
+
+		// Retain Fallback (Prio 0/1 equivalent from before) in case nothing matches
+		if !hasSibling && (candidatePriority == 0) {
+			// Heuristic: If we are completely desperate, pick the largest image in the zip?
+			// Or maintain the "FallbackCandidate" separate logic?
+			// Let's rely on the loops above. Prio 1 captures "Orphan in Scene Folder".
+			// If Prio is still 0, we can pick ANY image as last resort?
+			// The original code did `fallbackCandidate`.
+			if fallbackCandidate == nil || f.FileInfo().Size() > fallbackCandidate.FileInfo().Size() {
+				fallbackCandidate = f
 			}
 		}
 	}
