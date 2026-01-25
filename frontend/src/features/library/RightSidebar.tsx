@@ -8,6 +8,7 @@ import { PACKAGE_STATUS } from '../../constants';
 import { usePackageContext } from '../../context/PackageContext';
 import { getPackageStatus, findBestPackageMatch, getBlurStyle } from './utils';
 import { resolveDependency, resolveRecursive } from '../../utils/dependency';
+import { fetchWithAuth } from '../../services/api';
 
 export interface PackageContent {
     filePath: string;
@@ -57,9 +58,8 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                     if (isActive) setContents(res || []);
                 } else {
                     // Web Mode Logic
-                    const res = await fetch('/api/contents', {
+                    const res = await fetchWithAuth('/api/contents', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ filePath: pkg.filePath })
                     });
                     if (!res.ok) throw new Error("Failed to fetch contents");

@@ -4,6 +4,7 @@
 // The backend handles bcrypt hashing.
 
 const AUTH_KEY = 'yavam_auth_token';
+let cachedToken: string | null = null;
 
 export interface User {
     username: string;
@@ -12,6 +13,7 @@ export interface User {
 
 // Checks if we have any token stored (does not validate it)
 export function getStoredToken(): string | null {
+    if (cachedToken) return cachedToken;
     return localStorage.getItem(AUTH_KEY);
 }
 
@@ -20,6 +22,7 @@ export function isAuthenticated(): boolean {
 }
 
 export function logout() {
+    cachedToken = null;
     localStorage.removeItem(AUTH_KEY);
     // Reload to reset app state or let the App component handle it by checking event?
     // Dispatch event so App can react immediately
@@ -59,6 +62,7 @@ export async function login(password: string): Promise<string> {
         const { token } = await loginRes.json();
 
         // Store Token
+        cachedToken = token;
         localStorage.setItem(AUTH_KEY, token);
 
         // Dispatch Login Event so other parts of the app (like Wails Polyfill) react
