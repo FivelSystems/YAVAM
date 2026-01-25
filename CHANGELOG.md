@@ -12,6 +12,8 @@
 -   **CRITICAL:** Fixed Infinite Login Loop caused by recursive `logout` triggers.
 -   **CRITICAL:** Fixed Login Race Condition using explicit token passing.
 -   **CRITICAL:** Fixed "Ghost Fix" log spam in public access checks.
+-   **CRITICAL:** Fixed "Contents" tab failing to load on Web Clients due to missing Authorization header (`401 Unauthorized`).
+-   **Robustness:** Implemented In-Memory Token Caching to eliminate I/O race conditions for all API calls immediately after login.
 -   **System Tray**: Fixed "Run in Background" toggle not persisting or affecting the application's close behavior. It now correctly synchronizes user preference with the backend.
 - **Library UX**: Fixed a race condition in the "Right Sidebar" where rapidly selecting packages would display the contents of a previously clicked package (stale data). The sidebar now reliably shows the currently selected package's content.
 - **Web Client**: Updated fallback version display to v1.3.11.
