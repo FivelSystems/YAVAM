@@ -12,9 +12,21 @@ declare global {
 const listeners = new Map<string, ((data: any) => void)[]>();
 let eventSource: EventSource | null = null;
 let reconnectTimer: any = null;
+let isRevoked = false; // Prevent reconnect loop if logged out
+
+function disconnectSSE() {
+    if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+    }
+    if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+    }
+}
 
 function connectSSE() {
-    if (eventSource) return;
+    if (eventSource || isRevoked) return; // Stop if already connected or revoked
 
     console.log("[Polyfill] Connecting to SSE...");
     const token = localStorage.getItem('yavam_auth_token');
@@ -44,7 +56,9 @@ function connectSSE() {
             eventSource.close();
             eventSource = null;
         }
-        if (!reconnectTimer) {
+
+        // Retry logic - only if not revoked
+        if (!reconnectTimer && !isRevoked) {
             reconnectTimer = setTimeout(() => {
                 reconnectTimer = null;
                 connectSSE();
@@ -53,12 +67,28 @@ function connectSSE() {
     };
 }
 
+// Logic to handle Auth State Changes
+function handleLogout() {
+    console.log("[Polyfill] Auth Logout detected. Stopping SSE.");
+    isRevoked = true;
+    disconnectSSE();
+}
+
+function handleLogin() {
+    console.log("[Polyfill] Auth Login detected. Starting SSE.");
+    isRevoked = false;
+    connectSSE();
+}
+
 export function initWailsPolyfill() {
     // Only run if NOT in Wails (Desktop) mode
     if (window.go) {
         console.log("[Polyfill] Wails detected, skipping polyfill.");
         return;
     }
+
+    // Check if initialized already?
+    if (window.runtime && window.runtime.EventsOn) return;
 
     console.log("[Polyfill] Initializing Web Runtime...");
 
@@ -85,8 +115,6 @@ export function initWailsPolyfill() {
 
     // Polyfill EventsEmit (Optional, for completeness)
     window.runtime.EventsEmit = (eventName: string, data?: any) => {
-        // In local mode, we might just loopback?
-        // Or send to server? For now, simple loopback for local logic.
         const callbacks = listeners.get(eventName);
         if (callbacks) {
             callbacks.forEach(cb => cb(data));
@@ -97,6 +125,10 @@ export function initWailsPolyfill() {
     window.runtime.BrowserOpenURL = (url: string) => {
         window.open(url, '_blank');
     };
+
+    // Listen to Auth Events
+    window.addEventListener('auth:logout', handleLogout);
+    window.addEventListener('auth:login', handleLogin);
 
     // Start SSE connection
     connectSSE();

@@ -61,6 +61,9 @@ export async function login(password: string): Promise<string> {
         // Store Token
         localStorage.setItem(AUTH_KEY, token);
 
+        // Dispatch Login Event so other parts of the app (like Wails Polyfill) react
+        window.dispatchEvent(new Event('auth:login'));
+
         return token;
 
     } catch (err: any) {

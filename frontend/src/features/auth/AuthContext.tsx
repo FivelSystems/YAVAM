@@ -12,7 +12,7 @@ interface AuthContextType {
     isLoginForced: boolean;
     loginMessage?: string;
     openLoginModal: (force?: boolean, message?: string) => void;
-    closeLoginModal: () => void;
+    closeLoginModal: (token?: string) => void;
 
     // Actions
     logout: () => void;
@@ -31,7 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [loginMessage, setLoginMessage] = useState<string | undefined>(undefined);
 
     // Verify Token or Public Access
-    const checkAuth = async () => {
+    const checkAuth = async (tokenOverride?: string) => {
         try {
             // @ts-ignore
             if (window.go) {
@@ -44,7 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
 
             // 1. Check Token
-            const token = getStoredToken();
+            const token = tokenOverride ?? getStoredToken();
             if (token) {
                 // Validate token with server to ensure it is still valid/not revoked
                 // We must use a strictly protected endpoint that is NOT allowed for guests
@@ -72,7 +72,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setIsAuthenticated(false);
 
                 // 2. Check Public Access
-                const res = await fetchWithAuth('/api/config');
+                // CRITICAL: Use native fetch, NOT fetchWithAuth.
+                // If this returns 401, we just want to know it's private.
+                // We DO NOT want to trigger the global logout interceptor (which calls cleanLogout -> checkAuth -> infinite loop).
+                const res = await fetch('/api/config');
                 if (res.ok) {
                     const cfg = await res.json();
                     if (cfg.publicAccess) {
@@ -84,13 +87,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         openLoginModal(true);
                     }
                 } else {
-                    // Server unreachable or error -> Assume private
+                    // Server returned 401 (Private) or 500
+                    // Just force login. Do not logout (loop).
                     setIsGuest(false);
                     openLoginModal(true);
                 }
             }
         } catch (error) {
-            console.error("Auth Check Failed:", error);
+            console.error("Auth Check Failed (Exception):", error);
             // Fallback
             setIsAuthenticated(false);
             setIsGuest(false);
@@ -152,13 +156,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoginModalOpen(true);
     };
 
-    const closeLoginModal = () => {
+    const closeLoginModal = (token?: string) => {
         // If forced, cannot close unless we are authenticated or guest
         // Ideally the Modal component handles the "X" button logic based on force.
         // Here we just set state.
         setIsLoginModalOpen(false);
-        // If we just logged in, we should re-check auth
-        checkAuth();
+        // If we just logged in, we should re-check auth using the fresh token immediately
+        checkAuth(token);
     };
 
     const logout = () => {
