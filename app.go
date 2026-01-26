@@ -456,6 +456,10 @@ func (a *App) onBeforeClose(ctx context.Context) (prevent bool) {
 
 	// Minimize to tray if option enabled
 	if a.minimizeOnClose {
+		// Signal Frontend to Suspend (Dump textures/DOM)
+		runtime.EventsEmit(ctx, "window:suspend")
+		// Short delay to allow React to unmount? Not strictly necessary if hide is weird, but good practice.
+		// Actually, WindowHide is instant. The event will fire.
 		runtime.WindowHide(ctx)
 		if !a.trayRunning {
 			a.trayRunning = true
@@ -496,6 +500,7 @@ func (a *App) onSecondInstanceLaunch(secondInstanceData options.SecondInstanceDa
 	if runtime.WindowIsMinimised(a.ctx) {
 		runtime.WindowUnminimise(a.ctx)
 	}
+	runtime.EventsEmit(a.ctx, "window:restore")
 	runtime.WindowSetAlwaysOnTop(a.ctx, true)
 	runtime.WindowSetAlwaysOnTop(a.ctx, false)
 }
@@ -511,6 +516,7 @@ func (a *App) onTrayReady() {
 		if runtime.WindowIsMinimised(a.ctx) {
 			runtime.WindowUnminimise(a.ctx)
 		}
+		runtime.EventsEmit(a.ctx, "window:restore")
 		systray.Quit()
 	})
 
@@ -520,6 +526,7 @@ func (a *App) onTrayReady() {
 		if runtime.WindowIsMinimised(a.ctx) {
 			runtime.WindowUnminimise(a.ctx)
 		}
+		runtime.EventsEmit(a.ctx, "window:restore")
 		systray.Quit() // Stop the tray loop and remove icon
 	})
 

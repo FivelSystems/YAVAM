@@ -77,6 +77,13 @@ We follow the **Domain Grouping** pattern. Do not add everything to one file.
 2.  **Web Needs APIs:** Desktop calls Go directly. Web **MUST** fetch from `/api/*` endpoints.
 3.  **Auth First:** Web requests typically require an `Authorization` header (JWT). Ensure data fetching hooks handle 401/403 errors by redirecting to Login.
 
+### Suspend Mode (Tray Optimization)
+When the Desktop App is minimized to the System Tray, it enters "Suspend Mode" to save resources (RAM/VRAM) while keeping the web server active.
+*   **Mechanism:** Backend emits `window:suspend`. Frontend unmounts the Dashboard.
+*   **Effect:** WebView2 drops from ~600MB to <100MB.
+*   **Restoration:** Backend emits `window:restore`. Frontend remounts explicitly using `useSuspendMode`.
+*   **Web Isolation:** Remote web clients are unaffected by this local state change.
+
 ## 5. Component Architecture
 
 ### The "Layout Shell" Pattern
@@ -122,6 +129,7 @@ This ensures that "Duplicate", "Obsolete", and "Root" statuses are visualized co
 - `DUPLICATE`: Exact copy of another package (Priority: High).
 - `OBSOLETE`: Older version of a package (Priority: High).
 - `CORRUPT`: Broken ZIP file (Priority: Critical).
+- `DISABLED`: Valid but disabled by user.
 
 ## 7. Performance Constraints
 ### Animation Strategy (Framer Motion)

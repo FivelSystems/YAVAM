@@ -4,8 +4,11 @@ import LoginModal from './features/auth/LoginModal';
 import { AuthProvider, useAuth } from './features/auth/AuthContext';
 import { Loader2 } from 'lucide-react';
 
+import { useSuspendMode } from './hooks/useSuspendMode';
+
 function AppContent() {
     const { isLoginModalOpen, closeLoginModal, isLoginForced, isLoading, isAuthenticated, isGuest, loginMessage } = useAuth();
+    const isSuspended = useSuspendMode();
 
     // While checking auth, show a simple loader
     if (isLoading) {
@@ -14,6 +17,11 @@ function AppContent() {
                 <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
             </div>
         );
+    }
+
+    // Suspend Mode: Unmount everything
+    if (isSuspended) {
+        return <div className="h-screen w-screen bg-[#0b111a]" />;
     }
 
     return (

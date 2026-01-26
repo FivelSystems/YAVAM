@@ -26,6 +26,7 @@
     - Removed expensive "Layout" animations (Framer Motion) that caused reflows on every filter change.
     - Optimized `State Duplication` in thumbnail handling to reduce Garbage Collection pressure.
     - Page transitions are now faster and consume less RAM (No double-buffering of pages).
+    - **Suspend Mode**: Implemented intelligent resource management. When minimizing to the System Tray, the application unmounts the UI layer, releasing ~500MB+ of RAM/VRAM while keeping the backend active. Restoring the window instantly recovers the state.
 
 ## [1.3.10] - 2026-01-20
 
