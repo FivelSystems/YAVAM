@@ -139,7 +139,10 @@ export const SystemModals: React.FC<SystemModalsProps> = ({
                 isOpen={whatsNew.open}
                 onClose={() => {
                     setWhatsNew({ ...whatsNew, open: false });
-                    localStorage.setItem('last_seen_version', whatsNew.version);
+                    if (window.go) {
+                        // @ts-ignore
+                        window.go.main.App.SetLastSeenVersion(whatsNew.version);
+                    }
                 }}
                 content={whatsNew.content}
                 version={whatsNew.version}

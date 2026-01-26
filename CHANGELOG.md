@@ -6,9 +6,10 @@
 
 # Changelog
 
-## [1.3.11] - 2026-01-22
+## [1.3.12] - 2026-01-26
 
 ### Fixed
+-   **CRITICAL:** Fixed "What's New" modal not appearing after updates. The application now correctly persists the `LastSeenVersion` to `config.json` instead of volatile local storage, ensuring the changelog is shown exactly once per version update.
 -   **CRITICAL:** Fixed Infinite Login Loop caused by recursive `logout` triggers.
 -   **CRITICAL:** Fixed Login Race Condition using explicit token passing.
 -   **CRITICAL:** Fixed "Ghost Fix" log spam in public access checks.
