@@ -181,3 +181,34 @@ func TestCheckCollisions(t *testing.T) {
 		t.Errorf("Expected collision 'chk.var', got %s", cols[0])
 	}
 }
+
+func TestInstall_Disabled(t *testing.T) {
+	mockSys := &MockSystemService{}
+	lib := NewLibraryService(mockSys, nil)
+
+	srcDir := t.TempDir()
+	destDir := t.TempDir()
+
+	// Create dummy .var.disabled file
+	srcFile := filepath.Join(srcDir, "test.var.disabled")
+	if err := os.WriteFile(srcFile, []byte("disabled content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	files := []string{srcFile}
+
+	// Test Install
+	installed, err := lib.Install(files, destDir, false, nil)
+	if err != nil {
+		t.Fatalf("Install failed: %v", err)
+	}
+
+	if len(installed) != 1 {
+		t.Errorf("Expected 1 installed file, got %d", len(installed))
+	}
+
+	destFile := filepath.Join(destDir, "test.var.disabled")
+	if _, err := os.Stat(destFile); os.IsNotExist(err) {
+		t.Errorf("Destination file not created: %s", destFile)
+	}
+}

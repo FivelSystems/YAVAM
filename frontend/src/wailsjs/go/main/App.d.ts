@@ -44,6 +44,8 @@ export function GetConfiguredLibraries():Promise<Array<string>>;
 
 export function GetDiskSpace(arg1:string):Promise<manager.DiskSpaceInfo>;
 
+export function GetFileDetails(arg1:Array<string>):Promise<Array<models.FileDetail>>;
+
 export function GetFilters(arg1:string):Promise<Array<string>>;
 
 export function GetLibraryCounts(arg1:Array<string>):Promise<Record<string, number>>;
@@ -67,6 +69,8 @@ export function IsConfigured():Promise<boolean>;
 export function IsServerRunning():Promise<boolean>;
 
 export function ListSessions():Promise<Array<auth.User>>;
+
+export function Log(arg1:string,arg2:string):Promise<void>;
 
 export function Login(arg1:string,arg2:string):Promise<string>;
 

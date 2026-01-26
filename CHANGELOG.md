@@ -6,6 +6,72 @@
 
 # Changelog
 
+## [1.3.11] - 2026-01-22
+
+### Fixed
+-   **CRITICAL:** Fixed Infinite Login Loop caused by recursive `logout` triggers.
+-   **CRITICAL:** Fixed Login Race Condition using explicit token passing.
+-   **CRITICAL:** Fixed "Ghost Fix" log spam in public access checks.
+-   **CRITICAL:** Fixed "Contents" tab failing to load on Web Clients due to missing Authorization header (`401 Unauthorized`).
+
+-   **Robustness:** Implemented In-Memory Token Caching to eliminate I/O race conditions for all API calls immediately after login.
+-   **System Tray**: Fixed "Run in Background" toggle not persisting or affecting the application's close behavior. It now correctly synchronizes user preference with the backend.
+-   **Thumbnails**: Refactored thumbnail detection to use the "Sibling File" rule (Suggested by gicstin/VPM), ensuring robust detection across all folder structures (#25).
+    -   Implemented **Category-Weighted Sibling Rule** (Scenes > Looks > Clothing > Assets).
+    -   Added **Alphabetical Tie-Breaker**: When priorities are equal, the first file alphabetically wins (Visual Consistency).
+    -   Added **Texture Filter**: Explicitly ignores images in `/textures/` or `/assets/` unless they have a direct content sibling.
+- **Library UX**: Fixed a race condition in the "Right Sidebar" where rapidly selecting packages would display the contents of a previously clicked package (stale data). The sidebar now reliably shows the currently selected package's content.
+- **Web Client**: Updated fallback version display to v1.3.11.
+- **Performance**: Optimized `CardGrid` and `PackageCard` to reduce memory usage by 50% and eliminate UI stutter.
+    - Removed expensive "Layout" animations (Framer Motion) that caused reflows on every filter change.
+    - Optimized `State Duplication` in thumbnail handling to reduce Garbage Collection pressure.
+    - Page transitions are now faster and consume less RAM (No double-buffering of pages).
+    - **Suspend Mode**: Implemented intelligent resource management. When minimizing to the System Tray, the application unmounts the UI layer, releasing ~500MB+ of RAM/VRAM while keeping the backend active. Restoring the window instantly recovers the state.
+
+## [1.3.10] - 2026-01-20
+
+### Added
+- **Sidebar**: Added a search/filter button to the "Creators" section header. It expands into an input field to quickly find specific creators and collapses when focus is lost.
+- **UX**: Added "Random Package" keybind (Default: `R`). Selects a random package from the current filtered view and opens the Details Panel. (Does not auto-scroll for performance).
+- **UX**: Added Friendly Error Banner for library access failures (e.g. "Access Denied" or missing folders).
+- **UX**: Added visual indentation and hierarchy indicators to the Dependency List in the Right Sidebar to clearly distinguish direct vs. nested dependencies.
+- **UX**: Decoupled "Locate Package" from strict file path matching. It now intelligently falls back to Package ID (`Creator.Name.Version`) lookup, enabling seamless navigation to the same package across different libraries.
+- **Dependency Management**: Implemented **Recursive Installer**. The Install Modal now intelligently resolves and lists all missing dependencies, allowing one-click installation of complex packages.
+- **Dependency Management**: Added **Cascade Delete** support. When deleting a package, the system now analyzes and offers to purge orphaned dependencies that are no longer used by any other package.
+- **Dependency Management**: Added **Reverse Dependency Lookup** ("Used By"). You can now inspect a package to see exactly which Scenes or Presets depend on it.
+- **Dependency Management**: Implemented **Fuzzy Package Lookup**. The system can now locate packages even if the version number varies slightly (e.g. mapping `v1` to `v1.0`), significantly improving "Missing" status accuracy.
+
+### Changed
+- **Status Colors**: Changed "Root" package status color from Blue (System) to Indigo to clarify distinction from system files.
+- **Status Priority**: Prioritized status checks to ensure disabled packages are explicitly marked `DISABLED` (Gray) rather than `OBSOLETE` (Yellow) or `DUPLICATE` (Purple).
+- **Duplicate Logic**: Distinguish "Older Version" (Yellow/Obsolete) from "Redundant Copy" (Purple/Duplicate) to reduce false positives.
+
+### Fixed
+#### UX & Interface
+- **Library Navigation**: "View Library" button in Install Modal now correctly triggers a library switch and re-scan.
+- **Navigation**: Fixed "Locate Package" requiring double-clicks when switching pages. It now correctly auto-scrolls to the target immediately after the page transition.
+- **Filters**: Clicking the active "Creator" filter pill in the Details Panel now toggles the filter off (Reset).
+- **Selection**: Fixed `CTRL+A` (Select All) not visually highlighting "Corrupt" packages.
+- **Animation**: Fixed "Locate Package" animation to restart reliably on rapid clicks (spam-proofing) and handle interruptions correctly.
+- **UX**: Improved Install Feedback. Upload and Install modals now show a summary screen (Installed/Skipped/Failed) instead of closing immediately.
+- **UX**: Upload Modal now automatically refreshes the library view upon successful completion.
+- **UX**: Suppressed intrusive "Located Package" status (Success/Info) toasts when clicking dependencies. Toasts now only appear if the target package cannot be found (Error).
+- **UX**: Implemented a "Title Glow" animation in the Right Sidebar when the selected package is off-screen.
+
+#### Core Logic & Status
+- **Web Client**: Fixed "Unauthorized" error when engaging in package actions (Toggle/Delete) by ensuring the authorization token is correctly attached to API requests.
+- **Web Client**: Fixed "Storage Unavailable" error in Upload Modal by protecting disk space & collision checks with authentication.
+- **Web Client**: Fixed missing file size display in Upload Modal for empty or special files.
+- **Desktop Client**: Fixed "0 B" file size display in Upload Queue by implementing a backend bridge to retrieve file metadata for dragged files.
+- **Security**: Hardened Desktop file system bindings to enforce strict path validation, matching Web Client security rules.
+- **Web Client**: Fixed "Infinite Scanning" spinner on mobile/web clients by ensuring the server broadcasts the `scan:complete` event upon finish.
+- **Dependencies**: Fixed "Incomplete" dependency list in the Details Panel by unifying recursive logic with the Install Modal.
+- **Dependencies**: Fixed "False Missing" status by automatically masking internal warnings (Mismatch/Root) as Valid (Green) if the package exists.
+- **Dependencies**: Fixed discrepancy where valid dependencies appeared as "Missing" due to dot-notation or implicit `.latest` references.
+- **Duplicate Logic**: Resolved duplicate detection on Windows by enforcing strict lower-case path normalization.
+- **Selection**: Fixed "Grid Selection Mismatch" / Jitter. Enforced deterministic sorting (tie-breaking by filePath) to prevent packages from changing positions during re-renders, ensuring clicks always land on the correct item.
+- **Keybinds**: Fixed `DELETE` keybind. It now correctly triggers the delete action (with multi-selection support) instead of being blocked by the details panel logic.
+
 ## [1.3.2] - 2026-01-15
 
 ### Added
@@ -30,6 +96,7 @@
     - Added `Shift+Left/Right` to switch pages instantly.
 - **Testing**: Added Frontend Unit Testing infrastructure (`vitest` + `react-testing-library`).
 - **Dev**: Added `npm test` script.
+- **Testing**: Added unit tests for dependency analysis (`packageDependencyAnalysis.test.ts`) to ensure accurate version resolution.
 
 ### Changed
 - **Privacy**: 'V' hotkey now directly toggles "Blur Thumbnails" setting instead of a temporary view state.
@@ -89,22 +156,25 @@
 - **Login Redirect**: Fixed issue where successful login via modal would not redirect to the dashboard.
 - **Modal Layout**: Fixed modal title crowding by moving titles to top-left and increasing spacing from the close button.
 - **Factory Reset**: Fixed "Reset Database" confirmation not appearing (implemented generic confirmation handler).
-- **Z-Index**: Fixed confirmation modals appearing behind the settings menu (upcoming fix).
+- **Z-Index**: Fixed confirmation modals appearing behind the settings menu.
 - **Linting**: Resolved unused variable warnings in Settings and Dashboard components.
 - **Open App Data**: Fixed the button logic to explicitly enter the directory instead of just selecting it in the parent folder.
 - **Merge**: Fixed duplicates not being moved to library root on Web Clients.
 - **Upload**: Fixed file list persisting in Upload Modal when reopened.
 - **Restore**: Fixed application crash when restoring backup settings.
+- **Start-up**: Fixed "What's New" modal not appearing after an update by implementing reliable version tracking in local storage.
+- **Self-Update**: Fixed critical race condition where the application would fail to restart after an update (Old process blocking new process).
 - **Scanning**: Fixed a race condition where packages from a previous library scan could infiltrate the current view.
+
 
 ### Security
 - **Hardening**: Added Ed25519 Digital Signatures (SHA256) to Auto-Updater.
+- **Process Safety**: Reverted unsafe `cmd /c` process spawning on Windows, replacing it with `SysProcAttr` for secure and reliable process detachment.
 - **DoS Protection**: Patched a potential Zip Bomb vulnerability in the package parser by enforcing strict read limits (Memory Safety).
 - **Authentication**: Passwords are never transmitted over the network (Challenge-Response).
 - **Protection**: Added sliding-window rate limiting (5 attempts/min) to login endpoints.
 - **Critical**: Removed dependencies on `powershell.exe` and `cmd.exe` to prevent Command Injection.
 - **Critical**: Strict `PathValidator` and binding internal server to `127.0.0.1` to prevent Local Network exploits.
-- **Hardening**: Added Ed25519 Digital Signatures (SHA256) to Auto-Updater.
 
 ## [v1.2.17] - 2026-01-12
 

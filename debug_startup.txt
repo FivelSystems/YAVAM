@@ -1,0 +1,1 @@
+Attempting to create log at: C:\Users\ganndev\AppData\Roaming\YAVAM\application.log

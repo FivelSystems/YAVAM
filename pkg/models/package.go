@@ -51,3 +51,10 @@ type ResolveConflictResult struct {
 	Disabled int    `json:"disabled"`
 	NewPath  string `json:"newPath"`
 }
+
+// FileDetail represents basic file information for UI display
+type FileDetail struct {
+	Name string `json:"name"`
+	Size int64  `json:"size"`
+	Path string `json:"path"`
+}

@@ -1,9 +1,10 @@
 import { useState, useMemo, useEffect } from 'react';
-import { X, Download, Library, CheckCircle, Loader2, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Download, Library, CheckCircle, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { InstallResultView } from './InstallResultView';
 import { clsx } from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { VarPackage } from '../../types';
-import { resolveDependency } from '../../utils/dependency';
+import { resolveRecursive } from '../../utils/dependency';
 
 interface InstallPackageModalProps {
     isOpen: boolean;
@@ -12,7 +13,7 @@ interface InstallPackageModalProps {
     allPackages: VarPackage[];
     libraries: string[];
     currentLibrary: string; // To visually distinguishing or filtering
-    onSuccess: (result: { installed: number, skipped: number, targetLib: string }) => void;
+    onSuccess: (result: { installed: number, skipped: number, targetLib: string, switchTo?: boolean }) => void;
 }
 
 const formatBytes = (bytes: number) => {
@@ -63,30 +64,9 @@ export const InstallPackageModal = ({ isOpen, onClose, packages, allPackages, li
             });
         }
 
-        // Recursive Resolution
-        // BFS
-        const seenFiles = new Set<string>();
-        const result: VarPackage[] = [];
-        const queue = [...packages];
-
-        while (queue.length > 0) {
-            const current = queue.shift()!;
-
-            if (seenFiles.has(current.fileName)) continue;
-            seenFiles.add(current.fileName);
-            result.push(current);
-
-            if (current.meta && current.meta.dependencies) {
-                for (const depId of Object.keys(current.meta.dependencies)) {
-                    const res = resolveDependency(depId, allPackages);
-                    if (res.pkg) {
-                        queue.push(res.pkg);
-                    }
-                }
-            }
-        }
-
-        return result;
+        // Recursive Resolution via Shared Utility
+        // Map back to just packages for the installer
+        return resolveRecursive(packages, allPackages).map(node => node.pkg);
     }, [packages, includeDeps, allPackages, isOpen]);
 
 
@@ -248,53 +228,21 @@ export const InstallPackageModal = ({ isOpen, onClose, packages, allPackages, li
                     {/* Content */}
                     <div className="p-6 flex-1 flex flex-col min-h-0">
                         {installResult ? (
-                            <div className="flex flex-col items-center space-y-6 text-center overflow-y-auto custom-scrollbar pr-2">
-                                {/* Result Summary (Same as before) */}
-                                <div className="w-16 h-16 bg-blue-500/20 text-blue-400 rounded-full flex items-center justify-center mb-2">
-                                    <CheckCircle size={32} />
-                                </div>
-                                <div>
-                                    <h3 className="text-xl font-bold text-white">Installation Complete</h3>
-                                    <p className="text-gray-400 mt-1">
-                                        Processed {resolvedPackages.length} packages
-                                    </p>
-                                </div>
-
-                                <div className="grid grid-cols-3 gap-3 w-full">
-                                    <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3">
-                                        <div className="text-2xl font-bold text-green-400">{installResult.installed}</div>
-                                        <div className="text-xs text-green-300/70 uppercase tracking-wider font-medium">Installed</div>
-                                    </div>
-                                    <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3">
-                                        <div className="text-2xl font-bold text-yellow-400">{completedSkips.length}</div>
-                                        <div className="text-xs text-yellow-300/70 uppercase tracking-wider font-medium">Skipped</div>
-                                    </div>
-                                    <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
-                                        <div className="text-2xl font-bold text-red-400">{completedErrors.length}</div>
-                                        <div className="text-xs text-red-300/70 uppercase tracking-wider font-medium">Errors</div>
-                                    </div>
-                                </div>
-
-                                {(completedSkips.length > 0 || completedErrors.length > 0) && (
-                                    <div className="w-full text-left space-y-2 mt-4">
-                                        <p className="text-sm font-medium text-gray-300">Details:</p>
-                                        <div className="max-h-40 overflow-y-auto bg-gray-900/50 rounded-lg p-3 border border-gray-700 text-sm space-y-1">
-                                            {completedErrors.map(name => (
-                                                <div key={name} className="flex items-center gap-2 text-red-400">
-                                                    <AlertTriangle size={12} />
-                                                    <span>{name} (Error)</span>
-                                                </div>
-                                            ))}
-                                            {completedSkips.map(name => (
-                                                <div key={name} className="flex items-center gap-2 text-yellow-400">
-                                                    <AlertTriangle size={12} />
-                                                    <span>{name} (Skipped - Exists)</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
+                            <InstallResultView
+                                installed={installResult.installed}
+                                skipped={installResult.skipped}
+                                errors={completedErrors}
+                                skippedDetails={completedSkips}
+                                total={resolvedPackages.length}
+                                onViewLibrary={() => {
+                                    onSuccess({ installed: installResult.installed, skipped: installResult.skipped, targetLib: selectedLib!, switchTo: true });
+                                    onClose();
+                                }}
+                                onClose={() => {
+                                    onSuccess({ installed: installResult.installed, skipped: installResult.skipped, targetLib: selectedLib!, switchTo: false });
+                                    onClose();
+                                }}
+                            />
                         ) : loading ? (
                             <div className="flex flex-col h-full justify-center items-center py-4 space-y-6">
                                 {/* Percentage Display - Compact */}
@@ -498,34 +446,22 @@ export const InstallPackageModal = ({ isOpen, onClose, packages, allPackages, li
                         )}
                     </div>
 
-                    {/* Footer - HIDE when loading/installing */}
-                    {!loading && (
+                    {/* Footer - HIDE when loading/installing OR when showing result */}
+                    {!loading && !installResult && (
                         <div className="p-4 border-t border-gray-700 bg-gray-900/50 flex gap-3">
-                            {installResult ? (
-                                <button
-                                    onClick={() => {
-                                        onSuccess({ installed: installResult.installed, skipped: installResult.skipped, targetLib: selectedLib! });
-                                        onClose();
-                                    }}
-                                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-colors shadow-blue-900/20"
-                                >
-                                    Done
-                                </button>
-                            ) : (
-                                <button
-                                    onClick={handleInstall}
-                                    disabled={!selectedLib || loading || hasInsufficientSpace}
-                                    className={clsx(
-                                        "w-full py-2.5 rounded-lg font-medium transition-all shadow-lg flex items-center justify-center gap-2",
-                                        !selectedLib || loading || hasInsufficientSpace
-                                            ? "bg-gray-700 text-gray-500 cursor-not-allowed"
-                                            : "bg-blue-600 hover:bg-blue-500 text-white shadow-blue-900/20"
-                                    )}
-                                >
-                                    {loading ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
-                                    {loading ? "Installing..." : "Install Packages"}
-                                </button>
-                            )}
+                            <button
+                                onClick={handleInstall}
+                                disabled={!selectedLib || loading || hasInsufficientSpace}
+                                className={clsx(
+                                    "w-full py-2.5 rounded-lg font-medium transition-all shadow-lg flex items-center justify-center gap-2",
+                                    !selectedLib || loading || hasInsufficientSpace
+                                        ? "bg-gray-700 text-gray-500 cursor-not-allowed"
+                                        : "bg-blue-600 hover:bg-blue-500 text-white shadow-blue-900/20"
+                                )}
+                            >
+                                {loading ? <Loader2 size={18} className="animate-spin" /> : <Download size={18} />}
+                                {loading ? "Installing..." : "Install Packages"}
+                            </button>
                         </div>
                     )}
                 </motion.div>

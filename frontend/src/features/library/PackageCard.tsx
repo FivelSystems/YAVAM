@@ -15,13 +15,19 @@ interface PackageCardProps {
     blurAmount?: number;
     hidePackageNames?: boolean;
     hideCreatorNames?: boolean;
+    isHighlighted?: boolean;
+    startAnimationTs?: number; // Timestamp to force animation restart (used as key)
 }
 
-const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, viewMode = 'grid', censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false }: PackageCardProps) => {
+const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, viewMode = 'grid', censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false, isHighlighted = false, startAnimationTs }: PackageCardProps) => {
     const cardRef = useRef<HTMLDivElement>(null);
-    const [thumbSrc, setThumbSrc] = useState<string | undefined>(
-        pkg.thumbnailBase64 ? `data:image/jpeg;base64,${pkg.thumbnailBase64}` : undefined
-    );
+
+    // optimize: Do not store base64 in state if it comes from props (prevents duplication)
+    const [asyncThumb, setAsyncThumb] = useState<string | undefined>(undefined);
+    const thumbSrc = pkg.thumbnailBase64
+        ? `data:image/jpeg;base64,${pkg.thumbnailBase64}`
+        : asyncThumb;
+
     const [isVisible, setIsVisible] = useState(false);
 
     // Scroll Into View when Anchor
@@ -37,23 +43,13 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
         onSelect(pkg, e);
     };
 
-    // Ensure state syncs if pkg data updates (e.g. from backend scan completion)
-    useEffect(() => {
-        if (pkg.thumbnailBase64) {
-            setThumbSrc(`data:image/jpeg;base64,${pkg.thumbnailBase64}`);
-        } else if (!pkg.hasThumbnail) {
-            setThumbSrc(undefined);
-        }
-    }, [pkg.thumbnailBase64, pkg.hasThumbnail]);
-
     // Lazy Loading Logic
     useEffect(() => {
-        // @ts-ignore
         if (!window.go) {
             // Web Mode: Use API URL directly
             if (pkg.hasThumbnail && !pkg.thumbnailBase64) {
                 const token = localStorage.getItem('yavam_auth_token');
-                setThumbSrc(`/api/thumbnail?filePath=${encodeURIComponent(pkg.filePath)}&token=${token || ''}`);
+                setAsyncThumb(`/api/thumbnail?filePath=${encodeURIComponent(pkg.filePath)}&token=${token || ''}`);
             }
             return;
         }
@@ -75,12 +71,10 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
 
     useEffect(() => {
         // Fetch for Desktop when visible
-        // @ts-ignore
         if (window.go && isVisible && pkg.hasThumbnail && !thumbSrc) {
-            // @ts-ignore
             window.go.main.App.GetPackageThumbnail(pkg.filePath)
                 .then((b64: string) => {
-                    if (b64) setThumbSrc(`data:image/jpeg;base64,${b64}`);
+                    if (b64) setAsyncThumb(`data:image/jpeg;base64,${b64}`);
                 })
                 .catch((e: any) => console.error("Thumb load failed:", e));
         }
@@ -91,32 +85,57 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
     let statusClass = "border-gray-700 opacity-60 grayscale";
     let statusIcon = <Power size={14} className="text-gray-400" />;
 
+    // 1. Resolve Icon (Intrinsic State)
+    if (pkg.isCorrupt) {
+        statusIcon = <AlertTriangle size={14} className="text-red-500" />;
+    } else if (pkg.isEnabled) {
+        if (pkg.isExactDuplicate) {
+            statusIcon = <Copy size={16} className="text-purple-500" />;
+        } else if (pkg.isDuplicate) {
+            statusIcon = <AlertTriangle size={16} className="text-yellow-500" />;
+        } else if (pkg.missingDeps && pkg.missingDeps.length > 0) {
+            statusIcon = <AlertCircle size={16} className="text-red-500" />;
+        } else {
+            statusIcon = <Check size={16} className="text-green-500" />;
+        }
+    }
+
+    // 2. Resolve Styling (Interaction State > Intrinsic State)
     if (isAnchor) {
         statusClass = "border-white ring-2 ring-white/50 shadow-2xl z-20 grayscale-0 " + (viewMode === 'grid' ? "scale-[1.05]" : "");
+    } else if (isSelected) {
+        // Selection overrides Corrupt/Duplicate colors for the border/ring, 
+        // ensuring the user knows it is selected.
+        statusClass = "border-blue-500 ring-2 ring-blue-500/50 shadow-xl z-10 grayscale-0 " + (viewMode === 'grid' ? "scale-[1.02]" : "");
     } else {
-        if (isSelected) {
-            statusClass = "border-blue-500 ring-2 ring-blue-500/50 shadow-xl z-10 grayscale-0 " + (viewMode === 'grid' ? "scale-[1.02]" : "");
+        // Not Selected/Anchor -> Show specific status colors
+        if (pkg.isCorrupt) {
+            statusClass = "border-red-600 ring-1 ring-red-600/50 shadow-[0_0_15px_rgba(220,38,38,0.4)] z-10 grayscale-0";
         } else if (pkg.isEnabled) {
             statusClass = "border-gray-600 grayscale-0";
-            if (pkg.missingDeps && pkg.missingDeps.length > 0) {
-                statusClass = "border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]";
-                statusIcon = <AlertCircle size={16} className="text-red-500" />;
-            } else if (pkg.isExactDuplicate) {
+            if (pkg.isExactDuplicate) {
                 statusClass = "border-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.3)]";
-                statusIcon = <Copy size={16} className="text-purple-500" />;
             } else if (pkg.isDuplicate) {
                 statusClass = "border-yellow-500 shadow-[0_0_10px_rgba(234,179,8,0.3)]";
-                statusIcon = <AlertTriangle size={16} className="text-yellow-500" />;
+            } else if (pkg.missingDeps && pkg.missingDeps.length > 0) {
+                statusClass = "border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]";
             } else {
                 statusClass = "border-green-500/50 hover:border-green-400";
-                statusIcon = <Check size={16} className="text-green-500" />;
             }
         }
+    }
+
+    // Override with Highlight
+    if (isHighlighted) {
+        // Keep grayscale-0 but set border to base pink (animation modulated alpha)
+        statusClass = "border-pink-500 animate-neon-flash shadow-xl z-20 grayscale-0 scale-[1.05]";
     }
 
     if (viewMode === 'list') {
         return (
             <div
+                key={startAnimationTs} // Force re-render on new highlight request to restart animation
+                id={`package-${pkg.filePath}`}
                 ref={cardRef}
                 onClick={handleClick}
                 onContextMenu={(e) => onContextMenu(e, pkg)}
@@ -175,7 +194,9 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
     // Default Grid View
     return (
         <motion.div
-            layout
+            key={startAnimationTs} // Force re-render on new highlight request to restart animation
+            // Removed layout prop for performance
+            id={`package-${pkg.filePath}`}
             ref={cardRef}
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -241,10 +262,16 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
                     <div className="text-[10px] text-gray-400 mt-2 border-t border-gray-700/50 pt-2 flex justify-between">
                         <span>{(pkg.size / 1024 / 1024).toFixed(1)} MB</span>
                         {pkg.isEnabled && pkg.missingDeps && pkg.missingDeps.length > 0 && <span className="text-red-400 font-bold">{pkg.missingDeps.length} Missing</span>}
-                        {pkg.isEnabled && pkg.isExactDuplicate && <span className="text-purple-400 font-bold">Duplicate</span>}
-                        {pkg.isEnabled && !pkg.isExactDuplicate && pkg.isDuplicate && <span className="text-yellow-400 font-bold">Obsolete</span>}
+                        {pkg.isEnabled && pkg.isExactDuplicate && <span className="text-purple-400 font-bold truncate" title={pkg.obsoletedBy || "Duplicate"}>Duplicate</span>}
+                        {pkg.isEnabled && !pkg.isExactDuplicate && pkg.isDuplicate && <span className="text-yellow-400 font-bold truncate" title={pkg.obsoletedBy || "Obsolete"}>Obsolete</span>}
                         {!pkg.isEnabled && <span>Disabled</span>}
                     </div>
+                    {/* Explicit Reason Line */}
+                    {(pkg.obsoletedBy) && (
+                        <div className="text-[9px] text-yellow-500/80 px-1 pb-1 truncate border-t border-gray-700/30 mt-1 select-text cursor-text" title={pkg.obsoletedBy}>
+                            {pkg.obsoletedBy}
+                        </div>
+                    )}
                 </div>
             </div>
         </motion.div>

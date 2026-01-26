@@ -104,6 +104,34 @@ func (m *Manager) checkDependencies(pkgs []models.VarPackage) []models.VarPackag
 	return m.library.CheckDependencies(pkgs)
 }
 
+// ValidatePath checks if the given path is within any of the configured library roots
+// This is the global security check for file access
+func (m *Manager) ValidatePath(path string) error {
+	if path == "" {
+		return fmt.Errorf("path is empty")
+	}
+	cleanTarget := strings.ToLower(filepath.Clean(path))
+
+	libs := m.GetLibraries()
+	allowed := false
+	for _, lib := range libs {
+		cleanLib := strings.ToLower(filepath.Clean(lib))
+		if cleanTarget == cleanLib {
+			allowed = true
+			break
+		}
+		if strings.HasPrefix(cleanTarget, cleanLib+string(os.PathSeparator)) {
+			allowed = true
+			break
+		}
+	}
+
+	if !allowed {
+		return fmt.Errorf("access denied: path not in allowed libraries")
+	}
+	return nil
+}
+
 // validatePath ensures the path is within the allowed root
 func (m *Manager) validatePath(path string, root string) bool {
 	// Basic check: resolve absolute paths and ensure prefix matches
@@ -289,4 +317,8 @@ func (m *Manager) GetDiskSpace(path string) (DiskSpaceInfo, error) {
 // CheckCollisions delegates to LibraryService
 func (m *Manager) CheckCollisions(filePaths []string, destLibPath string) ([]string, error) {
 	return m.library.CheckCollisions(filePaths, destLibPath)
+}
+
+func (m *Manager) GetFileDetails(paths []string) ([]models.FileDetail, error) {
+	return m.system.GetFileDetails(paths)
 }

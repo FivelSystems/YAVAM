@@ -6,7 +6,7 @@ import { login, AuthError } from '../../services/auth';
 
 interface LoginModalProps {
     isOpen: boolean;
-    onClose: () => void;
+    onClose: (token?: string) => void;
     force?: boolean; // If true, cannot close
     message?: string;
 }
@@ -42,8 +42,8 @@ export default function LoginModal({ isOpen, onClose, force = false, message }: 
         setError(null);
 
         try {
-            await login(password);
-            onClose(); // Success!
+            const token = await login(password);
+            onClose(token); // Success! Pass token to avoid race condition
             navigate('/');
         } catch (err: any) {
             if (err instanceof AuthError) {
@@ -68,7 +68,7 @@ export default function LoginModal({ isOpen, onClose, force = false, message }: 
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        onClick={force ? undefined : onClose}
+                        onClick={force ? undefined : () => onClose()}
                         className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
                     >
                         {/* Modal */}
@@ -81,7 +81,7 @@ export default function LoginModal({ isOpen, onClose, force = false, message }: 
                         >
                             {!force && (
                                 <button
-                                    onClick={onClose}
+                                    onClick={() => onClose()}
                                     className="absolute top-4 right-4 p-2 text-gray-500 hover:text-white rounded-full hover:bg-white/10 transition-colors"
                                 >
                                     <X size={20} />

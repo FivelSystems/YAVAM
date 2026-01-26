@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -73,4 +74,35 @@ func TestThumbnailPriority(t *testing.T) {
 		"Custom/Preview.jpg": "meta_thumb",
 		"package.jpg":        "root_thumb",
 	}, "meta_thumb")
+
+	// Test 5: User Report Reproduction (Look vs Clothing Texture)
+	// LipRing (Clothing folder, .vab sibling) vs Yasmin (Appearance folder, .vap sibling)
+	runTest("User Look vs Clothing", map[string]string{
+		"meta.json": "{}",
+		"Custom/Clothing/Female/Jackaroo/LipRing/LipRing.png": "lipring_texture",
+		"Custom/Clothing/Female/Jackaroo/LipRing/LipRing.vab": "{}",
+		"Custom/Atom/Person/Appearance/Preset_Yasmin.jpg":     "yasmin_thumb",
+		"Custom/Atom/Person/Appearance/Preset_Yasmin.vap":     "{}",
+	}, "yasmin_thumb")
+	// Test 6: Alphabetical Tie-Breaker (Small A vs Large B)
+	// Both are Scenes (Priority 4). A is alphabetically first, but B is larger.
+	// Previous Logic: B wins (Size).
+	// New Logic: A wins (Alphabetical).
+	runTest("Alphabetical vs Size", map[string]string{
+		"meta.json":                "{}",
+		"Saves/scene/A_Scene.json": "{}",
+		"Saves/scene/A_Scene.jpg":  "a_thumb", // First alphabetically
+		"Saves/scene/B_Scene.json": "{}",
+		"Saves/scene/B_Scene.jpg":  strings.Repeat("b", 1000), // Larger file (1000 bytes vs ~7 bytes)
+	}, "a_thumb")
+
+	// Test 7: Case Sensitive Tie-Breaker (Z vs a)
+	// Go Sort: 'Z' (90) < 'a' (97). Comparison should be Case Sensitive.
+	runTest("Case Sensitive", map[string]string{
+		"meta.json":                "{}",
+		"Saves/scene/Z_Scene.json": "{}",
+		"Saves/scene/Z_Scene.jpg":  "z_thumb",
+		"Saves/scene/a_scene.json": "{}",
+		"Saves/scene/a_scene.jpg":  "a_thumb",
+	}, "z_thumb")
 }

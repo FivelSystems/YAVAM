@@ -6,12 +6,30 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"yavam/pkg/manager"
+	"yavam/pkg/services/config"
 )
 
 // Mock assets
 var mockAssets embed.FS
 
 // Note: MockAuthService is available from middleware_test.go (same package)
+
+// Mock Config Service for Server Tests (Unique Name)
+type TestServerConfigService struct {
+	libraries []string
+}
+
+func (m *TestServerConfigService) Load() (*config.Config, error) {
+	return &config.Config{Libraries: m.libraries}, nil
+}
+func (m *TestServerConfigService) Save(cfg *config.Config) error { return nil }
+func (m *TestServerConfigService) Get() *config.Config {
+	return &config.Config{Libraries: m.libraries}
+}
+func (m *TestServerConfigService) IsConfigured() bool                   { return true }
+func (m *TestServerConfigService) FinishSetup() error                   { return nil }
+func (m *TestServerConfigService) Update(fn func(*config.Config)) error { return nil }
 
 func TestStartServer(t *testing.T) {
 	// We can pass nil manager because Start() doesn't use it, only handlers do.
@@ -20,6 +38,7 @@ func TestStartServer(t *testing.T) {
 	// Mock Auth
 	mockAuth := &MockAuthService{validToken: "valid"}
 
+	// Note: We pass nil manager here as we don't call handlers
 	s := NewServer(context.Background(), nil, mockAuth, mockAssets, "1.0.0", func() {})
 	s.SkipEvents = true
 
@@ -70,9 +89,10 @@ func TestStartServer_EmptyPath(t *testing.T) {
 func TestAPI_EmptyPathSecurity(t *testing.T) {
 	mockAuth := &MockAuthService{validToken: "valid"}
 
-	// We pass nil manager. If the security check fails properly, manager won't be called.
-	// If it FAILS to block, it will panic on nil manager, which is also a test failure (sort of).
-	s := NewServer(context.Background(), nil, mockAuth, mockAssets, "1.0.0", func() {})
+	// Create Manager with Mock Config (Empty Libraries)
+	mgr := manager.NewManager(nil, nil, &TestServerConfigService{libraries: []string{}})
+
+	s := NewServer(context.Background(), mgr, mockAuth, mockAssets, "1.0.0", func() {})
 	s.SkipEvents = true
 
 	// Start with empty path
@@ -85,17 +105,6 @@ func TestAPI_EmptyPathSecurity(t *testing.T) {
 
 	w := httptest.NewRecorder()
 
-	// We need to serve via the mux created in Start?
-	// s.Start creates a new mux but doesn't expose it easily unless we assign it to s.httpSrv.Handler
-	// But Start() starts ListenAndServe in a goroutine?
-	// Wait, checking server.go implementation...
-	// Start() creates mux and assigns it to s.httpSrv.Handler.
-	// But it starts httpSrv.Serve in a goroutine?
-	// Actually for testing handlers, we prefer not to rely on network.
-	// But the handlers are defined INSIDE Start() closures.
-	// So we can't access them individually easily unless we access s.httpSrv.Handler.
-
-	// Assuming SafeToAutoRun logic executed Start completely before we reach here.
 	if s.httpSrv == nil || s.httpSrv.Handler == nil {
 		t.Fatal("Server handler not initialized")
 	}
@@ -114,18 +123,15 @@ func TestAPI_EmptyPathSecurity(t *testing.T) {
 
 func TestAPI_ExplicitPathSecurity(t *testing.T) {
 	mockAuth := &MockAuthService{validToken: "valid"}
-	s := NewServer(context.Background(), nil, mockAuth, mockAssets, "1.0.0", func() {})
+
+	// Create Manager with Mock Config (Allowed Library)
+	mgr := manager.NewManager(nil, nil, &TestServerConfigService{libraries: []string{"C:/Allowed"}})
+
+	s := NewServer(context.Background(), mgr, mockAuth, mockAssets, "1.0.0", func() {})
 	s.SkipEvents = true
 
-	// Start with empty path
+	// Start with allowed path
 	s.Start("0", []string{"C:/Allowed"})
-
-	// Request with explicit path parameter that IS allowed
-	// But we have nil manager, so if it passes security, it will crash.
-	// We just want to check it DOES NOT return 400 "No library path selected"
-	// It should return 500 (because manager is nil) or similar panic.
-	// To safely test this without panic, we'd need a mock manager.
-	// But for this specific "Invalid Path" bug, verifying the BLOCKING of empty path is most important.
 
 	// Let's test blocking of unsafe path
 	req := httptest.NewRequest("GET", "/api/packages?path=C:/Secrets", nil)

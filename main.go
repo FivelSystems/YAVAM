@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -24,6 +25,7 @@ func setupLogging() (*os.File, error) {
 
 	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
+		fmt.Printf("[ERROR] Failed to create log file: %v\n", err)
 		return nil, err
 	}
 
@@ -40,6 +42,7 @@ func main() {
 	if f != nil {
 		defer f.Close()
 	}
+	log.Printf("[Main] Process started. PID: %d\n", os.Getpid())
 
 	// User Config Dir
 	configDir, _ := os.UserConfigDir()

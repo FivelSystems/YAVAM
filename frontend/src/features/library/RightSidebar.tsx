@@ -1,40 +1,14 @@
 import { useState, useEffect } from 'react';
-import { X, Check, AlertCircle, Box, FileImage, User, Scissors, Copy } from 'lucide-react';
+import { X, Check, AlertCircle, AlertTriangle, Box, FileImage, User, Scissors, Copy, Power, Unlink, CornerDownRight } from 'lucide-react';
 import clsx from 'clsx';
 import { motion } from 'framer-motion';
-
-// Ideally, App exports it. 
-// If App.tsx exports it, we need to import it.
-// The previous code had "import { VarPackage } from '../types';" but linter complained.
-// Maybe circle dependency issue if App imports RightSidebar and RightSidebar imports App?
-// YES. Circular dependency.
-// Best practice: Move types to a separate file `src/types.ts`.
-// For now, I will use "any" or a simplified local interface to break the cycle quickly, 
-// OR simpler: just ignore the exported one and keep local one but rename it or don't import.
-// I will keep local but NOT import from App.
-
-interface VarPackage {
-    filePath: string;
-    fileName: string;
-    size: number;
-    meta: {
-        creator: string;
-        packageName: string;
-        version: string;
-        description?: string;
-        dependencies?: Record<string, any>;
-    };
-    thumbnailPath: string;
-    thumbnailBase64?: string;
-    isEnabled: boolean;
-    hasThumbnail: boolean;
-    missingDeps: string[];
-    isDuplicate: boolean;
-    isExactDuplicate: boolean;
-    type?: string;
-    tags?: string[];
-    isCorrupt?: boolean;
-}
+import { VarPackage } from '../../types';
+import { useThumbnail } from '../../hooks/useThumbnail';
+import { PACKAGE_STATUS } from '../../constants';
+import { usePackageContext } from '../../context/PackageContext';
+import { getPackageStatus, findBestPackageMatch, getBlurStyle } from './utils';
+import { resolveDependency, resolveRecursive } from '../../utils/dependency';
+import { fetchWithAuth } from '../../services/api';
 
 export interface PackageContent {
     filePath: string;
@@ -50,77 +24,62 @@ interface RightSidebarProps {
     onResolve: (pkg: VarPackage) => void;
     activeTab: 'details' | 'contents';
     onTabChange: (tab: 'details' | 'contents') => void;
-    onFilterByCreator: (creator: string) => void;
+    onFilterByCreator: (creator: string | null) => void;
     onDependencyClick: (depId: string) => void;
-    onTitleClick: () => void;
-    getDependencyStatus: (depId: string) => 'valid' | 'mismatch' | 'missing' | 'scanning' | 'system';
+    onTitleClick: (pkg: VarPackage) => void;
+    getDependencyStatus: (depId: string) => 'valid' | 'mismatch' | 'missing' | 'scanning' | 'system' | 'corrupt' | 'disabled';
     selectedCreator?: string | null;
+    censorThumbnails?: boolean;
+    blurAmount?: number;
+    isOffScreen?: boolean;
 }
 
-const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilterByCreator, onDependencyClick, onTitleClick, getDependencyStatus, selectedCreator }: RightSidebarProps) => {
+const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilterByCreator, onDependencyClick, onTitleClick, selectedCreator, censorThumbnails = false, blurAmount = 10, isOffScreen = false }: RightSidebarProps) => {
 
     const [contents, setContents] = useState<PackageContent[]>([]);
     const [loading, setLoading] = useState(false);
-    const [thumbSrc, setThumbSrc] = useState<string | undefined>(undefined);
+    const thumbSrc = useThumbnail(pkg);
+    const { packages } = usePackageContext();
 
     useEffect(() => {
-        if (pkg) {
-            fetchContents();
+        let isActive = true;
 
-            // Thumbnail Logic
-            if (pkg.thumbnailBase64) {
-                setThumbSrc(`data:image/jpeg;base64,${pkg.thumbnailBase64}`);
-            } else if (pkg.hasThumbnail) {
-                // Fetch
+        const fetchContents = async () => {
+            if (!pkg) {
+                if (isActive) setContents([]);
+                return;
+            }
+            if (isActive) setLoading(true);
+            try {
                 // @ts-ignore
                 if (window.go) {
                     // @ts-ignore
-                    window.go.main.App.GetPackageThumbnail(pkg.filePath)
-                        .then((b64: string) => {
-                            if (b64) setThumbSrc(`data:image/jpeg;base64,${b64}`);
-                        })
-                        .catch((e: any) => console.error(e));
+                    const res = await window.go.main.App.GetPackageContents(pkg.filePath);
+                    if (isActive) setContents(res || []);
                 } else {
-                    const token = localStorage.getItem('yavam_auth_token');
-                    setThumbSrc(`/api/thumbnail?filePath=${encodeURIComponent(pkg.filePath)}&token=${token || ''}`);
+                    // Web Mode Logic
+                    const res = await fetchWithAuth('/api/contents', {
+                        method: 'POST',
+                        body: JSON.stringify({ filePath: pkg.filePath })
+                    });
+                    if (!res.ok) throw new Error("Failed to fetch contents");
+                    const data = await res.json();
+                    if (isActive) setContents(data || []);
                 }
-            } else {
-                setThumbSrc(undefined);
+            } catch (e) {
+                console.error(e);
+                if (isActive) setContents([]);
+            } finally {
+                if (isActive) setLoading(false);
             }
+        };
 
-        } else {
-            setContents([]);
-            setThumbSrc(undefined);
-        }
+        fetchContents();
+
+        return () => {
+            isActive = false;
+        };
     }, [pkg]);
-
-    const fetchContents = async () => {
-        if (!pkg) return;
-        setLoading(true);
-        try {
-            // @ts-ignore
-            if (window.go) {
-                // @ts-ignore
-                const res = await window.go.main.App.GetPackageContents(pkg.filePath);
-                setContents(res || []);
-            } else {
-                // Web Mode Logic
-                const res = await fetch('/api/contents', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ filePath: pkg.filePath })
-                });
-                if (!res.ok) throw new Error("Failed to fetch contents");
-                const data = await res.json();
-                setContents(data || []);
-            }
-        } catch (e) {
-            console.error(e);
-            setContents([]);
-        } finally {
-            setLoading(false);
-        }
-    };
 
     if (!pkg) return null;
 
@@ -136,12 +95,21 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
             <div className="p-4 border-b border-gray-800 flex justify-between items-start bg-gray-900/50 backdrop-blur-sm sticky top-0 z-10">
                 <div
                     className="flex-1 mr-2 cursor-pointer group"
-                    onClick={onTitleClick}
-                    title="Click to locate in grid"
+                    onClick={() => onTitleClick(pkg)}
+                    title={isOffScreen ? "Package is on another page - Click to Locate" : "Locate in grid"}
                 >
-                    <h2 className="text-lg font-bold text-white truncate group-hover:text-blue-400 transition-colors">
+                    <motion.h2
+                        className={clsx(
+                            "text-lg font-bold truncate transition-colors",
+                            isOffScreen ? "text-blue-300" : "text-white group-hover:text-blue-400"
+                        )}
+                        animate={isOffScreen ? {
+                            textShadow: ["0 0 0px rgba(96, 165, 250, 0)", "0 0 15px rgba(96, 165, 250, 0.8)", "0 0 0px rgba(96, 165, 250, 0)"],
+                        } : { textShadow: "none" }}
+                        transition={isOffScreen ? { duration: 1.5, repeat: Infinity, repeatType: "reverse" } : {}}
+                    >
                         {pkg.meta.packageName || pkg.fileName}
-                    </h2>
+                    </motion.h2>
                 </div>
                 <button
                     onClick={onClose}
@@ -158,7 +126,11 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                         <img
                             src={thumbSrc}
                             alt={pkg.fileName}
-                            className="w-full h-full object-cover object-center transition-transform duration-700 group-hover:scale-105"
+                            className={clsx(
+                                "w-full h-full object-cover object-center transition-transform duration-700 group-hover:scale-105",
+                                censorThumbnails && "scale-110" // Scale up to hide blur edges
+                            )}
+                            style={getBlurStyle(censorThumbnails, blurAmount)}
                         />
                     ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center text-gray-700">
@@ -174,7 +146,11 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        onFilterByCreator(pkg.meta.creator);
+                                        if (selectedCreator === pkg.meta.creator) {
+                                            onFilterByCreator(null);
+                                        } else {
+                                            onFilterByCreator(pkg.meta.creator);
+                                        }
                                     }}
                                     className={clsx(
                                         "px-2 py-0.5 rounded-full text-xs font-medium border transition-colors cursor-pointer",
@@ -218,9 +194,9 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                                     {pkg.isExactDuplicate ? "Duplicate Detected" : "Obsolete Version"}
                                 </h4>
                                 <p className="text-xs text-gray-400 mb-2">
-                                    {pkg.isExactDuplicate
+                                    {pkg.obsoletedBy || (pkg.isExactDuplicate
                                         ? "The same package has been found somewhere else across the library."
-                                        : "A newer version of this package is available."}
+                                        : "A newer version of this package is available.")}
                                 </p>
                                 <button
                                     onClick={() => onResolve(pkg)}
@@ -288,50 +264,179 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                                 </h3>
 
                                 <div className="space-y-1">
-                                    {pkg.meta.dependencies && Object.keys(pkg.meta.dependencies).length > 0 ? (
-                                        Object.entries(pkg.meta.dependencies).map(([depId]) => {
-                                            const status = getDependencyStatus(depId);
+                                    {(() => {
+                                        // Calculate flattened dependencies (Found Transitive + Missing Direct)
+                                        const directDepsKeys = pkg.meta.dependencies ? Object.keys(pkg.meta.dependencies) : [];
 
-                                            // Status Logic
-                                            let bgClass = "bg-red-500/10 border-red-500/20 text-red-300 hover:bg-red-500/20"; // Missing/Default
+                                        // Get Nodes with Depth
+                                        const foundNodes = resolveRecursive([pkg], packages).filter(n => n.pkg.filePath !== pkg.filePath);
 
-                                            if (status === 'valid') {
-                                                bgClass = "bg-green-500/10 border-green-500/20 text-green-300 hover:bg-green-500/20";
-                                            } else if (status === 'mismatch') {
-                                                bgClass = "bg-yellow-500/10 border-yellow-500/20 text-yellow-300 hover:bg-yellow-500/20";
-                                            } else if (status === 'scanning') {
-                                                bgClass = "bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-750";
-                                            } else if (status === 'system') {
-                                                bgClass = "bg-blue-500/10 border-blue-500/20 text-blue-300 hover:bg-blue-500/20";
+                                        // Find Missing Direct Dependencies (since recursive only returns found ones)
+                                        const missingDirectIds = directDepsKeys.filter(key => {
+                                            const res = resolveDependency(key, packages);
+                                            return res.status === 'missing';
+                                        });
+
+                                        // Sort: Depth ascending (0, 1, 2) then Alphabetical
+                                        // This groups Direct deps first, then Subs.
+                                        const sortedNodes = [...foundNodes].sort((a, b) => {
+                                            if (a.depth !== b.depth) return a.depth - b.depth;
+                                            return a.pkg.fileName.localeCompare(b.pkg.fileName);
+                                        });
+
+                                        const totalCount = sortedNodes.length + missingDirectIds.length;
+
+                                        if (totalCount === 0) {
+                                            return <div className="text-xs text-gray-600 italic">No dependencies listed.</div>;
+                                        }
+
+                                        return (
+                                            <>
+                                                {/* Render Missing Direct First */}
+                                                {missingDirectIds.map(depId => (
+                                                    <div
+                                                        key={depId}
+                                                        className="flex items-center gap-3 p-2 rounded-lg text-xs border transition-colors cursor-pointer group bg-red-500/10 border-red-500/20 text-red-300 hover:bg-red-500/20"
+                                                        title={`Missing Dependency: ${depId}`}
+                                                    >
+                                                        <X size={14} className="text-red-500 shrink-0" />
+                                                        <span className="truncate flex-1 font-mono">{depId}</span>
+                                                    </div>
+                                                ))}
+
+                                                {/* Render Found Recursive */}
+                                                {sortedNodes.map(node => {
+                                                    const resolvedPkg = node.pkg;
+                                                    let status = getPackageStatus(resolvedPkg);
+                                                    // Status Masking (False Red Fix)
+                                                    // @ts-ignore
+                                                    if (status === PACKAGE_STATUS.MISMATCH || status === PACKAGE_STATUS.ROOT) {
+                                                        status = PACKAGE_STATUS.VALID;
+                                                    }
+
+                                                    const displayName = `${resolvedPkg.meta.creator}.${resolvedPkg.meta.packageName}.${resolvedPkg.meta.version}`;
+
+                                                    let bgClass = "bg-gray-800 border-gray-700";
+                                                    let icon = <Check size={14} className="text-green-500 shrink-0" />;
+
+                                                    if (status === PACKAGE_STATUS.VALID) {
+                                                        bgClass = "bg-green-500/10 border-green-500/20 text-green-300 hover:bg-green-500/20";
+                                                    } else if (status === PACKAGE_STATUS.OBSOLETE) {
+                                                        bgClass = "bg-yellow-500/10 border-yellow-500/20 text-yellow-300 hover:bg-yellow-500/20";
+                                                        icon = <AlertCircle size={14} className="text-yellow-500 shrink-0" />;
+                                                    } else if (status === PACKAGE_STATUS.DUPLICATE) {
+                                                        bgClass = "bg-purple-500/10 border-purple-500/20 text-purple-300 hover:bg-purple-500/20";
+                                                        icon = <Copy size={14} className="text-purple-500 shrink-0" />;
+                                                    } else if (status === PACKAGE_STATUS.CORRUPT) {
+                                                        bgClass = "bg-red-900/40 border-red-500 text-red-500 hover:bg-red-900/60";
+                                                        icon = <AlertTriangle size={14} className="text-red-500 shrink-0" />;
+                                                    } else if (status === PACKAGE_STATUS.DISABLED) {
+                                                        bgClass = "bg-gray-800 border-gray-600 text-gray-400 hover:bg-gray-700";
+                                                        icon = <Power size={14} className="text-gray-400 shrink-0" />;
+                                                    } else if (status === PACKAGE_STATUS.SYSTEM) {
+                                                        bgClass = "bg-gray-800/50 border-gray-700 text-gray-500 hover:bg-gray-800";
+                                                        icon = <Box size={14} className="text-gray-500 shrink-0" />;
+                                                    }
+
+                                                    const indentLevel = Math.max(0, node.depth - 1);
+
+                                                    return (
+                                                        <div
+                                                            key={resolvedPkg.filePath}
+                                                            onClick={() => onDependencyClick(resolvedPkg.filePath)}
+                                                            className={clsx(
+                                                                "flex items-center gap-3 p-2 rounded-lg text-xs border transition-colors cursor-pointer group",
+                                                                bgClass
+                                                            )}
+                                                            style={{ marginLeft: `${indentLevel * 16}px` }}
+                                                            title={resolvedPkg.obsoletedBy ? resolvedPkg.obsoletedBy : displayName}
+                                                        >
+                                                            {indentLevel > 0 && (
+                                                                <div className="text-gray-600 shrink-0">
+                                                                    <CornerDownRight size={12} />
+                                                                </div>
+                                                            )}
+                                                            {icon}
+                                                            <span className="truncate flex-1 font-medium">{displayName}</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </>
+                                        );
+                                    })()}
+                                </div>
+                            </div>
+
+                            {/* Used By (Incoming Dependencies) */}
+                            <div className="mb-6">
+                                <div className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-2 flex items-center justify-between">
+                                    Used By
+                                    {pkg.referencedBy && <span className="text-gray-600">{pkg.referencedBy.length}</span>}
+                                </div>
+                                <div className="space-y-1">
+                                    {pkg.referencedBy && pkg.referencedBy.length > 0 ? (
+                                        pkg.referencedBy.map((refId) => {
+                                            // SIMPLIFIED LOGIC: Find best enabled match. Show IT.
+                                            const resolvedPkg = findBestPackageMatch(packages, refId);
+
+                                            // Status Filtering (Mask Mismatch/Root -> Valid)
+                                            // This explicitly prevents "Red" status for valid packages with internal warnings.
+                                            let status = resolvedPkg ? getPackageStatus(resolvedPkg) : PACKAGE_STATUS.MISSING;
+                                            if (status === PACKAGE_STATUS.MISMATCH || status === PACKAGE_STATUS.ROOT) {
+                                                status = PACKAGE_STATUS.VALID;
+                                            }
+
+                                            // Navigation Target
+                                            const targetId = resolvedPkg ? resolvedPkg.filePath : refId;
+                                            const displayName = resolvedPkg?.meta
+                                                ? `${resolvedPkg.meta.creator}.${resolvedPkg.meta.packageName}.${resolvedPkg.meta.version}`
+                                                : (resolvedPkg?.fileName || refId);
+
+                                            // Status Coloring
+                                            let bgClass = "bg-red-500/10 border-red-500/20 text-red-300 hover:bg-red-500/20"; // Default Missing
+
+                                            if (resolvedPkg) {
+                                                if (status === PACKAGE_STATUS.VALID) {
+                                                    bgClass = "bg-green-500/10 border-green-500/20 text-green-300 hover:bg-green-500/20";
+                                                } else if (status === PACKAGE_STATUS.OBSOLETE) {
+                                                    bgClass = "bg-yellow-500/10 border-yellow-500/20 text-yellow-300 hover:bg-yellow-500/20";
+                                                } else if (status === PACKAGE_STATUS.DUPLICATE) {
+                                                    bgClass = "bg-purple-500/10 border-purple-500/20 text-purple-300 hover:bg-purple-500/20";
+                                                } else if (status === PACKAGE_STATUS.CORRUPT) {
+                                                    bgClass = "bg-red-900/40 border-red-500 text-red-500 hover:bg-red-900/60";
+                                                } else if (status === PACKAGE_STATUS.DISABLED) {
+                                                    bgClass = "bg-gray-800 border-gray-600 text-gray-400 hover:bg-gray-700";
+                                                    // @ts-ignore
+                                                } else if (status === PACKAGE_STATUS.ROOT) {
+                                                    bgClass = "bg-violet-500/10 border-violet-500/20 text-violet-300 hover:bg-violet-500/20";
+                                                }
                                             }
 
                                             return (
                                                 <div
-                                                    key={depId}
-                                                    onClick={() => onDependencyClick(depId)}
+                                                    key={refId}
+                                                    onClick={() => onDependencyClick(targetId)}
                                                     className={clsx(
                                                         "flex items-center gap-3 p-2 rounded-lg text-xs border transition-colors cursor-pointer group",
                                                         bgClass
-                                                    )}>
-
-                                                    {status === 'valid' ? (
-                                                        <Check size={14} className="text-green-500 shrink-0" />
-                                                    ) : status === 'mismatch' ? (
-                                                        <AlertCircle size={14} className="text-yellow-500 shrink-0" />
-                                                    ) : status === 'system' ? (
-                                                        <Box size={14} className="text-blue-500 shrink-0" />
-                                                    ) : status === 'scanning' ? (
-                                                        <div className="w-3.5 h-3.5 rounded-full border-2 border-gray-600 border-t-white animate-spin shrink-0" />
-                                                    ) : (
-                                                        <X size={14} className="text-red-500 shrink-0" />
                                                     )}
-
-                                                    <span className="truncate flex-1" title={depId}>{depId}</span>
+                                                    title={resolvedPkg?.obsoletedBy ? resolvedPkg.obsoletedBy : displayName}
+                                                >
+                                                    {status === PACKAGE_STATUS.VALID ? <Check size={14} className="text-green-500 shrink-0" /> :
+                                                        status === PACKAGE_STATUS.OBSOLETE ? <AlertCircle size={14} className="text-yellow-500 shrink-0" /> :
+                                                            status === PACKAGE_STATUS.DUPLICATE ? <Copy size={14} className="text-purple-500 shrink-0" /> :
+                                                                status === PACKAGE_STATUS.CORRUPT ? <AlertTriangle size={14} className="text-red-500 shrink-0" /> :
+                                                                    status === PACKAGE_STATUS.DISABLED ? <Power size={14} className="text-gray-400 shrink-0" /> :
+                                                                        // @ts-ignore
+                                                                        status === PACKAGE_STATUS.ROOT ? <Unlink size={14} className="text-violet-500 shrink-0" /> :
+                                                                            <X size={14} className="text-red-500 shrink-0" />
+                                                    }
+                                                    <span className="truncate flex-1">{displayName}</span>
                                                 </div>
                                             );
                                         })
                                     ) : (
-                                        <div className="text-xs text-gray-600 italic">No dependencies listed.</div>
+                                        <div className="text-xs text-gray-600 italic">No packages depend on this.</div>
                                     )}
                                 </div>
                             </div>
@@ -359,7 +464,11 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                                                     <img
                                                         src={`data:image/jpeg;base64,${item.thumbnailBase64}`}
                                                         alt={item.fileName}
-                                                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                                                        className={clsx(
+                                                            "w-full h-full object-cover transition-transform duration-500 group-hover:scale-110",
+                                                            censorThumbnails && "scale-125" // Scale up more to hide blur edges
+                                                        )}
+                                                        style={getBlurStyle(censorThumbnails, blurAmount)}
                                                     />
                                                 ) : (
                                                     <div className="w-full h-full flex flex-col items-center justify-center text-gray-700 p-2 text-center">
