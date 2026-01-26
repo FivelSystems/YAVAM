@@ -68,7 +68,9 @@ const DashboardContent = () => {
                 // 1. Check for "What's New" (Version Change)
                 // @ts-ignore
                 const currentVersion = await window.go.main.App.GetAppVersion();
-                const lastSeen = localStorage.getItem('last_seen_version');
+                // @ts-ignore
+                const config = await window.go.main.App.GetConfig();
+                const lastSeen = config.lastSeenVersion;
 
                 if (currentVersion !== lastSeen) {
                     // @ts-ignore
