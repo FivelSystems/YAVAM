@@ -2,12 +2,11 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -72,10 +71,19 @@ func (a *App) GetLibraryCounts(libraries []string) map[string]int {
 	return a.manager.GetLibraryCounts(libraries)
 }
 
+// Log writes a message to the persistent application log
+func (a *App) Log(level string, message string) {
+	log.Printf("[%s] %s\n", level, message)
+}
+
 // startup is called when the app starts. The context is saved
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	log.Println("[App] Startup lifecycle begin...")
+
+	// Initialize Logger
+
 	updater.CleanupOld()
 
 	// Sub into frontend/dist
@@ -88,7 +96,6 @@ func (a *App) startup(ctx context.Context) {
 	}
 
 	// Initialize Auth Service
-	// Initialize Auth Service
 	configDir, _ := os.UserConfigDir()
 	authConfigPath := filepath.Join(configDir, "YAVAM", "auth.json")
 	var authErr error
@@ -97,7 +104,7 @@ func (a *App) startup(ctx context.Context) {
 		// Log or Panic? For now, we panic as auth is critical if it fails to init store
 		// But in prod we might just log and fallback to memory?
 		// Let's print for now
-		fmt.Printf("Failed to initialize auth service: %v\n", authErr)
+		log.Printf("[App] Failed to initialize auth service: %v\n", authErr)
 	}
 
 	a.server = server.NewServer(ctx, a.manager, a.auth, subAssets, a.GetAppVersion(), func() {
@@ -129,11 +136,17 @@ func (a *App) startup(ctx context.Context) {
 }
 
 func (a *App) GetPackageContents(pkgPath string) ([]models.PackageContent, error) {
+	if err := a.manager.ValidatePath(pkgPath); err != nil {
+		return nil, err
+	}
 	return a.manager.GetPackageContents(pkgPath)
 }
 
 // GetPackageThumbnail returns the Base64 encoded thumbnail for a package
 func (a *App) GetPackageThumbnail(pkgPath string) (string, error) {
+	if err := a.manager.ValidatePath(pkgPath); err != nil {
+		return "", err
+	}
 	bytes, err := a.manager.GetThumbnail(pkgPath)
 	if err != nil {
 		return "", err
@@ -142,6 +155,10 @@ func (a *App) GetPackageThumbnail(pkgPath string) (string, error) {
 }
 
 func (a *App) OpenFolderInExplorer(path string) {
+	if err := a.manager.ValidatePath(path); err != nil {
+		fmt.Println("Security: OpenFolder access denied:", err)
+		return
+	}
 	err := a.manager.OpenFolder(path)
 	if err != nil {
 		fmt.Println("Error opening folder:", err)
@@ -149,6 +166,9 @@ func (a *App) OpenFolderInExplorer(path string) {
 }
 
 func (a *App) DeleteFileToRecycleBin(path string) error {
+	if err := a.manager.ValidatePath(path); err != nil {
+		return err
+	}
 	return a.manager.DeleteToTrash(path)
 }
 
@@ -212,23 +232,8 @@ func (a *App) Login(username, password string) (string, error) {
 		return "", fmt.Errorf("auth service not initialized")
 	}
 
-	// 1. Initiate Login (Get Nonce)
-	nonce, err := a.auth.InitiateLogin(username)
-	if err != nil {
-		return "", err
-	}
-
-	// 2. Calculate Proof (Verify knowledge of password without sending it)
-	// H1 = SHA256(password)
-	h1 := sha256.Sum256([]byte(password))
-	h1Str := hex.EncodeToString(h1[:])
-
-	// Proof = SHA256(H1 + Nonce)
-	proofRaw := sha256.Sum256([]byte(h1Str + nonce))
-	proof := hex.EncodeToString(proofRaw[:])
-
-	// 3. Complete Login
-	return a.auth.CompleteLogin(username, nonce, proof, "Desktop Client")
+	// Simplified Login
+	return a.auth.Login(username, password, "Desktop Client")
 }
 
 // SetPassword updates the admin password
@@ -253,7 +258,14 @@ func (a *App) GetAppVersion() string {
 }
 
 func (a *App) GetDiskSpace(path string) (manager.DiskSpaceInfo, error) {
+	if err := a.manager.ValidatePath(path); err != nil {
+		return manager.DiskSpaceInfo{}, err
+	}
 	return a.manager.GetDiskSpace(path)
+}
+
+func (a *App) GetFileDetails(paths []string) ([]models.FileDetail, error) {
+	return a.manager.GetFileDetails(paths)
 }
 
 // CancelScan signals the running scan to stop
@@ -354,6 +366,9 @@ func (a *App) DisableOldVersions(creator string, pkgName string, vamPath string)
 
 // InstallFiles handles dropped files
 func (a *App) InstallFiles(files []string, vamPath string) ([]string, error) {
+	if err := a.manager.ValidatePath(vamPath); err != nil {
+		return nil, err
+	}
 	fmt.Printf("Backend received files to install: %v\n", files)
 	return a.manager.InstallPackage(files, vamPath, func(current, total int) {
 		runtime.EventsEmit(a.ctx, "scan:progress", map[string]int{"current": current, "total": total})
@@ -413,26 +428,38 @@ func (a *App) SetMinimizeOnClose(val bool) {
 }
 
 // Shutdown performs clean cleanup of all resources
+// Shutdown performs clean cleanup of all resources
 func (a *App) Shutdown() {
+	log.Println("[App] Shutdown started...")
 	if a.server != nil && a.server.IsRunning() {
+		log.Println("[App] Stopping server...")
 		a.server.Stop()
+		log.Println("[App] Server stopped.")
 	}
 	if a.manager != nil {
+		log.Println("[App] Closing manager...")
 		a.manager.Close()
+		log.Println("[App] Manager closed.")
 	}
 	// Cancel any running scans
 	a.CancelScan()
+	log.Println("[App] Shutdown complete.")
 }
 
 func (a *App) onBeforeClose(ctx context.Context) (prevent bool) {
-	// If doing factory reset, force quit immediately
-	if a.pendingFactoryReset {
+	// If doing factory reset OR restarting (isQuitting), force quit immediately
+	log.Printf("[App] onBeforeClose called. isQuitting=%v, pendingFactoryReset=%v", a.isQuitting, a.pendingFactoryReset)
+	if a.pendingFactoryReset || a.isQuitting {
 		a.Shutdown()
 		return false
 	}
 
 	// Minimize to tray if option enabled
-	if a.minimizeOnClose && !a.isQuitting {
+	if a.minimizeOnClose {
+		// Signal Frontend to Suspend (Dump textures/DOM)
+		runtime.EventsEmit(ctx, "window:suspend")
+		// Short delay to allow React to unmount? Not strictly necessary if hide is weird, but good practice.
+		// Actually, WindowHide is instant. The event will fire.
 		runtime.WindowHide(ctx)
 		if !a.trayRunning {
 			a.trayRunning = true
@@ -445,7 +472,7 @@ func (a *App) onBeforeClose(ctx context.Context) (prevent bool) {
 		return true
 	}
 
-	// Normal Close or Quit
+	// Normal Close (User clicked X, and NOT minimizing)
 	if a.server != nil && a.server.IsRunning() {
 		res, err := runtime.MessageDialog(ctx, runtime.MessageDialogOptions{
 			Type:          runtime.QuestionDialog,
@@ -459,7 +486,6 @@ func (a *App) onBeforeClose(ctx context.Context) (prevent bool) {
 			return false // On error, just close?
 		}
 		if res == "No" {
-			a.isQuitting = false
 			return true // Prevent close
 		}
 	}
@@ -469,10 +495,12 @@ func (a *App) onBeforeClose(ctx context.Context) (prevent bool) {
 }
 
 func (a *App) onSecondInstanceLaunch(secondInstanceData options.SecondInstanceData) {
+	log.Printf("[App] Second Instance Launched! Args: %v", secondInstanceData.Args)
 	runtime.WindowShow(a.ctx)
 	if runtime.WindowIsMinimised(a.ctx) {
 		runtime.WindowUnminimise(a.ctx)
 	}
+	runtime.EventsEmit(a.ctx, "window:restore")
 	runtime.WindowSetAlwaysOnTop(a.ctx, true)
 	runtime.WindowSetAlwaysOnTop(a.ctx, false)
 }
@@ -488,6 +516,7 @@ func (a *App) onTrayReady() {
 		if runtime.WindowIsMinimised(a.ctx) {
 			runtime.WindowUnminimise(a.ctx)
 		}
+		runtime.EventsEmit(a.ctx, "window:restore")
 		systray.Quit()
 	})
 
@@ -497,6 +526,7 @@ func (a *App) onTrayReady() {
 		if runtime.WindowIsMinimised(a.ctx) {
 			runtime.WindowUnminimise(a.ctx)
 		}
+		runtime.EventsEmit(a.ctx, "window:restore")
 		systray.Quit() // Stop the tray loop and remove icon
 	})
 
@@ -667,6 +697,7 @@ func (a *App) IsServerRunning() bool {
 
 // RestartApp restarts the application
 func (a *App) RestartApp() {
+	a.isQuitting = true // Force quit mode for restart
 	var args []string
 	if a.pendingFactoryReset {
 		args = append(args, "--factory-reset")

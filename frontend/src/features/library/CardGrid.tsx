@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import { VarPackage } from '../../types';
 import PackageCard from './PackageCard';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { PackageSearch } from 'lucide-react';
 
 interface CardGridProps {
@@ -18,10 +18,10 @@ interface CardGridProps {
     blurAmount?: number;
     hidePackageNames?: boolean;
     hideCreatorNames?: boolean;
-    highlightedPackageId?: string | null;
+    highlightedRequest?: { id: string; ts: number } | null;
 }
 
-const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, selectedPkgId, selectedIds, viewMode, gridSize = 150, censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false, highlightedPackageId }: CardGridProps) => {
+const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, selectedPkgId, selectedIds, viewMode, gridSize = 150, censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false, highlightedRequest }: CardGridProps) => {
 
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -51,10 +51,26 @@ const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, 
         )
     }
 
+    // Animation Variants
+    const itemVariants = {
+        hidden: { opacity: 0, y: 20, scale: 0.95 },
+        visible: {
+            opacity: 1,
+            y: 0,
+            scale: 1,
+            transition: {
+                duration: 0.2, // Snappy uniform fade-in
+                ease: "easeOut"
+            }
+        },
+        exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } }
+    };
+
     return (
         <div ref={containerRef} className="h-full">
             <motion.div
                 layout
+                key={viewMode} // Forces re-mount on view switch to prevent morphing artifacts
                 className={viewMode === 'list'
                     ? "flex flex-col gap-2 pb-20 p-4"
                     : "grid gap-4 pb-20 p-4"
@@ -63,40 +79,38 @@ const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, 
                     gridTemplateColumns: `repeat(auto-fill, minmax(${gridSize}px, 1fr))`
                 } : undefined}
             >
-                <AnimatePresence mode="popLayout">
-                    {packages.map((pkg) => (
-                        <motion.div
-                            layout
-                            key={pkg.filePath}
-                            id={`pkg-${pkg.filePath}`}
-                            initial={{ opacity: 0 }}
-                            animate={{
-                                opacity: 1,
-                                scale: pkg.filePath === highlightedPackageId ? 1.02 : 1
-                            }}
-                            exit={{ opacity: 0 }}
-                            className={pkg.filePath === highlightedPackageId
-                                ? "rounded-xl ring-2 ring-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.3)] z-10"
-                                : ""}
-                        >
-                            <PackageCard
-                                pkg={pkg}
-                                onContextMenu={onContextMenu}
-                                onSelect={onSelect}
-                                isSelected={selectedIds ? selectedIds.has(pkg.filePath) : pkg.filePath === selectedPkgId}
-                                isAnchor={pkg.filePath === selectedPkgId}
-                                viewMode={viewMode}
-                                censorThumbnails={censorThumbnails}
-                                blurAmount={blurAmount}
-                                hidePackageNames={hidePackageNames}
-                                hideCreatorNames={hideCreatorNames}
-                            />
-                        </motion.div>
-                    ))}
-                </AnimatePresence>
+                {packages.map((pkg, i) => (
+                    <motion.div
+                        key={pkg.filePath}
+                        id={`pkg-${pkg.filePath}`}
+                        custom={i} // Pass index for stagger delay
+                        variants={itemVariants}
+                        initial="hidden"
+                        animate="visible"
+                        exit="exit"
+                        className=""
+                    // Removed layout prop for performance
+                    >
+                        <PackageCard
+                            pkg={pkg}
+                            onContextMenu={onContextMenu}
+                            onSelect={onSelect}
+                            isSelected={selectedIds ? selectedIds.has(pkg.filePath) : pkg.filePath === selectedPkgId}
+                            isAnchor={pkg.filePath === selectedPkgId}
+                            viewMode={viewMode}
+                            censorThumbnails={censorThumbnails}
+                            blurAmount={blurAmount}
+                            hidePackageNames={hidePackageNames}
+                            hideCreatorNames={hideCreatorNames}
+                            isHighlighted={highlightedRequest?.id === pkg.filePath}
+                            startAnimationTs={highlightedRequest?.id === pkg.filePath ? highlightedRequest.ts : undefined}
+                        />
+                    </motion.div>
+                ))}
             </motion.div>
         </div>
     );
+
 };
 
 export default CardGrid;

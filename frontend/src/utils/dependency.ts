@@ -64,3 +64,55 @@ export const resolveDependency = (depId: string, allPackages: VarPackage[]): Res
 
     return { status: 'missing' };
 };
+
+/**
+ * Recursively resolves all dependencies for a list of packages (BFS).
+ * Returns a flat list of unique VarPackages, including the inputs.
+ */
+export interface ResolvedNode {
+    pkg: VarPackage;
+    depth: number;
+}
+
+/**
+ * Recursively resolves all dependencies for a list of packages (BFS).
+ * Returns a flat list of unique VarPackages with their depth, including the inputs (depth 0).
+ */
+export const resolveRecursive = (startPackages: VarPackage[], allPackages: VarPackage[]): ResolvedNode[] => {
+    const minDepthMap = new Map<string, number>(); // filePath -> minDepth
+    const pkgMap = new Map<string, VarPackage>();
+
+    // Queue stores { pkg, depth }
+    const queue: ResolvedNode[] = startPackages.map(p => ({ pkg: p, depth: 0 }));
+
+    while (queue.length > 0) {
+        const { pkg: current, depth } = queue.shift()!;
+
+        // Update minDepth if undefined or if we found a shorter path (BFS guarantees shortest first, but just in case)
+        if (!minDepthMap.has(current.filePath) || depth < minDepthMap.get(current.filePath)!) {
+            minDepthMap.set(current.filePath, depth);
+            pkgMap.set(current.filePath, current);
+        } else {
+            // Already processed at a lower or equal depth
+            continue;
+        }
+
+        if (current.meta && current.meta.dependencies) {
+            for (const depId of Object.keys(current.meta.dependencies)) {
+                const res = resolveDependency(depId, allPackages);
+                if (res.pkg) {
+                    queue.push({ pkg: res.pkg, depth: depth + 1 });
+                }
+            }
+        }
+    }
+
+    // Convert map to array
+    const result: ResolvedNode[] = [];
+    minDepthMap.forEach((depth, path) => {
+        const p = pkgMap.get(path);
+        if (p) result.push({ pkg: p, depth });
+    });
+
+    return result;
+};

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -33,18 +34,22 @@ func GetLatestVersion(currentVersion string) (*UpdateInfo, error) {
 	if envUrl := os.Getenv("YAVAM_UPDATE_URL"); envUrl != "" {
 		url = envUrl
 	}
+	log.Printf("[Updater] Checking for updates at: %s\n", url)
 	resp, err := http.Get(url)
 	if err != nil {
+		log.Printf("[Updater] Network error: %v\n", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		log.Printf("[Updater] HTTP Error: %s\n", resp.Status)
 		return nil, fmt.Errorf("failed to fetch release: %s", resp.Status)
 	}
 
 	var rel Release
 	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
+		log.Printf("[Updater] JSON Decode Error: %v\n", err)
 		return nil, err
 	}
 
@@ -52,8 +57,11 @@ func GetLatestVersion(currentVersion string) (*UpdateInfo, error) {
 	remoteVer := strings.TrimPrefix(rel.TagName, "v")
 	localVer := strings.TrimPrefix(currentVersion, "v")
 
+	log.Printf("[Updater] Comparing Local: %s vs Remote: %s\n", localVer, remoteVer)
+
 	// Compare
 	if compareVersions(remoteVer, localVer) > 0 {
+		log.Println("[Updater] Update available!")
 		// Find .exe asset
 		var downloadUrl string
 		for _, a := range rel.Assets {
@@ -63,6 +71,7 @@ func GetLatestVersion(currentVersion string) (*UpdateInfo, error) {
 			}
 		}
 		if downloadUrl == "" {
+			log.Println("[Updater] No .exe asset found.")
 			return nil, fmt.Errorf("no executable found in release")
 		}
 
@@ -71,6 +80,8 @@ func GetLatestVersion(currentVersion string) (*UpdateInfo, error) {
 			Changelog:   rel.Body,
 			DownloadURL: downloadUrl,
 		}, nil
+	} else {
+		log.Println("[Updater] No update needed.")
 	}
 
 	return nil, nil // No update

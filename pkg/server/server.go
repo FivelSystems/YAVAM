@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 	"yavam/pkg/manager"
@@ -104,30 +103,6 @@ func (s *Server) writeError(w http.ResponseWriter, message string, code int) {
 	})
 }
 
-// IsPathAllowed checks if the given path is within activePath or any of the allowed libraries.
-// It is thread-safe.
-func (s *Server) IsPathAllowed(path string) bool {
-	if path == "" {
-		return false
-	}
-	cleanTarget := strings.ToLower(filepath.Clean(path))
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for _, lib := range s.libraries {
-		cleanLib := strings.ToLower(filepath.Clean(lib))
-		if cleanTarget == cleanLib {
-			return true
-		}
-		if strings.HasPrefix(cleanTarget, cleanLib+string(os.PathSeparator)) {
-			return true
-		}
-	}
-
-	return false
-}
-
 func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -201,8 +176,8 @@ func (s *Server) Start(port string, libraries []string) error {
 
 	mux := http.NewServeMux()
 
-	// SSE Endpoint
-	mux.HandleFunc("/api/events", func(w http.ResponseWriter, r *http.Request) {
+	// SSE Endpoint (Secured)
+	mux.Handle("/api/events", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
@@ -241,7 +216,7 @@ func (s *Server) Start(port string, libraries []string) error {
 				}
 			}
 		}
-	})
+	})))
 
 	// Scan Cancel Endpoint
 	mux.HandleFunc("/api/scan/cancel", func(w http.ResponseWriter, r *http.Request) {
@@ -294,7 +269,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		})
 	}))
 
-	// Auth: Login Endpoint (Complete)
+	// Auth: Login Endpoint (Simple Password)
 	mux.HandleFunc("/api/auth/login", loginLimiter.Middleware(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -302,8 +277,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		}
 		var req struct {
 			Username   string `json:"username"`
-			Nonce      string `json:"nonce"`
-			Proof      string `json:"proof"`
+			Password   string `json:"password"`
 			DeviceName string `json:"deviceName"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -316,11 +290,14 @@ func (s *Server) Start(port string, libraries []string) error {
 			return
 		}
 
-		token, err := s.auth.CompleteLogin(req.Username, req.Nonce, req.Proof, req.DeviceName)
+		token, err := s.auth.Login(req.Username, req.Password, req.DeviceName)
 		if err != nil {
-			s.writeError(w, "Invalid credentials or expired nonce", 401)
+			s.log(fmt.Sprintf("Login failed for user '%s' from device '%s': %v", req.Username, req.DeviceName, err))
+			// Generic error for security
+			s.writeError(w, "Invalid credentials", 401)
 			return
 		}
+		s.log(fmt.Sprintf("User '%s' logged in successfully from '%s'", req.Username, req.DeviceName))
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -339,6 +316,38 @@ func (s *Server) Start(port string, libraries []string) error {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(sessions)
+	})))
+
+	// Library Counts Endpoint
+	mux.Handle("/api/library/counts", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			Libraries []string `json:"libraries"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.writeError(w, "Invalid request body", 400)
+			return
+		}
+
+		// Security Check: Ensure all requested paths are allowed?
+		// Actually, if client requests counts for arbitrary path, it might be info leak.
+		// We should validate each path against s.libraries?
+		// Or trust Manager? Manager gets counts for whatever path.
+		// Let's validate.
+		for _, lib := range req.Libraries {
+			if err := s.manager.ValidatePath(lib); err != nil {
+				s.writeError(w, "Access denied: Invalid library path", 403)
+				return
+			}
+		}
+
+		counts := s.manager.GetLibraryCounts(req.Libraries)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(counts)
 	})))
 
 	// Verify Endpoint
@@ -374,8 +383,10 @@ func (s *Server) Start(port string, libraries []string) error {
 		json.NewEncoder(w).Encode(map[string]bool{"success": true})
 	})))
 
-	// API Endpoint
 	mux.Handle("/api/packages", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
 		w.Header().Set("Content-Type", "application/json")
 
 		// Allow client to request a specific library, default to activePath
@@ -394,8 +405,8 @@ func (s *Server) Start(port string, libraries []string) error {
 		s.log(fmt.Sprintf("Client requested packages for: %s", targetPath))
 
 		// Security: Ensure targetPath is in allowed libraries
-		if !s.IsPathAllowed(targetPath) {
-			s.log(fmt.Sprintf("Access denied. Target: %s", targetPath))
+		if err := s.manager.ValidatePath(targetPath); err != nil {
+			s.log(fmt.Sprintf("Access denied. Target: %s. Error: %v", targetPath, err))
 			s.writeError(w, "Access denied to this library path", 403)
 			return
 		}
@@ -430,15 +441,22 @@ func (s *Server) Start(port string, libraries []string) error {
 			})
 		})
 		if err != nil {
+			s.Broadcast("scan:error", err.Error())
 			s.writeError(w, err.Error(), 500)
 			return
 		}
+
+		// Notify completion so frontend stops spinner
+		s.Broadcast("scan:complete", true)
 
 		json.NewEncoder(w).Encode(pkgs)
 	})))
 
 	// Disk Space Endpoint
 	mux.Handle("/api/disk-space", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
 		targetPath := r.URL.Query().Get("path")
 
 		if targetPath == "" {
@@ -452,7 +470,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		}
 
 		// Security: Ensure targetPath is in allowed libraries
-		if !s.IsPathAllowed(targetPath) {
+		if err := s.manager.ValidatePath(targetPath); err != nil {
 			s.writeError(w, "Access denied", 403)
 			return
 		}
@@ -481,7 +499,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		// So we MUST check if activePath is empty before allowing based on it.
 
 		// Security Check
-		if !s.IsPathAllowed(filePath) {
+		if err := s.manager.ValidatePath(filePath); err != nil {
 			s.writeError(w, "Access denied", 403)
 			return
 		}
@@ -512,7 +530,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		}
 
 		// Security Check
-		if !s.IsPathAllowed(req.FilePath) {
+		if err := s.manager.ValidatePath(req.FilePath); err != nil {
 			s.writeError(w, "Access denied", 403)
 			return
 		}
@@ -600,7 +618,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		}
 
 		// Security Check
-		if !s.IsPathAllowed(targetPath) {
+		if err := s.manager.ValidatePath(targetPath); err != nil {
 			s.writeError(w, "Access denied: Invalid library path", 403)
 			return
 		}
@@ -709,13 +727,13 @@ func (s *Server) Start(port string, libraries []string) error {
 
 		// Security Check
 		// Ensure targetLib is allowed library
-		if !s.IsPathAllowed(targetLib) {
+		if err := s.manager.ValidatePath(targetLib); err != nil {
 			s.writeError(w, "Security violation: Invalid library", 403)
 			return
 		}
 
 		// Ensure file path is allowed (redundant if checking parent, but safer)
-		if !s.IsPathAllowed(req.FilePath) {
+		if err := s.manager.ValidatePath(req.FilePath); err != nil {
 			s.writeError(w, "Security violation: Invalid file path", 403)
 			return
 		}
@@ -797,7 +815,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		// CopyPackagesToLibrary reads from src.
 		// We should validate sources are in s.libraries OR activePath.
 		for _, src := range req.FilePaths {
-			if !s.IsPathAllowed(src) {
+			if err := s.manager.ValidatePath(src); err != nil {
 				s.writeError(w, fmt.Sprintf("Access denied: Source file %s not in allowed libraries", src), 403)
 				return
 			}
@@ -852,7 +870,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		}
 
 		// Security Check
-		if !s.IsPathAllowed(targetPath) {
+		if err := s.manager.ValidatePath(targetPath); err != nil {
 			s.writeError(w, "Access denied: Invalid library path", 403)
 			return
 		}
@@ -914,7 +932,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		}
 
 		// Security Check: targetFile must be inside one of the libraries
-		if !s.IsPathAllowed(targetFile) {
+		if err := s.manager.ValidatePath(targetFile); err != nil {
 			s.writeError(w, "Access denied: File not in allowed libraries", 403)
 			return
 		}
@@ -970,7 +988,7 @@ func (s *Server) Stop() error {
 	}
 
 	s.log("Stopping server...")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
 	err := s.httpSrv.Shutdown(ctx)
@@ -993,47 +1011,4 @@ func (s *Server) GetOutboundIP() string {
 	localAddr := conn.LocalAddr().(*net.UDPAddr)
 
 	return localAddr.IP.String()
-}
-
-// isSafePath checks if the requested path is within the allowed root directory
-// It resolves symlinks and absolute paths to prevent traversal attacks
-func (s *Server) isSafePath(requestedPath, root string) bool {
-	// 1. Get Absolute Path of Root (resolve symlinks)
-	absRoot, err := filepath.EvalSymlinks(root)
-	if err != nil {
-		// Fallback to simpler Abs if symlink eval fails
-		absRoot, err = filepath.Abs(root)
-		if err != nil {
-			return false
-		}
-	}
-
-	// 2. Get Absolute Path of Request
-	absPath, err := filepath.Abs(requestedPath)
-	if err != nil {
-		return false
-	}
-
-	// 3. Eval Symlinks of Request (if it exists)
-	if info, err := os.Lstat(absPath); err == nil {
-		if info.Mode()&os.ModeSymlink != 0 {
-			resolved, err := filepath.EvalSymlinks(absPath)
-			if err == nil {
-				absPath = resolved
-			}
-		}
-	}
-
-	// 4. Case Insensitive Compare on Windows
-	rel, err := filepath.Rel(strings.ToLower(absRoot), strings.ToLower(absPath))
-	if err != nil {
-		return false
-	}
-
-	// 5. Ensure no ".." in relative path
-	if strings.Contains(rel, "..") {
-		return false
-	}
-
-	return !strings.HasPrefix(rel, "..")
 }

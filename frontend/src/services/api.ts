@@ -1,4 +1,4 @@
-import { getStoredToken } from './auth';
+import { getStoredToken, logout } from './auth';
 
 export async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
     const token = getStoredToken();
@@ -13,5 +13,14 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}): Pro
         headers
     };
 
-    return fetch(url, config);
+    const response = await fetch(url, config);
+
+    if (response.status === 401) {
+        console.warn(`[API] 401 Unauthorized from: ${url}`);
+        // Token expired or invalid
+        logout();
+        // window.location.reload(); // FIXED: Do not force reload, let AuthContext handle the modal
+    }
+
+    return response;
 }

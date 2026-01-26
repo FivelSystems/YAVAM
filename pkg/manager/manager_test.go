@@ -10,14 +10,33 @@ import (
 )
 
 // Mock Config Service
-type MockConfigService struct{}
+// Mock Config Service
+type MockConfigService struct {
+	cfg *config.Config
+}
 
-func (m *MockConfigService) Load() (*config.Config, error)        { return &config.Config{}, nil }
-func (m *MockConfigService) Save(cfg *config.Config) error        { return nil }
-func (m *MockConfigService) Get() *config.Config                  { return &config.Config{} }
-func (m *MockConfigService) IsConfigured() bool                   { return false }
-func (m *MockConfigService) FinishSetup() error                   { return nil }
-func (m *MockConfigService) Update(fn func(*config.Config)) error { return nil }
+func (m *MockConfigService) Load() (*config.Config, error) {
+	if m.cfg == nil {
+		return &config.Config{}, nil
+	}
+	return m.cfg, nil
+}
+func (m *MockConfigService) Save(cfg *config.Config) error { m.cfg = cfg; return nil }
+func (m *MockConfigService) Get() *config.Config {
+	if m.cfg == nil {
+		return &config.Config{}
+	}
+	return m.cfg
+}
+func (m *MockConfigService) IsConfigured() bool { return false }
+func (m *MockConfigService) FinishSetup() error { return nil }
+func (m *MockConfigService) Update(fn func(*config.Config)) error {
+	if m.cfg == nil {
+		m.cfg = &config.Config{}
+	}
+	fn(m.cfg)
+	return nil
+}
 
 func TestFinishSetup(t *testing.T) {
 	// Setup temporary directory for test

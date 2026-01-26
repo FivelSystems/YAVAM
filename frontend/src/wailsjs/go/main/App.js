@@ -78,6 +78,10 @@ export function GetDiskSpace(arg1) {
   return window['go']['main']['App']['GetDiskSpace'](arg1);
 }
 
+export function GetFileDetails(arg1) {
+  return window['go']['main']['App']['GetFileDetails'](arg1);
+}
+
 export function GetFilters(arg1) {
   return window['go']['main']['App']['GetFilters'](arg1);
 }
@@ -124,6 +128,10 @@ export function IsServerRunning() {
 
 export function ListSessions() {
   return window['go']['main']['App']['ListSessions']();
+}
+
+export function Log(arg1, arg2) {
+  return window['go']['main']['App']['Log'](arg1, arg2);
 }
 
 export function Login(arg1, arg2) {

@@ -1,77 +1,85 @@
-# Refactoring Roadmap: Journey to v1.3.0
+# Refactoring Roadmap: Journey to v1.4.0+
 
-This roadmap is designed to guide the evolution of YAVAM from a prototype to a production-ready application. It prioritizes **Security** first (to stop the bleeding), then **Architecture** (to enable growth), and finally **Features** (Auth).
+This roadmap guides the evolution of YAVAM.
+**Current Status:** v1.3.4 (Stability & Logic Hardening).
+**Next Major Milestone:** v1.4.0 (Robustness & diagnostics).
 
-##  phase 1: The Safety Net (Security Hardening)
-**Goal:** Eliminate Critical CVEs. Ensure the app cannot destroy the user's computer. (Matches **Issue #1: Security & Privacy**)
+## ✅ Completed Phases (v1.0.0 - v1.3.3)
 
-- [ ] **Step 1.1: Ban `cmd /C`**
-    -   **Action:** Rewrite `pkg/manager` file operations (Delete, Open) to use `golang.org/x/sys/windows`.
-    -   **Validation:** Use `gosec` to confirm no `G204` errors remain.
-- [ ] **Step 1.2: Lockdown `pkg/server`**
-    -   **Action:** Change `http.ListenAndServe` to listen ONLY on `127.0.0.1`.
-    -   **Action:** Implement a strict `PathValidator` struct that is tested with unit tests to reject `..` and invalid roots.
-- [ ] **Step 1.3: Add Tests**
-    -   **Action:** Create `pkg/manager/manager_test.go`. Write tests for `ScanAndAnalyze`.
-    -   **Note:** You cannot refactor safely without tests.
+### Phase 1: The Safety Net (Security Hardening) - **DONE**
+- [x] **Step 1.1: Ban `cmd /C`**: Replaced all shell calls with native Go syscalls.
+- [x] **Step 1.2: Lockdown `pkg/server`**: `PathValidator` implemented, `127.0.0.1` binding enforced.
+- [x] **Step 1.3: Add Tests**: Unit tests added for Manager and LibraryService.
 
-## Phase 2: Decoupling the Backend (Issue #5)
-**Goal:** Break the "God Object" (`Manager`). Address **Issue #5: Internal Refactor** (Isolation levels, Context Management).
+### Phase 2: Decoupling the Backend (Issue #5) - **DONE**
+- [x] **Step 2.1: Extract `FileSystem` Interface**: `pkg/fs` created.
+- [x] **Step 2.2: Split Manager**: Decoupled into `LibraryService` and `SystemService`.
+- [x] **Step 2.3: Context Management**: Thread-safe operations implemented.
 
-- [ ] **Step 2.1: Extract `FileSystem` Interface**
-    -   Create `pkg/fs/filesystem.go`. Move all `os.*` calls here.
-    -   Allows mocking disk operations for safer testing.
-- [ ] **Step 2.2: Split Manager**
-    -   Create `pkg/library/library_service.go` (Manages the list of paths).
-    -   Create `pkg/scanner/scanner_service.go` (The heavy lifting).
-    -   Keep `Manager` only as a coordinator that wires these services together.
-- [ ] **Step 2.3: Context Management (Issue #5)**
-    -   Implement "Command Pattern" for file operations to support Undo (CTRL+Z) and prevent conflicts between multiple clients.
+### Phase 3: Taming the Frontend Monolith (Issue #5) - **DONE**
+- [x] **Step 3.1: Install State Management**: Context API architecture implemented (`PackageContext`, `LibraryContext`, etc.).
+- [x] **Step 3.2: Extract Major Views**: Feature-based folder structure (`features/library`, `features/settings`).
+- [x] **Step 3.3: Component Cleanup**: `PackageCard` and `Sidebar` refactored.
 
-## Phase 3: Taming the Frontend Monolith (Issue #5)
-**Goal:** Reduce `App.tsx` from 2500 lines to <300 lines. Refactor for code reutilization.
+### Phase 4: Authentication & Advanced Features - **DONE**
+- [x] **Step 4.1: Session Management**: Challenge-Response implemented.
+- [x] **Step 4.2: Login Screen**: Tabbed Settings & Auth Dialogs created.
+- [x] **Step 4.3: Secure Endpoints**: Middleware enforcement active.
 
-- [ ] **Step 3.1: Install State Management**
-    -   Add `zustand`. Create `useLibraryStore`.
-    -   Move `packages`, `filters`, and `pagination` state into the store.
-- [ ] **Step 3.2: Extract Major Views**
-    -   Create `src/views/MainLibrary.tsx`.
-    -   Create `src/views/Settings.tsx`.
-    -   `App.tsx` should only contain the Layout (Sidebar + Content Area).
-- [ ] **Step 3.3: Component Cleanup**
-    -   Analyze `src/components`. Standardize props.
+---
 
-## Phase 4: Authentication & Advanced Features (Issue #13 & #2)
-**Goal:** Prepare for Password Auth and Enhanced Library Management.
+## 🚧 Phase 5: Refinement, Robustness & Logic (v1.3.10 - v1.4.0)
+**Goal:** Perfect the logic (Dependency Graph, Orphans, Duplicates) and improve UX.
 
-- [ ] **Step 4.1: Session Management (Issue #13)**
-    -   Implement JWT or simple Session Token logic in `pkg/auth`.
-- [ ] **Step 4.2: Login Screen**
-    -   Create a new Route in React `/login`.
-- [ ] **Step 4.3: Secure Endpoints**
-    -   Add Middleware to `pkg/server` that checks for the Session Token.
-- [ ] **Step 4.4: Device Approval (Issue #13)**
-    -   Implement Whitelist logic for new device connections using a desktop popup.
-- [ ] **Step 4.5: Enhanced Library Management (Issue #2)**
-    -   Implement granular permissions (Read-Only, Password Locked, Web Visibility) for each library.
-    -   Refactor Library struct to support `Alias`, `IsLocked`, `IsPrivate`.
+- [x] **Step 5.0: Logic Hardening (v1.3.10)**
+    -   **Action:** Detect "Unreferenced" packages (Orphans). (Fixed: Indigo Status)
+    -   **Action:** Fix "Used By" / Reverse Dependency graph logic. (Fixed: Robust Dependency Parsing)
+    -   **Action:** Improve "Duplicate" detection to handle exact vs loose matches. (Fixed: Global Map & Status Priority)
+- [x] **Step 5.1: Corrupt Package Detection**
+    -   **Action:** Enhance `pkg/scanner` to detect invalid header/EOF in zip files.
+    -   **UI:** Display "Corrupt" badge. (Implemented in v1.3.2)
+- [x] **Step 5.2: Privacy & UX (v1.3.10)**
+    -   **Action:** Granular Privacy (Details Panel Censor).
+    -   **Action:** "Neon Flash" Highlight for better visibility.
+    -   **Action:** (v1.3.10) Fixed "Locate" animation spam/interruption issues.
+    -   **Action:** (v1.3.10) Fixed "False Missing" dependencies via Status Masking.
+    -   **Action:** (v1.3.10) **Critical**: Fixed Recursive Dependency display in Sidebar (Details Panel).
+    -   **Action:** (v1.3.10) **UX**: Fixed Selection Logic (`CTRL+A`) for corrupt packages.
+    -   **Action:** (v1.3.10) **UX**: Friendly "Access Denied" Banner for library scanning errors.
+    -   **Action:** (v1.3.10) **UX**: "View Library" post-install navigation fix.
+- [ ] **Step 5.3: Graph Logic Migration (v1.4.0)**
+    -   **Action:** Move Dependency Graph calculation (`packageDependencyAnalysis.ts`) to Go Backend for performance/caching.
+- [ ] **Step 5.4: Advanced Library Management**
+    -   **Action:** Enhanced Configs & Settings per library.
+    -   **Action:** Trigger Auth Modal when switching libraries (Security).
+
+---
+
+## 🔮 Phase 6: Advanced Viz & Bulk Ops (v1.5.0)
+**Goal:** Deep insights (Visualization) and Mass Actions (Bulk Downloads).
+
+### 1. Bulk Downloads (From README.md)
+**Goal:** Grab tons of files as one big ZIP.
+-   **Architecture:** Backend zip-streaming service.
+-   **UI:** "Download All" context menu action for selections or filters.
+
+### 2. Dependency Tree Visualization
+**Concept:** A hierarchical "Tree View" for the "Roots" (formerly Unreferenced) filter.
+-   **Goal:** Visualize how packages link together, starting from entry points (Scenes/Looks) down to their deepest dependencies.
+-   **Structure:**
+    > Scene A
+    >   ├── Look B
+    >   │     ├── Clothing C
+    >   │     └── Hair D
+    >   └── Asset Pack E
+-   **Technical Challenge:** Handling cyclic dependencies and large graph performance.
+-   **User Value:** Deep understanding of library composition + Bulk Download of entire trees.
 
 ---
 
 ## Technical Debt to Repay
 | Debt | Interest Rate | Plan |
 | :--- | :--- | :--- |
-| `App.tsx` Monolith | **High** (Slows down every UI change) | Phase 3 |
-| No Tests | **Critical** (Bugs reach users instantly) | Phase 1 & 2 |
-| `cmd` usage | **Fatal** (Security vulnerability) | Phase 1 |
-
----
-
-## Phase 5: Refinement & Robustness (v1.4.0)
-**Goal:** Improve error handling for corrupt content and enhance package diagnostics.
-
-- [ ] **Step 5.1: Corrupt Package Detection**
-    -   **Action:** enhance `pkg/scanner` to detect and flag invalid zip files during scan.
-    -   **UI:** Display a "Corrupt" status badge in the dashboard and exclude from analysis to prevent crashes.
-- [ ] **Step 5.2: Granular Library Privacy**
-    -   **Action:** Allow marking specific library folders as "Private" (hidden from web view).
+| `App.tsx` Monolith | **Paid Off** | Done (v1.3.3) |
+| No Tests | **In Progress** | Ongoing |
+| Frontend Performance | **Medium** (Graph calculation on main thread) | Step 5.3 |

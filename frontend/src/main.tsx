@@ -164,6 +164,11 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
     }
 }
 
+import { initWailsPolyfill } from './services/wails-polyfill';
+
+// Initialize Polyfill for Web Mode
+initWailsPolyfill();
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
         <ErrorBoundary>

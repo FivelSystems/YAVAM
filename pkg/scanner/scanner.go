@@ -26,7 +26,11 @@ func (s *Scanner) scanDirectory(root string) ([]models.VarPackage, error) {
 
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return nil // Skip errors to keep scanning
+			// If we can't access the root, we must fail.
+			if path == root {
+				return err
+			}
+			return nil // Skip errors for sub-items
 		}
 
 		if info.IsDir() {
