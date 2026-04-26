@@ -279,15 +279,16 @@ func (m *Manager) FinishSetup() error {
 	if err := os.MkdirAll(m.DataPath, 0755); err != nil {
 		return err
 	}
-	marker := filepath.Join(m.DataPath, ".setup_complete")
-	return os.WriteFile(marker, []byte("done"), 0644)
+	// Persist setupDone: true to config.json
+	if err := m.config.FinishSetup(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // IsConfigured checks if the application setup is complete
 func (m *Manager) IsConfigured() bool {
-	marker := filepath.Join(m.DataPath, ".setup_complete")
-	_, err := os.Stat(marker)
-	return err == nil
+	return m.config.IsConfigured()
 }
 
 func (m *Manager) GetLibraryCounts(libraries []string) map[string]int {

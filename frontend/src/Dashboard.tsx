@@ -8,6 +8,7 @@ import { SystemModals } from './features/system/SystemModals';
 import { PackageActionModals } from './features/packages/PackageActionModals';
 import { GlobalDialogs } from './components/common/GlobalDialogs';
 import { ToastContainer } from './features/layout/ToastContainer';
+import { EmptyState } from './features/layout/EmptyState';
 import DragDropOverlay from './features/upload/DragDropOverlay';
 import ContextMenu from './components/ui/ContextMenu';
 import { useActionContext } from './context/ActionContext';
@@ -118,7 +119,7 @@ const DashboardContent = () => {
         loading, isCancelling, packages, scanPackages
     } = usePackageContext();
     const {
-        activeLibraryPath
+        activeLibraryPath, needsSetup, setNeedsSetup, addLibrary
     } = useLibraryContext();
     const {
         itemsPerPage, setItemsPerPage, sortMode,
@@ -247,6 +248,18 @@ const DashboardContent = () => {
         setSelectedPackage(randomPkg);
         setIsDetailsPanelOpen(true);
     }, [filteredPkgs, setSelectedPackage, setIsDetailsPanelOpen]);
+
+    // -- Early Returns for Setup / Empty States --
+    if (needsSetup || (!activeLibraryPath && typeof window !== 'undefined' && !('go' in window))) {
+        return (
+            <EmptyState
+                needsSetup={needsSetup}
+                setNeedsSetup={setNeedsSetup}
+                addLibrary={addLibrary}
+                activeLibraryPath={activeLibraryPath}
+            />
+        );
+    }
 
     // -- Render --
     return (

@@ -87,7 +87,20 @@ func (s *fileConfigService) Load() (*Config, error) {
 	}
 
 	err = json.Unmarshal(data, s.config)
-	return s.config, err
+	if err != nil {
+		return s.config, err
+	}
+
+	// Migration: existing users who configured libraries before the SetupWizard
+	// existed will have setupDone=false. Treat a non-empty library list as implicit proof
+	// of prior setup and silently migrate them to avoid the wizard appearing on update.
+	if !s.config.SetupDone && len(s.config.Libraries) > 0 {
+		s.config.SetupDone = true
+		data, _ := json.MarshalIndent(s.config, "", "  ")
+		_ = os.WriteFile(s.path, data, 0644) // Best-effort persist; non-fatal if it fails.
+	}
+
+	return s.config, nil
 }
 
 func (s *fileConfigService) Save(cfg *Config) error {

@@ -28,8 +28,19 @@ func (m *MockConfigService) Get() *config.Config {
 	}
 	return m.cfg
 }
-func (m *MockConfigService) IsConfigured() bool { return false }
-func (m *MockConfigService) FinishSetup() error { return nil }
+func (m *MockConfigService) IsConfigured() bool {
+	if m.cfg == nil {
+		return false
+	}
+	return m.cfg.SetupDone
+}
+func (m *MockConfigService) FinishSetup() error {
+	if m.cfg == nil {
+		m.cfg = &config.Config{}
+	}
+	m.cfg.SetupDone = true
+	return nil
+}
 func (m *MockConfigService) Update(fn func(*config.Config)) error {
 	if m.cfg == nil {
 		m.cfg = &config.Config{}
@@ -56,19 +67,18 @@ func TestFinishSetup(t *testing.T) {
 		DataPath: filepath.Join(tempDir, "YAVAM_TEST"),
 	}
 
-	// 1. Test FinishSetup (should create directory)
+	// 1. Test FinishSetup (should persist setupDone via config service)
 	err = m.FinishSetup()
 	if err != nil {
 		t.Fatalf("FinishSetup failed: %v", err)
 	}
 
-	// 2. Verify file exists
-	marker := filepath.Join(m.DataPath, ".setup_complete")
-	if _, err := os.Stat(marker); os.IsNotExist(err) {
-		t.Errorf("Marker file was not created at %s", marker)
+	// 2. Verify setupDone is reflected in the config
+	if !m.config.Get().SetupDone {
+		t.Errorf("SetupDone was not set to true after FinishSetup")
 	}
 
-	// 3. Verify IsConfigured
+	// 3. Verify IsConfigured delegates to config service
 	if !m.IsConfigured() {
 		t.Errorf("IsConfigured returned false after setup")
 	}

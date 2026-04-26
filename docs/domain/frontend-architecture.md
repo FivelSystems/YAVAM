@@ -84,6 +84,12 @@ When the Desktop App is minimized to the System Tray, it enters "Suspend Mode" t
 *   **Restoration:** Backend emits `window:restore`. Frontend remounts explicitly using `useSuspendMode`.
 *   **Web Isolation:** Remote web clients are unaffected by this local state change.
 
+### Setup Wizard (First-Time Onboarding)
+*   **Desktop only.** The `SetupWizard` component MUST NEVER render in a web/browser context.
+*   **Enforcement:** `EmptyState.tsx` guards the wizard behind `if (!window.go)` and shows a "Setup Required — complete on the host machine" message to web clients instead.
+*   **Completion:** `FinishSetup()` (Wails → `manager.FinishSetup()` → `config.FinishSetup()`) sets `setupDone: true` in `config.json`.
+*   **Migration:** Existing users with pre-configured libraries but `setupDone: false` are silently migrated on first load by `config.Load()` to prevent the wizard appearing unexpectedly after an update.
+
 ## 5. Component Architecture
 
 ### The "Layout Shell" Pattern
@@ -134,8 +140,9 @@ This ensures that "Duplicate", "Obsolete", and "Root" statuses are visualized co
 ### Reusable Utilities & Formatting
 **Rule:** NEVER write inline math to format sizes (`Math.pow`, `Math.log`) or custom logic for UI constants.
 **Solution:**
-- **Formatting:** Use `src/utils/format.ts` -> `formatBytes(size)` to display file sizes. This guarantees consistency across Cards, Modals, and Sidebars.
-- **Components:** For repeated data structures like dependencies, use common components like `<DependencyRow />` rather than raw `div` maps.
+- **Formatting:** Use `src/utils/format.ts` → `formatBytes(size)` to display file sizes. This guarantees consistency across Cards, Modals, and Sidebars.
+- **Dependency Lists:** Use `<DependencyGroup>` (`src/features/library/components/DependencyGroup.tsx`) to render any list of packages with a title, item count, total size, and empty state. It internally uses `<DependencyRow>` for each item. Do NOT roll custom dependency list UIs.
+- **Domain Logic:** Use `getDependencySummary(pkg, allPackages)` from `src/utils/dependency.ts` to resolve a package's full dependency tree, missing IDs, and total size. Do NOT perform recursive resolution inline in components.
 
 ## 7. Performance Constraints
 ### Animation Strategy (Framer Motion)
