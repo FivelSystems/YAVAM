@@ -5,6 +5,7 @@ import { clsx } from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { VarPackage } from '../../types';
 import { resolveRecursive } from '../../utils/dependency';
+import { formatBytes } from '../../utils/format';
 
 interface InstallPackageModalProps {
     isOpen: boolean;
@@ -16,13 +17,7 @@ interface InstallPackageModalProps {
     onSuccess: (result: { installed: number, skipped: number, targetLib: string, switchTo?: boolean }) => void;
 }
 
-const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-};
+
 
 export const InstallPackageModal = ({ isOpen, onClose, packages, allPackages, libraries, currentLibrary, onSuccess }: InstallPackageModalProps) => {
     const [selectedLib, setSelectedLib] = useState<string | null>(null);

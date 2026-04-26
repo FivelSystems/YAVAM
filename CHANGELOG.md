@@ -6,6 +6,13 @@
 
 # Changelog
 
+## [Unreleased]
+
+### Refactored
+- **Dependency UI**: Abstracted dependency visualization into highly reusable `DependencyGroup` and `DependencyRow` components to enforce DRY principles (#26).
+- **Core Logic**: Moved complex dependency resolution and size calculation logic out of the UI and into a centralized `getDependencySummary` domain utility (#26).
+- **Formatting**: Replaced all inline `Math.pow` file size calculations globally with a centralized `formatBytes` utility (#26).
+
 ## [1.3.12] - 2026-01-26
 
 ### Fixed

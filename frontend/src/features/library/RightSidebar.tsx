@@ -1,14 +1,16 @@
-import { useState, useEffect } from 'react';
-import { X, Check, AlertCircle, AlertTriangle, Box, FileImage, User, Scissors, Copy, Power, Unlink, CornerDownRight } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { X, Box, FileImage, User, Scissors, Copy, AlertCircle } from 'lucide-react';
 import clsx from 'clsx';
 import { motion } from 'framer-motion';
 import { VarPackage } from '../../types';
 import { useThumbnail } from '../../hooks/useThumbnail';
-import { PACKAGE_STATUS } from '../../constants';
+
+import { findBestPackageMatch, getBlurStyle } from './utils';
+import { getDependencySummary } from '../../utils/dependency';
 import { usePackageContext } from '../../context/PackageContext';
-import { getPackageStatus, findBestPackageMatch, getBlurStyle } from './utils';
-import { resolveDependency, resolveRecursive } from '../../utils/dependency';
 import { fetchWithAuth } from '../../services/api';
+import { formatBytes } from '../../utils/format';
+import { DependencyGroup } from './components/DependencyGroup';
 
 export interface PackageContent {
     filePath: string;
@@ -82,6 +84,39 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
     }, [pkg]);
 
     if (!pkg) return null;
+
+    const depsInfo = useMemo(() => {
+        if (!pkg) return { nodes: [], missing: [], totalSize: 0 };
+        return getDependencySummary(pkg, packages);
+    }, [pkg, packages]);
+
+    const depsItems = useMemo(() => {
+        return [
+            ...depsInfo.missing.map(depId => ({
+                missingId: depId,
+                targetId: depId,
+                depth: 0
+            })),
+            ...depsInfo.nodes.map(node => ({
+                pkg: node.pkg,
+                targetId: node.pkg.filePath,
+                depth: Math.max(0, node.depth - 1)
+            }))
+        ];
+    }, [depsInfo]);
+
+    const usedByItems = useMemo(() => {
+        if (!pkg || !pkg.referencedBy) return [];
+        return pkg.referencedBy.map(refId => {
+            const resolvedPkg = findBestPackageMatch(packages, refId);
+            return {
+                pkg: resolvedPkg || undefined,
+                missingId: !resolvedPkg ? refId : undefined,
+                targetId: resolvedPkg ? resolvedPkg.filePath : refId,
+                depth: 0
+            };
+        });
+    }, [pkg, packages]);
 
     return (
         <motion.div
@@ -167,7 +202,7 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                                 v{pkg.meta.version}
                             </span>
                             <span className="text-xs text-gray-400 ml-auto">
-                                {(pkg.size / 1024 / 1024).toFixed(1)} MB
+                                {formatBytes(pkg.size)}
                             </span>
                         </div>
                     </div>
@@ -257,188 +292,23 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                             )}
 
                             {/* Dependencies */}
-                            <div className="space-y-3">
-                                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex justify-between items-center">
-                                    Dependencies
-                                    {pkg.meta.dependencies && <span className="text-gray-600">{Object.keys(pkg.meta.dependencies).length}</span>}
-                                </h3>
-
-                                <div className="space-y-1">
-                                    {(() => {
-                                        // Calculate flattened dependencies (Found Transitive + Missing Direct)
-                                        const directDepsKeys = pkg.meta.dependencies ? Object.keys(pkg.meta.dependencies) : [];
-
-                                        // Get Nodes with Depth
-                                        const foundNodes = resolveRecursive([pkg], packages).filter(n => n.pkg.filePath !== pkg.filePath);
-
-                                        // Find Missing Direct Dependencies (since recursive only returns found ones)
-                                        const missingDirectIds = directDepsKeys.filter(key => {
-                                            const res = resolveDependency(key, packages);
-                                            return res.status === 'missing';
-                                        });
-
-                                        // Sort: Depth ascending (0, 1, 2) then Alphabetical
-                                        // This groups Direct deps first, then Subs.
-                                        const sortedNodes = [...foundNodes].sort((a, b) => {
-                                            if (a.depth !== b.depth) return a.depth - b.depth;
-                                            return a.pkg.fileName.localeCompare(b.pkg.fileName);
-                                        });
-
-                                        const totalCount = sortedNodes.length + missingDirectIds.length;
-
-                                        if (totalCount === 0) {
-                                            return <div className="text-xs text-gray-600 italic">No dependencies listed.</div>;
-                                        }
-
-                                        return (
-                                            <>
-                                                {/* Render Missing Direct First */}
-                                                {missingDirectIds.map(depId => (
-                                                    <div
-                                                        key={depId}
-                                                        className="flex items-center gap-3 p-2 rounded-lg text-xs border transition-colors cursor-pointer group bg-red-500/10 border-red-500/20 text-red-300 hover:bg-red-500/20"
-                                                        title={`Missing Dependency: ${depId}`}
-                                                    >
-                                                        <X size={14} className="text-red-500 shrink-0" />
-                                                        <span className="truncate flex-1 font-mono">{depId}</span>
-                                                    </div>
-                                                ))}
-
-                                                {/* Render Found Recursive */}
-                                                {sortedNodes.map(node => {
-                                                    const resolvedPkg = node.pkg;
-                                                    let status = getPackageStatus(resolvedPkg);
-                                                    // Status Masking (False Red Fix)
-                                                    // @ts-ignore
-                                                    if (status === PACKAGE_STATUS.MISMATCH || status === PACKAGE_STATUS.ROOT) {
-                                                        status = PACKAGE_STATUS.VALID;
-                                                    }
-
-                                                    const displayName = `${resolvedPkg.meta.creator}.${resolvedPkg.meta.packageName}.${resolvedPkg.meta.version}`;
-
-                                                    let bgClass = "bg-gray-800 border-gray-700";
-                                                    let icon = <Check size={14} className="text-green-500 shrink-0" />;
-
-                                                    if (status === PACKAGE_STATUS.VALID) {
-                                                        bgClass = "bg-green-500/10 border-green-500/20 text-green-300 hover:bg-green-500/20";
-                                                    } else if (status === PACKAGE_STATUS.OBSOLETE) {
-                                                        bgClass = "bg-yellow-500/10 border-yellow-500/20 text-yellow-300 hover:bg-yellow-500/20";
-                                                        icon = <AlertCircle size={14} className="text-yellow-500 shrink-0" />;
-                                                    } else if (status === PACKAGE_STATUS.DUPLICATE) {
-                                                        bgClass = "bg-purple-500/10 border-purple-500/20 text-purple-300 hover:bg-purple-500/20";
-                                                        icon = <Copy size={14} className="text-purple-500 shrink-0" />;
-                                                    } else if (status === PACKAGE_STATUS.CORRUPT) {
-                                                        bgClass = "bg-red-900/40 border-red-500 text-red-500 hover:bg-red-900/60";
-                                                        icon = <AlertTriangle size={14} className="text-red-500 shrink-0" />;
-                                                    } else if (status === PACKAGE_STATUS.DISABLED) {
-                                                        bgClass = "bg-gray-800 border-gray-600 text-gray-400 hover:bg-gray-700";
-                                                        icon = <Power size={14} className="text-gray-400 shrink-0" />;
-                                                    } else if (status === PACKAGE_STATUS.SYSTEM) {
-                                                        bgClass = "bg-gray-800/50 border-gray-700 text-gray-500 hover:bg-gray-800";
-                                                        icon = <Box size={14} className="text-gray-500 shrink-0" />;
-                                                    }
-
-                                                    const indentLevel = Math.max(0, node.depth - 1);
-
-                                                    return (
-                                                        <div
-                                                            key={resolvedPkg.filePath}
-                                                            onClick={() => onDependencyClick(resolvedPkg.filePath)}
-                                                            className={clsx(
-                                                                "flex items-center gap-3 p-2 rounded-lg text-xs border transition-colors cursor-pointer group",
-                                                                bgClass
-                                                            )}
-                                                            style={{ marginLeft: `${indentLevel * 16}px` }}
-                                                            title={resolvedPkg.obsoletedBy ? resolvedPkg.obsoletedBy : displayName}
-                                                        >
-                                                            {indentLevel > 0 && (
-                                                                <div className="text-gray-600 shrink-0">
-                                                                    <CornerDownRight size={12} />
-                                                                </div>
-                                                            )}
-                                                            {icon}
-                                                            <span className="truncate flex-1 font-medium">{displayName}</span>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </>
-                                        );
-                                    })()}
-                                </div>
+                            <div className="mb-6">
+                                <DependencyGroup
+                                    title="Dependencies"
+                                    items={depsItems}
+                                    emptyMessage="No dependencies listed."
+                                    onItemClick={onDependencyClick}
+                                />
                             </div>
 
                             {/* Used By (Incoming Dependencies) */}
                             <div className="mb-6">
-                                <div className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-2 flex items-center justify-between">
-                                    Used By
-                                    {pkg.referencedBy && <span className="text-gray-600">{pkg.referencedBy.length}</span>}
-                                </div>
-                                <div className="space-y-1">
-                                    {pkg.referencedBy && pkg.referencedBy.length > 0 ? (
-                                        pkg.referencedBy.map((refId) => {
-                                            // SIMPLIFIED LOGIC: Find best enabled match. Show IT.
-                                            const resolvedPkg = findBestPackageMatch(packages, refId);
-
-                                            // Status Filtering (Mask Mismatch/Root -> Valid)
-                                            // This explicitly prevents "Red" status for valid packages with internal warnings.
-                                            let status = resolvedPkg ? getPackageStatus(resolvedPkg) : PACKAGE_STATUS.MISSING;
-                                            if (status === PACKAGE_STATUS.MISMATCH || status === PACKAGE_STATUS.ROOT) {
-                                                status = PACKAGE_STATUS.VALID;
-                                            }
-
-                                            // Navigation Target
-                                            const targetId = resolvedPkg ? resolvedPkg.filePath : refId;
-                                            const displayName = resolvedPkg?.meta
-                                                ? `${resolvedPkg.meta.creator}.${resolvedPkg.meta.packageName}.${resolvedPkg.meta.version}`
-                                                : (resolvedPkg?.fileName || refId);
-
-                                            // Status Coloring
-                                            let bgClass = "bg-red-500/10 border-red-500/20 text-red-300 hover:bg-red-500/20"; // Default Missing
-
-                                            if (resolvedPkg) {
-                                                if (status === PACKAGE_STATUS.VALID) {
-                                                    bgClass = "bg-green-500/10 border-green-500/20 text-green-300 hover:bg-green-500/20";
-                                                } else if (status === PACKAGE_STATUS.OBSOLETE) {
-                                                    bgClass = "bg-yellow-500/10 border-yellow-500/20 text-yellow-300 hover:bg-yellow-500/20";
-                                                } else if (status === PACKAGE_STATUS.DUPLICATE) {
-                                                    bgClass = "bg-purple-500/10 border-purple-500/20 text-purple-300 hover:bg-purple-500/20";
-                                                } else if (status === PACKAGE_STATUS.CORRUPT) {
-                                                    bgClass = "bg-red-900/40 border-red-500 text-red-500 hover:bg-red-900/60";
-                                                } else if (status === PACKAGE_STATUS.DISABLED) {
-                                                    bgClass = "bg-gray-800 border-gray-600 text-gray-400 hover:bg-gray-700";
-                                                    // @ts-ignore
-                                                } else if (status === PACKAGE_STATUS.ROOT) {
-                                                    bgClass = "bg-violet-500/10 border-violet-500/20 text-violet-300 hover:bg-violet-500/20";
-                                                }
-                                            }
-
-                                            return (
-                                                <div
-                                                    key={refId}
-                                                    onClick={() => onDependencyClick(targetId)}
-                                                    className={clsx(
-                                                        "flex items-center gap-3 p-2 rounded-lg text-xs border transition-colors cursor-pointer group",
-                                                        bgClass
-                                                    )}
-                                                    title={resolvedPkg?.obsoletedBy ? resolvedPkg.obsoletedBy : displayName}
-                                                >
-                                                    {status === PACKAGE_STATUS.VALID ? <Check size={14} className="text-green-500 shrink-0" /> :
-                                                        status === PACKAGE_STATUS.OBSOLETE ? <AlertCircle size={14} className="text-yellow-500 shrink-0" /> :
-                                                            status === PACKAGE_STATUS.DUPLICATE ? <Copy size={14} className="text-purple-500 shrink-0" /> :
-                                                                status === PACKAGE_STATUS.CORRUPT ? <AlertTriangle size={14} className="text-red-500 shrink-0" /> :
-                                                                    status === PACKAGE_STATUS.DISABLED ? <Power size={14} className="text-gray-400 shrink-0" /> :
-                                                                        // @ts-ignore
-                                                                        status === PACKAGE_STATUS.ROOT ? <Unlink size={14} className="text-violet-500 shrink-0" /> :
-                                                                            <X size={14} className="text-red-500 shrink-0" />
-                                                    }
-                                                    <span className="truncate flex-1">{displayName}</span>
-                                                </div>
-                                            );
-                                        })
-                                    ) : (
-                                        <div className="text-xs text-gray-600 italic">No packages depend on this.</div>
-                                    )}
-                                </div>
+                                <DependencyGroup
+                                    title="Used By"
+                                    items={usedByItems}
+                                    emptyMessage="No packages depend on this."
+                                    onItemClick={onDependencyClick}
+                                />
                             </div>
                         </div>
                     )}

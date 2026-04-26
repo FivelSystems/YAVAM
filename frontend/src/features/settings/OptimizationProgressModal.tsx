@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { CheckCircle, AlertCircle, HardDrive, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
+import { formatBytes } from '../../utils/format';
 
 interface OptimizationProgressModalProps {
     isOpen: boolean;
@@ -25,13 +26,7 @@ export const OptimizationProgressModal = ({
 }: OptimizationProgressModalProps) => {
     if (!isOpen) return null;
 
-    const formatBytes = (bytes: number) => {
-        if (bytes === 0) return '0 B';
-        const k = 1024;
-        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    };
+
 
     return (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 backdrop-blur-md">

@@ -131,6 +131,12 @@ This ensures that "Duplicate", "Obsolete", and "Root" statuses are visualized co
 - `CORRUPT`: Broken ZIP file (Priority: Critical).
 - `DISABLED`: Valid but disabled by user.
 
+### Reusable Utilities & Formatting
+**Rule:** NEVER write inline math to format sizes (`Math.pow`, `Math.log`) or custom logic for UI constants.
+**Solution:**
+- **Formatting:** Use `src/utils/format.ts` -> `formatBytes(size)` to display file sizes. This guarantees consistency across Cards, Modals, and Sidebars.
+- **Components:** For repeated data structures like dependencies, use common components like `<DependencyRow />` rather than raw `div` maps.
+
 ## 7. Performance Constraints
 ### Animation Strategy (Framer Motion)
 *   **Grid Layouts:** Do **NOT** use `layout` prop on `motion.div` items in large grids (Dashboard, Library).

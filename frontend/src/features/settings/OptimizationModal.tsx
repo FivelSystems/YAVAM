@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { X, Sparkles, Layers, AlertTriangle } from 'lucide-react';
 import clsx from 'clsx';
 import { VarPackage } from '../../types';
+import { formatBytes } from '../../utils/format';
 
 interface OptimizationModalProps {
     isOpen: boolean;
@@ -16,14 +17,7 @@ interface OptimizationModalProps {
 export type ManualPlan = Record<string, string>; // PackageID -> SelectedFilePath (or "none")
 
 export const OptimizationModal = ({ isOpen, onClose, onConfirm, mergePlan, resolveGroups, targetPackage }: OptimizationModalProps) => {
-    // Format Helper
-    const formatBytes = (bytes: number) => {
-        if (bytes === 0) return '0 B';
-        const k = 1024;
-        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    };
+
 
     const [enableMerge, setEnableMerge] = useState(true);
     const [resolutionStrategy, setResolutionStrategy] = useState<'latest' | 'manual' | 'none' | 'delete-older'>('latest');
