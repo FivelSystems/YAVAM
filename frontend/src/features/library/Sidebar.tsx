@@ -154,7 +154,10 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
     const types = useMemo(() => {
         const counts: Record<string, number> = {};
         packages.forEach(p => {
-            const t = p.type || "Unknown";
+            // Corrupt packages have their own Status filter; exclude them here
+            // so they never pollute the category list with "Unknown".
+            if (p.isCorrupt) return;
+            const t = p.type || 'Other';
             counts[t] = (counts[t] || 0) + 1;
         });
         return Object.entries(counts).sort((a, b) => b[1] - a[1]);

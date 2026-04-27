@@ -73,7 +73,9 @@ func (s *defaultLibraryService) Scan(ctx context.Context, rootPath string, onPac
 				if len(categories) > 0 {
 					p.Type = categories[0]
 				} else {
-					p.Type = "Unknown"
+					// No recognised content folders — use "Other" (matches VaM Hub taxonomy).
+					// "Unknown" is reserved for corrupt packages that could not be parsed.
+					p.Type = "Other"
 				}
 
 				p.Tags = meta.Tags
@@ -155,7 +157,7 @@ func sortCategories(categories []string) {
 				return 3
 			case "Morph":
 				return 4
-			case "Script":
+			case "Plugin": // was "Script" — renamed to match VaM Hub taxonomy
 				return 5
 			case "Scene":
 				return 6
@@ -163,6 +165,18 @@ func sortCategories(categories []string) {
 				return 7
 			case "Asset":
 				return 8
+			case "Sound":
+				return 9
+			case "Image":
+				return 10
+			case "Pose":
+				return 11
+			case "SubScene":
+				return 12
+			case "PluginPreset":
+				return 13
+			case "Blueprint":
+				return 14
 			default:
 				return 99
 			}

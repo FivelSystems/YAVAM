@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { X, Box, FileImage, User, Scissors, Copy, AlertCircle } from 'lucide-react';
+import { X, Box, FileImage, User, Scissors, Copy, AlertCircle, Puzzle, Music, Image as ImageIcon } from 'lucide-react';
 import clsx from 'clsx';
 import { motion } from 'framer-motion';
 import { VarPackage } from '../../types';
@@ -378,11 +378,15 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
 
 const getContentIcon = (type: string) => {
     switch (type) {
-        case 'Scene': return <FileImage size={24} />;
-        case 'Look': return <User size={24} />;
+        case 'Scene':  return <FileImage size={24} />;
+        case 'Look':   return <User size={24} />;
+        case 'Pose':   return <User size={24} />;
         case 'Clothing': return <Scissors size={24} />;
-        case 'Hair': return <Scissors size={24} />; // Reuse scissors for now or find better icon
-        default: return <Box size={24} />;
+        case 'Hair':   return <Scissors size={24} />;
+        case 'Plugin': return <Puzzle size={24} />;
+        case 'Sound':  return <Music size={24} />;
+        case 'Image':  return <ImageIcon size={24} />;
+        default:       return <Box size={24} />;
     }
 }
 

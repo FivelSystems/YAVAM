@@ -8,7 +8,10 @@
 
 ## [Unreleased]
 
+## [1.3.14] - 2026-04-27
+
 ### Added
+- **Categorization**: Support for `Sound`, `Image`, `SubScene`, `PluginPreset`, `Pose`, and `Blueprint` packages.
 - **Setup Wizard**: First-time onboarding wizard now correctly triggers on fresh installs. The wizard guides new users through selecting a library folder, setting a password, and configuring remote access.
 
 ### Fixed
@@ -18,10 +21,13 @@
 - **Setup Wizard**: Fixed the `EmptyState` component being orphaned from the render tree after a prior refactor, preventing the wizard from displaying even when `needsSetup` was `true`.
 
 ### Changed
+- **Categorization**: `Script` category renamed to `Plugin` to align with the VaM Hub standard taxonomy.
 - **Setup Wizard**: Wizard is now enforced as Desktop (Wails) only. Web clients that encounter `setupDone: false` receive a clear "Setup Required — complete on the host machine" message instead of the setup form.
 - **Migration**: Existing users with configured libraries but `setupDone: false` are now silently migrated on first launch. Prevents a disruptive wizard prompt appearing after an update for long-time users.
 
 ### Refactored
+- **Categorization**: Complete overhaul of the categorization pipeline (#17). Extracted scattered `if/else` logic into a clean, declarative rule table (`categories.go`) acting as a single source of truth.
+- **Categorization**: Introduced a secondary classification pass reading `meta.json`'s `contentList` to properly tag data-only zip entries (textures, audio).
 - **Dependency UI**: Abstracted dependency visualization into highly reusable `DependencyGroup` and `DependencyRow` components to enforce DRY principles (#26).
 - **Core Logic**: Moved complex dependency resolution and size calculation logic out of the UI and into a centralized `getDependencySummary` domain utility (#26).
 - **Formatting**: Replaced all inline `Math.pow` file size calculations globally with a centralized `formatBytes` utility (#26).
