@@ -6,9 +6,7 @@
 
 # Changelog
 
-## [Unreleased]
-
-## [1.3.14] - 2026-04-27
+## [1.3.15] - 2026-04-27
 
 ### Added
 - **Categorization**: Support for `Sound`, `Image`, `SubScene`, `PluginPreset`, `Pose`, and `Blueprint` packages.
