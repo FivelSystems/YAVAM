@@ -129,7 +129,7 @@ func (s *fileConfigService) Get() *Config {
 func (s *fileConfigService) IsConfigured() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.config.SetupDone && len(s.config.Libraries) > 0
+	return s.config.SetupDone
 }
 
 func (s *fileConfigService) FinishSetup() error {

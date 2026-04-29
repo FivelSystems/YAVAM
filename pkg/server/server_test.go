@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -18,16 +19,17 @@ var mockAssets embed.FS
 // Mock Config Service for Server Tests (Unique Name)
 type TestServerConfigService struct {
 	libraries []string
+	setupDone bool
 }
 
 func (m *TestServerConfigService) Load() (*config.Config, error) {
-	return &config.Config{Libraries: m.libraries}, nil
+	return &config.Config{Libraries: m.libraries, SetupDone: m.setupDone}, nil
 }
 func (m *TestServerConfigService) Save(cfg *config.Config) error { return nil }
 func (m *TestServerConfigService) Get() *config.Config {
-	return &config.Config{Libraries: m.libraries}
+	return &config.Config{Libraries: m.libraries, SetupDone: m.setupDone}
 }
-func (m *TestServerConfigService) IsConfigured() bool                   { return true }
+func (m *TestServerConfigService) IsConfigured() bool                   { return m.setupDone }
 func (m *TestServerConfigService) FinishSetup() error                   { return nil }
 func (m *TestServerConfigService) Update(fn func(*config.Config)) error { return nil }
 
@@ -143,5 +145,40 @@ func TestAPI_ExplicitPathSecurity(t *testing.T) {
 	// Should be 403 Forbidden
 	if w.Code != 403 {
 		t.Errorf("Expected 403 Forbidden for unsafe path, got %d", w.Code)
+	}
+}
+func TestAPI_Config_SetupDone(t *testing.T) {
+	mockAuth := &MockAuthService{validToken: "valid"}
+	
+	// Mock config with SetupDone = true
+	cfgSvc := &TestServerConfigService{libraries: []string{"C:/Allowed"}, setupDone: true}
+	mgr := manager.NewManager(nil, nil, cfgSvc)
+
+	s := NewServer(context.Background(), mgr, mockAuth, mockAssets, "1.0.0", func() {})
+	s.SkipEvents = true
+	s.Start("0", []string{"C:/Allowed"})
+
+	req := httptest.NewRequest("GET", "/api/config", nil)
+	req.Header.Set("Authorization", "Bearer valid")
+	w := httptest.NewRecorder()
+
+	s.httpSrv.Handler.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Fatalf("Expected 200 OK, got %d", w.Code)
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
+
+	if val, ok := resp["setupDone"]; !ok || val != true {
+		t.Errorf("Expected setupDone: true in response, got: %v", resp["setupDone"])
+	}
+
+	libs, ok := resp["libraries"].([]interface{})
+	if !ok || len(libs) != 1 || libs[0] != "C:/Allowed" {
+		t.Errorf("Expected libraries: [C:/Allowed] in response, got: %v", resp["libraries"])
 	}
 }

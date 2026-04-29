@@ -29,7 +29,6 @@ type Server struct {
 	logMutex  sync.Mutex
 	manager   *manager.Manager
 	auth      auth.AuthService // Injected Auth Service
-	libraries []string         // List of allowed library paths
 	assets    fs.FS            // Embedded frontend assets
 	version   string           // App Version
 	onRestore func()
@@ -53,7 +52,6 @@ func NewServer(ctx context.Context, m *manager.Manager, authService auth.AuthSer
 		manager:   m,
 		auth:      authService,
 		onRestore: onRestore,
-		libraries: []string{},
 		assets:    assets,
 		version:   version,
 		clients:   make(map[chan string]bool),
@@ -61,21 +59,11 @@ func NewServer(ctx context.Context, m *manager.Manager, authService auth.AuthSer
 }
 
 func (s *Server) UpdateLibraries(libraries []string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.libraries = libraries
-	s.log(fmt.Sprintf("Updated allowed libraries: %d paths", len(libraries)))
+	s.log(fmt.Sprintf("Syncing allowed libraries: %d paths", len(libraries)))
 }
 
 func (s *Server) GetLibraries() []string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	// Return copy to prevent race on slice underlying array?
-	// String slices are headers. Underlying array is shared?
-	// To be safe, copy.
-	libs := make([]string, len(s.libraries))
-	copy(libs, s.libraries)
-	return libs
+	return s.manager.GetLibraries()
 }
 
 func (s *Server) log(message string) {
@@ -166,13 +154,11 @@ func (s *Server) Broadcast(eventType string, data interface{}) {
 
 func (s *Server) Start(port string, libraries []string) error {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.running {
-		s.mu.Unlock()
 		return fmt.Errorf("server is already running")
 	}
-	s.mu.Unlock()
-
-	s.libraries = libraries
 
 	mux := http.NewServeMux()
 
@@ -579,9 +565,10 @@ func (s *Server) Start(port string, libraries []string) error {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"webMode":      true,
-			"libraries":    s.libraries,
+			"libraries":    cfg.Libraries,
 			"version":      s.version,
 			"publicAccess": cfg.PublicAccess,
+			"setupDone":    cfg.SetupDone,
 		})
 	})))
 
@@ -958,9 +945,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		return err
 	}
 
-	s.mu.Lock()
 	s.running = true
-	s.mu.Unlock()
 
 	s.log(fmt.Sprintf("Starting server on port %s...", port))
 	s.log(fmt.Sprintf("Serving %d libraries.", len(libraries)))
