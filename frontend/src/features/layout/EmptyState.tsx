@@ -16,12 +16,28 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     addLibrary,
     activeLibraryPath
 }) => {
-    // 1. Setup Wizard
+    // 1. Setup Wizard — Desktop (Wails) only. Web clients must never trigger setup.
     if (needsSetup) {
+        // @ts-ignore
+        if (!window.go) {
+            // A remote web client somehow hit the setup state — block it.
+            return (
+                <div className="flex h-screen items-center justify-center bg-gray-900 text-white flex-col p-8 text-center space-y-4">
+                    <div className="bg-yellow-500/10 p-6 rounded-full">
+                        <WifiOff size={48} className="text-yellow-500" />
+                    </div>
+                    <h1 className="text-2xl font-bold">Setup Required</h1>
+                    <p className="text-gray-400 max-w-md">
+                        The host application has not been configured yet.
+                        Please complete the initial setup on the host machine first.
+                    </p>
+                </div>
+            );
+        }
+
         return (
             <>
-                {/* @ts-ignore */}
-                {window.go && <TitleBar />}
+                <TitleBar />
                 {/* @ts-ignore */}
                 <SetupWizard onComplete={(libPath?: string) => {
                     setNeedsSetup(false);

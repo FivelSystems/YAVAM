@@ -86,52 +86,32 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 
 		normName := strings.ReplaceAll(strings.ToLower(f.Name), "\\", "/")
 
-		// Category Detection & Content Priority Assignment
-		if strings.HasPrefix(normName, "saves/scene/") && strings.HasSuffix(normName, ".json") {
-			categorySet["Scene"] = true
-			contentPriority[normName] = 4 // Highest
-		} else if (strings.HasPrefix(normName, "saves/person/appearance/") || strings.HasPrefix(normName, "custom/atom/person/appearance/")) && strings.HasSuffix(normName, ".vap") {
-			categorySet["Look"] = true
-			contentPriority[normName] = 4 // High (Look matches Scene)
-		} else if strings.HasPrefix(normName, "custom/clothing/") {
-			categorySet["Clothing"] = true
-			if strings.HasSuffix(normName, ".vam") || strings.HasSuffix(normName, ".json") || strings.HasSuffix(normName, ".vap") {
-				contentPriority[normName] = 3
-			}
-		} else if strings.HasPrefix(normName, "custom/hair/") {
-			categorySet["Hair"] = true
-			if strings.HasSuffix(normName, ".vam") || strings.HasSuffix(normName, ".json") || strings.HasSuffix(normName, ".vap") {
-				contentPriority[normName] = 3
-			}
-		} else if strings.HasPrefix(normName, "custom/atom/person/morphs/") {
-			categorySet["Morph"] = true
-			if strings.HasSuffix(normName, ".vmi") || strings.HasSuffix(normName, ".vmb") {
-				contentPriority[normName] = 2
-			}
-		} else if strings.HasPrefix(normName, "custom/atom/person/textures/") {
-			categorySet["Skin"] = true
-			// Textures are NOT content (Prio 0)
-		} else if strings.HasPrefix(normName, "custom/scripts/") {
-			categorySet["Script"] = true
-			if strings.HasSuffix(normName, ".cs") || strings.HasSuffix(normName, ".cslist") {
-				contentPriority[normName] = 2
-			}
-		} else if strings.HasPrefix(normName, "custom/assets/") {
-			categorySet["Asset"] = true
-			if strings.HasSuffix(normName, ".assetbundle") || strings.HasSuffix(normName, ".scene") {
-				contentPriority[normName] = 2
-			}
-		} else if strings.HasPrefix(normName, "custom/") {
-			parts := strings.Split(normName, "/")
-			if len(parts) > 2 {
-				cat := parts[1]
-				if len(cat) > 0 {
-					cat = strings.ToUpper(cat[:1]) + cat[1:]
-					categorySet[cat] = true
-					// Unknown custom category content?
-					// Be conservative: Prio 0 unless we add generic detection
-				}
-			}
+		// ── Thumbnail Content Priority ─────────────────────────────────────────
+		// Assign a priority score to content files so the thumbnail picker can
+		// select the most representative image via the sibling rule.
+		switch {
+		case (strings.HasPrefix(normName, "saves/scene/") && strings.HasSuffix(normName, ".json")) ||
+			((strings.HasPrefix(normName, "saves/person/appearance/") ||
+				strings.HasPrefix(normName, "custom/atom/person/appearance/")) &&
+				strings.HasSuffix(normName, ".vap")):
+			contentPriority[normName] = 4
+		case (strings.HasPrefix(normName, "custom/clothing/") || strings.HasPrefix(normName, "custom/hair/")) &&
+			(strings.HasSuffix(normName, ".vam") || strings.HasSuffix(normName, ".json") || strings.HasSuffix(normName, ".vap")):
+			contentPriority[normName] = 3
+		case (strings.HasPrefix(normName, "custom/atom/person/morphs/") &&
+			(strings.HasSuffix(normName, ".vmi") || strings.HasSuffix(normName, ".vmb"))) ||
+			(strings.HasPrefix(normName, "custom/scripts/") &&
+				(strings.HasSuffix(normName, ".cs") || strings.HasSuffix(normName, ".cslist"))) ||
+			(strings.HasPrefix(normName, "custom/assets/") &&
+				(strings.HasSuffix(normName, ".assetbundle") || strings.HasSuffix(normName, ".scene"))):
+			contentPriority[normName] = 2
+		}
+
+		// ── Category Detection (zip-scan pass) ────────────────────────────────
+		// classifyPath covers all known folders declared in categories.go.
+		// Unknown folders are intentionally ignored — no catch-all noise.
+		if cat := classifyPath(normName); cat != "" {
+			categorySet[cat] = true
 		}
 
 		// Metadata Parsing
@@ -317,7 +297,18 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 		}
 	}
 
-	// Convert categories set to slice
+	// ── contentList secondary pass ─────────────────────────────────────────
+	// meta.json is now fully parsed. Use its contentList as a secondary
+	// category source. This catches packages whose zip entries are data-only
+	// (e.g. textures, audio) but whose contentList names the right folder.
+	for _, entry := range meta.ContentList {
+		norm := strings.ToLower(strings.ReplaceAll(entry, "\\", "/"))
+		if cat := classifyPath(norm); cat != "" {
+			categorySet[cat] = true
+		}
+	}
+
+	// Convert category set to slice
 	var categories []string
 	for c := range categorySet {
 		categories = append(categories, c)

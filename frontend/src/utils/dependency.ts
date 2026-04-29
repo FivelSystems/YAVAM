@@ -116,3 +116,36 @@ export const resolveRecursive = (startPackages: VarPackage[], allPackages: VarPa
 
     return result;
 };
+
+export interface DependencySummary {
+    nodes: ResolvedNode[];
+    missing: string[];
+    totalSize: number;
+}
+
+/**
+ * Returns a complete summary of a package's dependencies including sorted nodes, missing direct deps, and total size.
+ * Useful for UI components that need to render a clean dependency list.
+ */
+export const getDependencySummary = (pkg: VarPackage, allPackages: VarPackage[]): DependencySummary => {
+    const directDepsKeys = pkg.meta && pkg.meta.dependencies ? Object.keys(pkg.meta.dependencies) : [];
+
+    // Get Nodes with Depth, excluding the root package itself
+    const foundNodes = resolveRecursive([pkg], allPackages).filter(n => n.pkg.filePath !== pkg.filePath);
+
+    // Find Missing Direct Dependencies
+    const missingDirectIds = directDepsKeys.filter(key => {
+        const res = resolveDependency(key, allPackages);
+        return res.status === 'missing';
+    });
+
+    // Sort: Depth ascending (0, 1, 2) then Alphabetical
+    const sortedNodes = [...foundNodes].sort((a, b) => {
+        if (a.depth !== b.depth) return a.depth - b.depth;
+        return a.pkg.fileName.localeCompare(b.pkg.fileName);
+    });
+
+    const totalSize = sortedNodes.reduce((sum, node) => sum + node.pkg.size, 0);
+
+    return { nodes: sortedNodes, missing: missingDirectIds, totalSize };
+};

@@ -54,10 +54,27 @@ There are two distinct types of categorization in this domain:
 
 ### 1. Physical Categorization (VaM Native)
 Determined strictly by **file path** and **extension**. This dictates where the content appears inside Virt-A-Mate (e.g., "Select Scene" browser).
-*   **Scene:** `Saves/scene/*.json`
-*   **Look:** `Saves/person/appearance/*.vap`
-*   **Clothing:** `Custom/Clothing/*`
-*   **Morph:** `Custom/Atom/Person/Morphs/*`
+The canonical names below are the single source of truth — they originate from `pkg/parser/categories.go` and flow through the whole stack.
+
+| Category | Primary Folder(s) |
+| :--- | :--- |
+| `Scene` | `Saves/scene/` |
+| `Look` | `Saves/person/appearance/`, `Custom/Atom/Person/Appearance/` |
+| `Pose` | `Saves/person/pose/` |
+| `Clothing` | `Custom/Clothing/` |
+| `Hair` | `Custom/Hair/` |
+| `Morph` | `Custom/Atom/Person/Morphs/` |
+| `Skin` | `Custom/Atom/Person/Textures/` |
+| `Plugin` | `Custom/Scripts/` |
+| `Asset` | `Custom/Assets/` |
+| `Sound` | `Custom/Sounds/` |
+| `Image` | `Custom/Images/` |
+| `SubScene` | `Custom/SubScene/` |
+| `PluginPreset` | `Custom/PluginPresets/` |
+| `Blueprint` | `Saves/PluginData/Blooprints/` |
+| `Other` | *(no recognised folder matched)* |
+
+> **Rule:** Category names must never be changed without updating `categories.go`, `sortCategories` in `scan.go`, and any frontend icon maps simultaneously.
 
 ### 2. Logical Categorization (Hub / User)
 Determined by **intent** (e.g., "Cosplay", "Toolkit", "Demo").

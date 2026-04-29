@@ -138,14 +138,19 @@ export const useLibrary = () => {
             // Desktop Mode: Fetch saved config
             // @ts-ignore
             window.go.main.App.GetConfig().then((cfg: config.Config) => {
-                if (cfg && cfg.libraries) {
-                    setLibraries(cfg.libraries);
+                if (cfg) {
+                    // Setup wizard is Desktop-only: FinishSetup() can only be called via Wails.
+                    setNeedsSetup(!cfg.setupDone);
 
-                    const current = activeLibraryPath; // Closure?
-                    const isValid = cfg.libraries.some((l: string) => l.toLowerCase() === current.toLowerCase());
+                    if (cfg.libraries) {
+                        setLibraries(cfg.libraries);
 
-                    if ((!current || !isValid) && cfg.libraries.length > 0) {
-                        selectLibrary(cfg.libraries[0]);
+                        const current = activeLibraryPath;
+                        const isValid = cfg.libraries.some((l: string) => l.toLowerCase() === current.toLowerCase());
+
+                        if ((!current || !isValid) && cfg.libraries.length > 0) {
+                            selectLibrary(cfg.libraries[0]);
+                        }
                     }
                 }
             }).catch((err: any) => console.error("Failed to load library config:", err));
@@ -157,16 +162,20 @@ export const useLibrary = () => {
                     return res.json();
                 })
                 .then(data => {
-                    if (data && data.libraries) {
-                        setLibraries(data.libraries);
+                    if (data) {
+                        setNeedsSetup(!data.setupDone);
 
-                        // Validate active path
-                        const current = activeLibraryPath;
-                        const isValid = data.libraries.some((l: string) => l.toLowerCase() === current.toLowerCase());
+                        if (data.libraries) {
+                            setLibraries(data.libraries);
 
-                        // If empty or invalid, select first available
-                        if ((!current || !isValid) && data.libraries.length > 0) {
-                            selectLibrary(data.libraries[0]);
+                            // Validate active path
+                            const current = activeLibraryPath;
+                            const isValid = data.libraries.some((l: string) => l.toLowerCase() === current.toLowerCase());
+
+                            // If empty or invalid, select first available
+                            if ((!current || !isValid) && data.libraries.length > 0) {
+                                selectLibrary(data.libraries[0]);
+                            }
                         }
                     }
                 })

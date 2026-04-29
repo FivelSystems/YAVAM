@@ -3,6 +3,7 @@ import { VarPackage } from '../../types';
 import clsx from 'clsx';
 import { AlertCircle, Check, AlertTriangle, Power, Copy } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { formatBytes } from '../../utils/format';
 
 interface PackageCardProps {
     pkg: VarPackage;
@@ -183,7 +184,7 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
                         </span>
                         <div className="flex gap-2">
                             <span>v{pkg.meta.version}</span>
-                            <span>{(pkg.size / 1024 / 1024).toFixed(1)} MB</span>
+                            <span>{formatBytes(pkg.size)}</span>
                         </div>
                     </div>
                 </div>
@@ -260,7 +261,7 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
                 {/* Hover Details / Hint */}
                 <div className="h-0 group-hover:h-auto overflow-hidden transition-all duration-300">
                     <div className="text-[10px] text-gray-400 mt-2 border-t border-gray-700/50 pt-2 flex justify-between">
-                        <span>{(pkg.size / 1024 / 1024).toFixed(1)} MB</span>
+                        <span>{formatBytes(pkg.size)}</span>
                         {pkg.isEnabled && pkg.missingDeps && pkg.missingDeps.length > 0 && <span className="text-red-400 font-bold">{pkg.missingDeps.length} Missing</span>}
                         {pkg.isEnabled && pkg.isExactDuplicate && <span className="text-purple-400 font-bold truncate" title={pkg.obsoletedBy || "Duplicate"}>Duplicate</span>}
                         {pkg.isEnabled && !pkg.isExactDuplicate && pkg.isDuplicate && <span className="text-yellow-400 font-bold truncate" title={pkg.obsoletedBy || "Obsolete"}>Obsolete</span>}
