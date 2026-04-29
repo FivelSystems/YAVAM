@@ -74,6 +74,17 @@ This is built with **Wails** (Go + React + TypeScript). We keep the codebase cle
 - **Node.js**: v20+
 - **Wails CLI**: `go install github.com/wailsapp/wails/v2/cmd/wails@latest`
 
+### If you want to use my setup:
+1. Install [Scoop](https://scoop.sh/)
+2. Download go and nodejs-lts through scoop
+3. Install [wails](https://wails.io/) with Go
+4. Clone the repository and you're ready to go!
+```powershell
+irm -useb get.scoop.sh | iex
+scoop install git go nodejs-lts
+go install github.com/wailsapp/wails/v2/cmd/wails@latest
+```
+
 ### Build It
 Clone the repo and run:
 
@@ -83,17 +94,6 @@ wails dev
 
 # Compile for Release
 wails build
-```
-
-### If you want to use my same workflow:
-1. Install [Scoop](https://scoop.sh/)
-2. Download go and nodejs-lts through scoop
-3. Install [wails](https://wails.io/) using go
-4. Clone the repository and you're ready to go!
-```powershell
-irm -useb get.scoop.sh | iex
-scoop install git go nodejs-lts
-go install github.com/wailsapp/wails/v2/cmd/wails@latest
 ```
 
 You'll find your fresh `YAVAM.exe` in the `build/bin/` folder. Happy coding! 💜
