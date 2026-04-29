@@ -85,6 +85,19 @@ wails dev
 wails build
 ```
 
+### If you want to use my same workflow:
+1. Install [Scoop](https://scoop.sh/)
+2. Download go and nodejs-lts through scoop
+3. Install [wails](https://wails.io/) using go
+4. Clone the repository and you're ready to go!
+```powershell
+irm -useb get.scoop.sh | iex
+scoop install git
+scoop install go
+scoop install nodejs-lts
+go install github.com/wailsapp/wails/v2/cmd/wails@latest
+```
+
 You'll find your fresh `YAVAM.exe` in the `build/bin/` folder. Happy coding! 💜
 
 ---
