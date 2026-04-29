@@ -250,7 +250,7 @@ const DashboardContent = () => {
     }, [filteredPkgs, setSelectedPackage, setIsDetailsPanelOpen]);
 
     // -- Early Returns for Setup / Empty States --
-    if (needsSetup || (!activeLibraryPath && typeof window !== 'undefined' && !('go' in window))) {
+    if (needsSetup) {
         return (
             <EmptyState
                 needsSetup={needsSetup}

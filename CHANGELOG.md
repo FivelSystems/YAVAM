@@ -6,6 +6,18 @@
 
 # Changelog
 
+## [1.3.16] - 2026-04-29
+
+### Fixed
+- **CRITICAL**: Fixed "Setup Required" screen persisting in web mode even after completing setup. The `/api/config` endpoint now correctly reports `setupDone` status.
+- **CRITICAL**: Resolved a server deadlock during startup caused by recursive mutex locking.
+- **Web Client**: Fixed the "Waiting for Host Configuration" false positive by ensuring the server returns the actual persisted libraries from configuration instead of a stale internal cache.
+
+### Changed
+- **Server**: Allowed the HTTP server to start even if no libraries are configured, enabling remote clients to access settings and the dashboard immediately.
+- **Configuration**: Refactored `IsConfigured` logic to only require setup completion, decoupled from library counts.
+- **Architecture**: Eliminated redundant internal library cache in the server to ensure consistency with the master configuration.
+
 ## [1.3.15] - 2026-04-27
 
 ### Added

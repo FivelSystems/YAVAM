@@ -121,15 +121,13 @@ func (a *App) startup(ctx context.Context) {
 			// Path defaults to active (Vam) path.
 			// Config VamPath might be empty if just setup,
 			// but if ServerEnabled is true, VamPath should be set.
-			if len(cfg.Libraries) > 0 {
-				port := cfg.ServerPort
-				if port == "" {
-					port = "18888"
-				}
-				// We need to pass the libraries as well
-				if err := a.server.Start(port, cfg.Libraries); err == nil {
-					runtime.EventsEmit(a.ctx, "server:status:changed", true)
-				}
+			port := cfg.ServerPort
+			if port == "" {
+				port = "18888"
+			}
+			// We need to pass the libraries as well
+			if err := a.server.Start(port, cfg.Libraries); err == nil {
+				runtime.EventsEmit(a.ctx, "server:status:changed", true)
 			}
 		}()
 	}
@@ -397,15 +395,24 @@ func (a *App) AddConfiguredLibrary(path string) error {
 	if err != nil {
 		return err
 	}
+	a.UpdateServerLibraries(a.GetConfiguredLibraries())
 	return nil
 }
 
 func (a *App) RemoveConfiguredLibrary(path string) error {
-	return a.manager.RemoveLibrary(path)
+	err := a.manager.RemoveLibrary(path)
+	if err == nil {
+		a.UpdateServerLibraries(a.GetConfiguredLibraries())
+	}
+	return err
 }
 
 func (a *App) ReorderConfiguredLibraries(paths []string) error {
-	return a.manager.SetLibraries(paths)
+	err := a.manager.SetLibraries(paths)
+	if err == nil {
+		a.UpdateServerLibraries(paths)
+	}
+	return err
 }
 
 // Server Methods
