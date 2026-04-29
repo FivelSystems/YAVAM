@@ -92,9 +92,7 @@ wails build
 4. Clone the repository and you're ready to go!
 ```powershell
 irm -useb get.scoop.sh | iex
-scoop install git
-scoop install go
-scoop install nodejs-lts
+scoop install git go nodejs-lts
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
 ```
 
