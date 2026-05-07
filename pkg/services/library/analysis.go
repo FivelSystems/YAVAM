@@ -8,91 +8,293 @@ import (
 	"yavam/pkg/models"
 )
 
-// ResolveConflictResult holds statistics about the resolution operation
-// Note: This struct is defined in models, but duplicated in manager.go originally. Used models one.
+// PackageAnalysis holds the analysis results for a single package from the Link Pass.
+// This struct is emitted as the "package:analyzed" event payload.
+type PackageAnalysis struct {
+	FilePath        string   `json:"filePath"`
+	MissingDeps     []string `json:"missingDeps"`
+	IsDuplicate     bool     `json:"isDuplicate"`     // Obsoleted by a newer version
+	IsExactDuplicate bool    `json:"isExactDuplicate"` // Identical copy (same version + size)
+	IsOrphan        bool     `json:"isOrphan"`        // Not referenced by any enabled package
+	ObsoletedBy     string   `json:"obsoletedBy,omitempty"`
+	ReferencedBy    []string `json:"referencedBy,omitempty"`
+}
 
-// CheckDependencies analyzes packages for missing dependencies
-func (s *defaultLibraryService) CheckDependencies(pkgs []models.VarPackage) []models.VarPackage {
-	// Build an index of available package IDs "Creator.Package.Version"
-	// And "Creator.Package" (latest)
-	available := make(map[string]bool)
-
-	for _, p := range pkgs {
-		// strict ID
-		id := fmt.Sprintf("%s.%s.%s", p.Meta.Creator, p.Meta.PackageName, p.Meta.Version)
-		available[strings.ToLower(id)] = true
-
-		// loose ID (just package existence)
-		baseId := fmt.Sprintf("%s.%s", p.Meta.Creator, p.Meta.PackageName)
-		available[strings.ToLower(baseId)] = true
+// LinkPass runs full dependency, duplicate and orphan analysis over all scanned packages.
+//
+// resolvers are tried in order for dependency resolution; the first one that resolves a dep wins.
+// Pass a LocalResolver as the first argument. Future callers may append a MultiLibraryResolver or
+// OnlineResolver — no changes to this function are needed.
+//
+// This function is intentionally pure: it takes a slice and returns analysis results without
+// mutating the input packages. The caller (scan_orchestrator) applies them back.
+func LinkPass(pkgs []models.VarPackage, resolvers ...DependencyResolver) []PackageAnalysis {
+	if len(pkgs) == 0 {
+		return nil
 	}
 
-	for i := range pkgs {
-		var missing []string
-		if pkgs[i].Meta.Dependencies != nil {
-			for depID := range pkgs[i].Meta.Dependencies {
-				// Dependency format in meta.json is "Creator.Package.Version" : "license/url"
-				// We check if "Creator.Package.Version" exists
-				// VaM also allows "latest" typically handled by game, but meta lists specific version.
+	// ── Build ID sets for dependency resolution ──────────────────────────────
+	// Collect all package IDs once; resolvers use these internally.
+	// (LocalResolver is already built — this step is for orphan/duplicate detection.)
 
-				depIDLower := strings.ToLower(depID)
+	// ── Group packages by "Creator.PackageName" for duplicate detection ──────
+	type group struct {
+		pkgs []models.VarPackage
+	}
+	groups := make(map[string]*group)
+	for _, p := range pkgs {
+		if p.IsCorrupt {
+			continue
+		}
+		key := strings.ToLower(p.Meta.Creator + "." + p.Meta.PackageName)
+		if _, ok := groups[key]; !ok {
+			groups[key] = &group{}
+		}
+		groups[key].pkgs = append(groups[key].pkgs, p)
+	}
 
-				// Check strict existence
-				if !available[depIDLower] {
-					// Check if any version of that package exists?
-					// Technically missing specific version might be fine if a newer one exists,
-					// but strictly it's missing.
-					// Let's check if the base package exists at least.
-					parts := strings.Split(depIDLower, ".")
-					if len(parts) >= 2 {
-						baseId := fmt.Sprintf("%s.%s", parts[0], parts[1])
-						if !available[baseId] {
-							missing = append(missing, depID)
-						}
-					} else {
-						missing = append(missing, depID)
+	obsoletePaths := make(map[string]string) // filePath → reason
+	redundantPaths := make(map[string]string)
+
+	compareVersions := func(v1, v2 string) int {
+		if v1 == v2 {
+			return 0
+		}
+		p1 := strings.Split(v1, ".")
+		p2 := strings.Split(v2, ".")
+		l := len(p1)
+		if len(p2) > l {
+			l = len(p2)
+		}
+		for i := 0; i < l; i++ {
+			var n1, n2 int
+			if i < len(p1) {
+				fmt.Sscanf(p1[i], "%d", &n1)
+			}
+			if i < len(p2) {
+				fmt.Sscanf(p2[i], "%d", &n2)
+			}
+			if n1 > n2 {
+				return 1
+			}
+			if n1 < n2 {
+				return -1
+			}
+		}
+		return 0
+	}
+
+	for _, g := range groups {
+		if len(g.pkgs) <= 1 {
+			continue
+		}
+		// Sort: enabled first, then descending version
+		sorted := make([]models.VarPackage, len(g.pkgs))
+		copy(sorted, g.pkgs)
+		for i := 0; i < len(sorted); i++ {
+			for j := i + 1; j < len(sorted); j++ {
+				a, b := sorted[i], sorted[j]
+				swap := false
+				if !a.IsEnabled && b.IsEnabled {
+					swap = true
+				} else if a.IsEnabled == b.IsEnabled {
+					if compareVersions(b.Meta.Version, a.Meta.Version) > 0 {
+						swap = true
 					}
+				}
+				if swap {
+					sorted[i], sorted[j] = sorted[j], sorted[i]
 				}
 			}
 		}
-		pkgs[i].MissingDeps = missing
+		head := sorted[0]
+		for _, other := range sorted[1:] {
+			cmp := compareVersions(other.Meta.Version, head.Meta.Version)
+			if cmp == 0 {
+				redundantPaths[other.FilePath] = fmt.Sprintf("Identical copy of %s", head.FilePath)
+			} else {
+				obsoletePaths[other.FilePath] = fmt.Sprintf("Obsoleted by v%s (%s)", head.Meta.Version, head.FileName)
+			}
+		}
+	}
+
+	// ── Exact duplicate detection (same version + same size) ─────────────────
+	exactKey := func(p models.VarPackage) string {
+		return strings.ToLower(fmt.Sprintf("%s.%s.%s|%d", p.Meta.Creator, p.Meta.PackageName, p.Meta.Version, p.Size))
+	}
+	exactCounts := make(map[string]int)
+	for _, p := range pkgs {
+		if !p.IsCorrupt {
+			exactCounts[exactKey(p)]++
+		}
+	}
+
+	// ── Orphan / reverse-dependency graph ────────────────────────────────────
+	// An orphan is an enabled, non-corrupt package that is not referenced by any
+	// other enabled package's dependency list.
+	reverseDeps := make(map[string][]string) // pkgID → [referencedBy IDs]
+	pkgIDSet := make(map[string]bool)
+	for _, p := range pkgs {
+		if p.IsCorrupt || p.Meta.Creator == "" {
+			continue
+		}
+		id := strings.ToLower(fmt.Sprintf("%s.%s.%s", p.Meta.Creator, p.Meta.PackageName, p.Meta.Version))
+		pkgIDSet[id] = true
+	}
+	for _, p := range pkgs {
+		if p.IsCorrupt || !p.IsEnabled {
+			continue
+		}
+		myID := strings.ToLower(fmt.Sprintf("%s.%s.%s", p.Meta.Creator, p.Meta.PackageName, p.Meta.Version))
+		for depID := range p.Meta.Dependencies {
+			dLower := strings.ToLower(depID)
+			reverseDeps[dLower] = append(reverseDeps[dLower], myID)
+		}
+	}
+	referenced := make(map[string]bool)
+	for depID := range reverseDeps {
+		referenced[depID] = true
+	}
+
+	// ── Assemble results ──────────────────────────────────────────────────────
+	results := make([]PackageAnalysis, 0, len(pkgs))
+
+	// Build a set of enabled base IDs for dependency resolution
+	enabledBase := make(map[string]bool)
+	for _, p := range pkgs {
+		if p.IsEnabled && !p.IsCorrupt && p.Meta.Creator != "" {
+			b := strings.ToLower(p.Meta.Creator + "." + p.Meta.PackageName)
+			enabledBase[b] = true
+		}
+	}
+
+	for _, p := range pkgs {
+		a := PackageAnalysis{FilePath: p.FilePath}
+
+		if ob, ok := obsoletePaths[p.FilePath]; ok {
+			a.IsDuplicate = true
+			a.ObsoletedBy = ob
+		}
+		if rd, ok := redundantPaths[p.FilePath]; ok {
+			a.IsExactDuplicate = true
+			if a.ObsoletedBy == "" {
+				a.ObsoletedBy = rd
+			}
+		}
+		if exactCounts[exactKey(p)] > 1 {
+			a.IsExactDuplicate = true
+			if a.ObsoletedBy == "" {
+				a.ObsoletedBy = "Identical copy exists in library"
+			}
+		}
+
+		// Missing dependency detection — uses supplied resolvers in order
+		if p.IsEnabled && !p.IsCorrupt && p.Meta.Dependencies != nil {
+			for depID := range p.Meta.Dependencies {
+				dLower := strings.ToLower(depID)
+
+				// Skip well-known built-in IDs
+				if dLower == "everlaster.core.latest" || strings.HasPrefix(dLower, "system.") {
+					continue
+				}
+
+				resolved := false
+				for _, r := range resolvers {
+					if r.ResolveExact(depID) || r.ResolveBase(depID) {
+						resolved = true
+						break
+					}
+					// .latest resolution
+					if strings.HasSuffix(dLower, ".latest") {
+						base := dLower[:len(dLower)-7]
+						if r.ResolveBase(base) {
+							resolved = true
+							break
+						}
+					}
+					// Recursive base lookup (handles multi-dot package names)
+					temp := dLower
+					for strings.Contains(temp, ".") {
+						last := strings.LastIndex(temp, ".")
+						temp = temp[:last]
+						if r.ResolveBase(temp) {
+							resolved = true
+							break
+						}
+					}
+					if resolved {
+						break
+					}
+				}
+
+				if !resolved {
+					a.MissingDeps = append(a.MissingDeps, depID)
+				}
+			}
+		}
+
+		// Orphan detection
+		if p.IsEnabled && !p.IsCorrupt && p.Meta.Creator != "" {
+			myID := strings.ToLower(fmt.Sprintf("%s.%s.%s", p.Meta.Creator, p.Meta.PackageName, p.Meta.Version))
+			if !referenced[myID] {
+				a.IsOrphan = true
+			}
+			if deps, ok := reverseDeps[myID]; ok {
+				a.ReferencedBy = deps
+			}
+		}
+
+		results = append(results, a)
+	}
+
+	return results
+}
+
+// ── Existing service methods (unchanged contract) ─────────────────────────────
+
+// CheckDependencies analyzes packages for missing dependencies.
+// This is preserved for backward compatibility; internally it now uses LinkPass.
+func (s *defaultLibraryService) CheckDependencies(pkgs []models.VarPackage) []models.VarPackage {
+	resolver := NewLocalResolver(pkgs)
+	analyses := LinkPass(pkgs, resolver)
+	byPath := make(map[string]PackageAnalysis, len(analyses))
+	for _, a := range analyses {
+		byPath[a.FilePath] = a
+	}
+	for i := range pkgs {
+		if a, ok := byPath[pkgs[i].FilePath]; ok {
+			pkgs[i].MissingDeps = a.MissingDeps
+		}
 	}
 	return pkgs
 }
 
 // ResolveConflicts handles deduplication and cleanup of conflicting packages
 func (s *defaultLibraryService) ResolveConflicts(keepPath string, others []string, libraryPath string) (*models.ResolveConflictResult, error) {
-	// 1. Get info of the file to keep
 	keepInfo, err := os.Stat(keepPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to stat keep file: %v", err)
 	}
 
 	result := &models.ResolveConflictResult{
-		Merged:   0,
+		Merged:  0,
 		Disabled: 0,
-		NewPath:  keepPath,
+		NewPath: keepPath,
 	}
 
-	// 2. Process conflicting files
 	for _, otherPath := range others {
 		if otherPath == keepPath {
 			continue
 		}
-
 		otherInfo, err := os.Stat(otherPath)
 		if os.IsNotExist(err) {
-			continue // Already gone
+			continue
 		}
-
-		// Merge Check: Exactly same size?
 		if otherInfo.Size() == keepInfo.Size() {
-			// MATCH! Deleting duplicate
 			if err := os.Remove(otherPath); err == nil {
 				result.Merged++
 			}
 		} else {
-			// MISMATCH! Disabling
 			if !strings.HasSuffix(otherPath, ".disabled") {
 				disabledPath := otherPath + ".disabled"
 				if err := os.Rename(otherPath, disabledPath); err == nil {
@@ -102,38 +304,22 @@ func (s *defaultLibraryService) ResolveConflicts(keepPath string, others []strin
 		}
 	}
 
-	// 3. Move 'keepPath' to Library Root (Standardization)
-	// Only if it's not already in the root
 	baseName := filepath.Base(keepPath)
 	targetPath := filepath.Join(libraryPath, baseName)
 
 	if filepath.Clean(keepPath) != filepath.Clean(targetPath) {
-		// Move it
-		// Check if target exists
 		if _, err := os.Stat(targetPath); err == nil {
-			// Target exists. Is it me?
 			if filepath.Clean(keepPath) != filepath.Clean(targetPath) {
-				// We have a collision at the destination.
-				// This implies we are merging FROM a subdirectory or sidecar TO the root.
-				// If we are here, we probably should have checked this earlier.
-				// But let's check size.
 				destInfo, _ := os.Stat(targetPath)
 				if destInfo.Size() == keepInfo.Size() {
-					// Dest is same. Delete source.
 					os.Remove(keepPath)
 					result.NewPath = targetPath
 					result.Merged++
 					return result, nil
 				}
-				// Dest is different.
-				// We should probably backup dest? Or rename source?
-				// Original logic was complex here. Let's assume we overwrite if we "Keep" this one?
-				// Or fail.
 				return result, fmt.Errorf("target file already exists and is different: %s", targetPath)
 			}
 		}
-
-		// Move
 		if err := os.Rename(keepPath, targetPath); err != nil {
 			return result, err
 		}

@@ -5,10 +5,12 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"yavam/pkg/models"
+	"yavam/pkg/parser"
 )
 
 // GetPackageContents scans a .var file and returns a list of its displayable contents
@@ -128,13 +130,44 @@ func (s *defaultLibraryService) GetPackageContents(pkgPath string) ([]models.Pac
 	return contents, nil
 }
 
+// GetThumbnail returns the cover thumbnail bytes for a package.
+// Strategy (cache-first to avoid zip opens):
+//  1. Check the thumbnail disk cache using (path + modTime + size) as key.
+//  2. On a cache hit: return immediately — no zip open needed.
+//  3. On a cache miss: open the zip, extract the thumbnail, cache it, return.
+//
+// This is called by the frontend's lazy-load IntersectionObserver path for packages
+// whose HasThumbnail == true. Because the Hard Pass caches thumbnails as it scans,
+// most requests will hit the cache. Only the very first request for a not-yet-scanned
+// package will incur a zip open.
 func (s *defaultLibraryService) GetThumbnail(pkgPath string) ([]byte, error) {
-	// Not implemented in Manager originally?
-	// It was embedded in `ScanAndAnalyze` or `GetPackageContents`.
-	// For API, we might want it separate.
-	// Implementing basic extraction of "thumb.jpg" or similar if needed.
-	// For now, returning error/empty conforming to interface.
-	return nil, fmt.Errorf("not implemented")
+	// 1. Cache hit
+	if s.thumbCache != nil {
+		info, err := os.Stat(pkgPath)
+		if err == nil {
+			if data, ok := s.thumbCache.Get(pkgPath, info.ModTime(), info.Size()); ok {
+				return data, nil
+			}
+		}
+	}
+
+	// 2. Cache miss — open zip and extract thumbnail
+	_, thumbBytes, _, err := parser.ParseVarMetadata(pkgPath)
+	if err != nil {
+		return nil, fmt.Errorf("thumbnail: parse failed: %w", err)
+	}
+	if len(thumbBytes) == 0 {
+		return nil, fmt.Errorf("thumbnail: not found in %s", pkgPath)
+	}
+
+	// 3. Cache for next time
+	if s.thumbCache != nil {
+		if info, err := os.Stat(pkgPath); err == nil {
+			_ = s.thumbCache.Set(pkgPath, info.ModTime(), info.Size(), thumbBytes)
+		}
+	}
+
+	return thumbBytes, nil
 }
 
 func (s *defaultLibraryService) GetCounts(libraries []string) map[string]int {

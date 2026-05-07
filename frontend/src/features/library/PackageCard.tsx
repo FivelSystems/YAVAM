@@ -4,6 +4,7 @@ import clsx from 'clsx';
 import { AlertCircle, Check, AlertTriangle, Power, Copy } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatBytes } from '../../utils/format';
+import PackageSkeleton from './components/PackageSkeleton';
 
 interface PackageCardProps {
     pkg: VarPackage;
@@ -23,29 +24,29 @@ interface PackageCardProps {
 const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, viewMode = 'grid', censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false, isHighlighted = false, startAnimationTs }: PackageCardProps) => {
     const cardRef = useRef<HTMLDivElement>(null);
 
-    // optimize: Do not store base64 in state if it comes from props (prevents duplication)
+    // ── All hooks must be declared unconditionally (Rules of Hooks) ───────────
+    // Do NOT add early returns before these declarations.
+
+    // Async thumbnail for web mode / desktop lazy-load
     const [asyncThumb, setAsyncThumb] = useState<string | undefined>(undefined);
+    const [isVisible, setIsVisible] = useState(false);
+
     const thumbSrc = pkg.thumbnailBase64
         ? `data:image/jpeg;base64,${pkg.thumbnailBase64}`
         : asyncThumb;
 
-    const [isVisible, setIsVisible] = useState(false);
-
     // Scroll Into View when Anchor
     useEffect(() => {
         if (isAnchor && cardRef.current) {
-            // Use subtle timeout to allow layout to settle if needed, or run immediately.
-            // 'nearest' ensures minimal scrolling just to get it in view.
             cardRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
     }, [isAnchor]);
 
-    const handleClick = (e: React.MouseEvent) => {
-        onSelect(pkg, e);
-    };
-
     // Lazy Loading Logic
     useEffect(() => {
+        // Skip for skeleton phase — the zip hasn't been opened yet
+        if (pkg.scanPhase === 'discovered') return;
+
         if (!window.go) {
             // Web Mode: Use API URL directly
             if (pkg.hasThumbnail && !pkg.thumbnailBase64) {
@@ -56,31 +57,55 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
         }
 
         // Desktop Mode: Intersection Observer
-        if (!pkg.hasThumbnail || thumbSrc) return; // Already have it or none exists
+        if (!pkg.hasThumbnail || thumbSrc) return;
 
         const observer = new IntersectionObserver(([entry]) => {
             if (entry.isIntersecting) {
                 setIsVisible(true);
-                observer.disconnect(); // Only need trigger once
+                observer.disconnect();
             }
         }, { rootMargin: '200px' });
 
         if (cardRef.current) observer.observe(cardRef.current);
-
         return () => observer.disconnect();
-    }, [pkg.filePath, pkg.hasThumbnail, thumbSrc]);
+    }, [pkg.filePath, pkg.hasThumbnail, pkg.scanPhase, thumbSrc]);
 
     useEffect(() => {
-        // Fetch for Desktop when visible
+        if (pkg.scanPhase === 'discovered') return;
         if (window.go && isVisible && pkg.hasThumbnail && !thumbSrc) {
             window.go.main.App.GetPackageThumbnail(pkg.filePath)
                 .then((b64: string) => {
                     if (b64) setAsyncThumb(`data:image/jpeg;base64,${b64}`);
                 })
-                .catch((e: any) => console.error("Thumb load failed:", e));
+                .catch((e: any) => console.error('Thumb load failed:', e));
         }
-    }, [isVisible, pkg.hasThumbnail, pkg.filePath, thumbSrc]);
+    }, [isVisible, pkg.hasThumbnail, pkg.filePath, pkg.scanPhase, thumbSrc]);
 
+    // ── Click handler ─────────────────────────────────────────────────────────
+    const handleClick = (e: React.MouseEvent) => {
+        // Bump this package to the front of the Hard Pass queue on any click.
+        if (pkg.scanPhase !== 'analyzed' && window.go) {
+            // @ts-ignore
+            window.go.main.App.PrioritizePackage(pkg.filePath).catch(() => {});
+        }
+        onSelect(pkg, e);
+    };
+
+    // ── Light Pass skeleton ───────────────────────────────────────────────────
+    // Render a placeholder until the Hard Pass has opened the zip.
+    // All hooks above have already run at this point — no Rules of Hooks violation.
+    if (pkg.scanPhase === 'discovered') {
+        return (
+            <div
+                ref={cardRef}
+                onClick={handleClick}
+                onContextMenu={(e) => onContextMenu(e, pkg)}
+                style={{ cursor: 'pointer' }}
+            >
+                <PackageSkeleton viewMode={viewMode} />
+            </div>
+        );
+    }
 
     // Visual State Logic
     let statusClass = "border-gray-700 opacity-60 grayscale";

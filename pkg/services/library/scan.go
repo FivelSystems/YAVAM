@@ -5,143 +5,138 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"yavam/pkg/cache"
 	"yavam/pkg/models"
-	"yavam/pkg/parser"
 )
 
-// Scan scans the directory and streams results via callbacks
+// activeScan holds state for the currently-running three-phase scan so that
+// SetCurrentPage / PrioritizePackage can inject priority bumps at any time.
+type activeScan struct {
+	mu          sync.Mutex
+	orchestrator *scanOrchestrator
+}
+
+// Scan runs the three-phase scan against rootPath, streaming results via callbacks.
+//
+// Callbacks:
+//   - onDiscovered  → called once per package during the Light Pass (no zip open)
+//   - onScanned     → called once per package when the Hard Pass finishes it
+//   - onAnalyzed    → called once per package when the Link Pass finishes
+//   - onStage       → called on every meaningful progress tick across all three phases
+//
+// The old onPackage / onProgress callbacks in the LibraryService interface are preserved
+// via the wrapper in service.go for callers that haven't migrated yet.
 func (s *defaultLibraryService) Scan(ctx context.Context, rootPath string, onPackage func(models.VarPackage), onProgress func(int, int)) error {
 	rawPkgs, err := s.scanner.ScanForPackages(rootPath)
 	if err != nil {
 		return err
 	}
 
-	total := len(rawPkgs)
-	processed := 0
-	var wg sync.WaitGroup
-	// Callback mutex to ensure sequential writes
-	var cbMu sync.Mutex
-
-	// Channels for tags/deduplication if needed?
-	// Manager filtered duplicate tags.
-	tagSet := make(map[string]bool)
-	var tagMu sync.Mutex
-
-	// Semaphore to limit concurrency
-	sem := make(chan struct{}, 20)
-
-	// Notify initial progress
-	if onProgress != nil {
-		onProgress(0, total)
-	}
-
-	for _, pkg := range rawPkgs {
-		// Check cancellation
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-
-		wg.Add(1)
-		go func(p models.VarPackage) {
-			defer wg.Done()
-
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-
-			sem <- struct{}{}        // Acquire
-			defer func() { <-sem }() // Release
-
-			// Double check cancellation after acquire
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-
-			meta, thumbBytes, categories, err := parser.ParseVarMetadata(p.FilePath)
-			if err == nil {
-				p.Meta = meta
-
-				// Sort Categories for stability and primary type selection
-				sortCategories(categories)
-				p.Categories = categories
-				if len(categories) > 0 {
-					p.Type = categories[0]
-				} else {
-					// No recognised content folders — use "Other" (matches VaM Hub taxonomy).
-					// "Unknown" is reserved for corrupt packages that could not be parsed.
-					p.Type = "Other"
-				}
-
-				p.Tags = meta.Tags
-				p.HasThumbnail = len(thumbBytes) > 0
-			} else {
-				p.Type = "Unknown"
-				p.IsCorrupt = true
-			}
-
-			// Fix empty fields from filename
-			ensureMetaFromFilename(&p)
-
-			// Normalize Tags
-			var normalizedTags []string
-			tagMu.Lock()
-			for _, t := range p.Tags {
-				lowerT := strings.ToLower(t)
-				normalizedTags = append(normalizedTags, lowerT)
-				tagSet[lowerT] = true
-			}
-			tagMu.Unlock()
-			p.Tags = normalizedTags
-
-			// TODO: Status Logic (Duplicate, Obsolete) - Requires global view?
-			// Manager.resolveDuplicates processed the WHOLE list *after* scan in GetPackages?
-			// Wait, ScanAndAnalyze streams individual packages.
-			// It does NOT return the full list.
-			// The Caller (App) accumulated them and then presumably called resolveDuplicates?
-			// Checking `pkg/manager/manager.go` around line 250...
-			// `resolveDuplicates` is a helper method.
-			// `App` calls `ScanAndAnalyze`.
-			// `App` in `GetFilters` used it.
-
-			// Wait, `resolveDuplicates` was NOT called inside `ScanAndAnalyze` in Manager.
-			// The UI/Frontend likely handled it or `App.go`?
-			// I need to check `App.go` or usage of `resolveDuplicates`.
-			// Searching checks... `Manager.resolveDuplicates` is unexported?
-			// If it's unexported and not called in `ScanAndAnalyze`, who calls it?
-			// Maybe `GetPackages`? (Which I might have missed or it was removed/renamed?)
-			// Ah, I see `checkDependencies` and `resolveDuplicates` in `manager.go`.
-			// Are they used?
-
-			// If the Service is responsible for "Status Logic", it should likely be a post-processing step
-			// or done on the fly if state is maintained.
-			// For now, implementing the pure Scan logic.
-
-			cbMu.Lock()
-			current := processed + 1
-			processed = current
-
+	orc := &scanOrchestrator{
+		thumbCache: s.thumbCache,
+		highCh:     make(chan string, 512),
+		bumpPaths:  make(chan []string, 64),
+		onDiscovered: func(p models.VarPackage) {},
+		onScanned: func(p models.VarPackage) {
 			if onPackage != nil {
 				onPackage(p)
 			}
-			if onProgress != nil {
-				if current%10 == 0 || current == total {
-					onProgress(current, total)
-				}
+		},
+		onAnalysisDone: func(_ []PackageAnalysis) {},
+		onStage: func(sp ScanStageProgress) {
+			if onProgress != nil && sp.Stage == StageScanning {
+				onProgress(sp.Current, sp.Total)
 			}
-			cbMu.Unlock()
-
-		}(pkg)
+		},
 	}
 
-	wg.Wait()
-	return nil
+	// Register as active scan so priority bumps can reach it.
+	s.active.mu.Lock()
+	s.active.orchestrator = orc
+	s.active.mu.Unlock()
+	defer func() {
+		s.active.mu.Lock()
+		s.active.orchestrator = nil
+		s.active.mu.Unlock()
+	}()
+
+	return orc.runThreePhase(ctx, rawPkgs)
 }
+
+// ScanFull is the three-phase scan entry point.
+func (s *defaultLibraryService) ScanFull(
+	ctx context.Context,
+	rootPath string,
+	onDiscovered func(models.VarPackage),
+	onScanned func(models.VarPackage),
+	onAnalysisDone func([]PackageAnalysis),
+	onStage func(ScanStageProgress),
+) error {
+	rawPkgs, err := s.scanner.ScanForPackages(rootPath)
+	if err != nil {
+		return err
+	}
+
+	orc := &scanOrchestrator{
+		thumbCache:     s.thumbCache,
+		highCh:         make(chan string, 512),
+		bumpPaths:      make(chan []string, 64),
+		onDiscovered:   onDiscovered,
+		onScanned:      onScanned,
+		onAnalysisDone: onAnalysisDone,
+		onStage:        onStage,
+	}
+
+	s.active.mu.Lock()
+	s.active.orchestrator = orc
+	s.active.mu.Unlock()
+	defer func() {
+		s.active.mu.Lock()
+		s.active.orchestrator = nil
+		s.active.mu.Unlock()
+	}()
+
+	return orc.runThreePhase(ctx, rawPkgs)
+}
+
+// Prioritize bumps the given paths to the front of the Hard Pass queue.
+// Safe to call at any time; no-op if no scan is running.
+func (s *defaultLibraryService) Prioritize(paths []string) {
+	s.active.mu.Lock()
+	orc := s.active.orchestrator
+	s.active.mu.Unlock()
+	if orc == nil || len(paths) == 0 {
+		return
+	}
+	select {
+	case orc.bumpPaths <- paths:
+	default:
+		// Channel full — drop; the package will be scanned in normal order.
+	}
+}
+
+// SetCurrentPage is a convenience wrapper that bumps the paths for the current page.
+func (s *defaultLibraryService) SetCurrentPage(paths []string) {
+	s.Prioritize(paths)
+}
+
+// ClearThumbnailCache removes all cached thumbnails.
+func (s *defaultLibraryService) ClearThumbnailCache() error {
+	if s.thumbCache == nil {
+		return nil
+	}
+	return s.thumbCache.Clear()
+}
+
+// ThumbnailCacheSize returns the total byte size of the thumbnail cache.
+func (s *defaultLibraryService) ThumbnailCacheSize() (int64, error) {
+	if s.thumbCache == nil {
+		return 0, nil
+	}
+	return s.thumbCache.Size()
+}
+
+// ── Category helpers (unchanged) ─────────────────────────────────────────────
 
 func sortCategories(categories []string) {
 	sort.Slice(categories, func(i, j int) bool {
@@ -157,7 +152,7 @@ func sortCategories(categories []string) {
 				return 3
 			case "Morph":
 				return 4
-			case "Plugin": // was "Script" — renamed to match VaM Hub taxonomy
+			case "Plugin":
 				return 5
 			case "Scene":
 				return 6
@@ -223,3 +218,10 @@ func ensureMetaFromFilename(p *models.VarPackage) {
 		}
 	}
 }
+
+// ── Thumbnail cache field injected into the service ───────────────────────────
+// (defined here to co-locate with scan logic; accessed from library.go)
+
+// defaultLibraryService extension — thumb cache and active scan state.
+// These fields are added to the struct in library.go.
+var _ = cache.ThumbnailCache{} // import guard

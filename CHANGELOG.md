@@ -6,6 +6,23 @@
 
 # Changelog
 
+## [1.3.17] - 2026-05-07
+
+### Added
+- **Scan Optimization (Issue #34)**: Replaced the monolithic up-front zip scan with a three-phase pipeline:
+  - **Light Pass**: Filesystem walk only — package cards appear as animated skeletons within seconds of opening a library. No `.var` files are opened in this phase.
+  - **Hard Pass**: Prioritized zip scan — packages on the current page are always processed first. Navigating to a new page or clicking an unscanned card immediately reprioritizes that work in the queue. Thumbnails appear as each package finishes.
+  - **Link Pass**: Dependency resolution, duplicate detection, and orphan analysis run after all packages are scanned. Results (missing deps, obsolete, duplicate flags) are streamed back per-package via a `package:analyzed` event.
+- **Thumbnail Cache**: Package cover images are now cached to `%AppData%/YAVAM/thumbnails/`. On subsequent library opens, thumbnails are served from cache, completely skipping the zip open for that step. Cache keys include file modification time and size, so updated packages invalidate automatically.
+- **Stacked Progress Bar**: The existing single progress bar is replaced with three stacked strips — one per scan phase (blue = Discovering, amber = Scanning, green = Analysing). Each strip shows its own package count and fills independently.
+- **Settings — Thumbnail Cache**: New "Thumbnail Cache" section in Application settings shows current cache size and provides a "Clear Cache" button.
+- **Extensible `DependencyResolver` interface** (`pkg/services/library/dependency_resolver.go`): The Link Pass accepts a slice of resolvers tried in order. `LocalResolver` (current library) is the default. Future `MultiLibraryResolver` and `OnlineResolver` implementations can be plugged in without changing the scan orchestrator.
+
+### Changed
+- **Search Bar**: Search no longer filters in real-time while typing. Results are applied on Enter (desktop) or the search button (mobile). This prevents the package grid from jumping mid-scan as the user types. Escape clears the search.
+- **Backend Analysis**: Dependency/duplicate/orphan analysis (`analyzePackages`) moved from the frontend to the Go backend (`LinkPass` in `pkg/services/library/analysis.go`). The frontend now listens for `package:analyzed` events instead of running a full graph traversal in the browser.
+- **Scan Events**: New `package:discovered` (Light Pass) and `package:analyzed` (Link Pass) events join the existing `package:scanned`. The `scan:progress` event is replaced by `scan:stage` which carries the active phase name, current count, total, and done flag.
+
 ## [1.3.16] - 2026-04-29
 
 ### Fixed
