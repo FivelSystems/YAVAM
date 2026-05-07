@@ -33,6 +33,12 @@ export const usePackages = (activeLibraryPath: string) => {
         if (scanAbortController.current) scanAbortController.current.abort();
         if (window.go) {
             await window.go.main.App.CancelScan();
+        } else {
+            // Await the cancel so the modal stays visible and the new scan does not
+            // start until the backend scan goroutine has actually stopped.
+            // Flow: abort() closes the connection → Go cancels r.Context() → scan context
+            // cancelled → runThreePhase returns → defer scanWg.Done() fires → Wait() unblocks.
+            await fetchWithAuth('/api/scan/cancel').catch(() => { /* non-fatal */ });
         }
         if (resetLoading) setLoading(false);
         setIsCancelling(false);
@@ -226,7 +232,12 @@ export const usePackages = (activeLibraryPath: string) => {
                 setLoading(false);
             }
         } else {
-            // Web (server) mode — SSE/REST fallback
+            // Web (server) mode — SSE/REST fallback.
+            // MUST await: this keeps scanPackages() suspended while the scan is running,
+            // matching the desktop behaviour (await ScanPackages()). This ensures that
+            // when the library changes and a new scanPackages() call runs cancelScan(),
+            // the previous invocation's event listeners have already been torn down and
+            // the server scan has completed before the new one starts.
             if (scanAbortController.current) scanAbortController.current.abort();
             const controller = new AbortController();
             scanAbortController.current = controller;
@@ -236,7 +247,10 @@ export const usePackages = (activeLibraryPath: string) => {
                     { signal: controller.signal }
                 );
             } catch (e: any) {
+                // AbortError = we cancelled on purpose; don't clear loading here since
+                // cancelScan() already handles state via resetLoading.
                 if (e.name !== 'AbortError') {
+                    setScanError(e.message || String(e));
                     setLoading(false);
                 }
             }
