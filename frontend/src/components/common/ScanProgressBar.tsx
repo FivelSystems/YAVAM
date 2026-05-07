@@ -9,9 +9,9 @@ interface ScanProgressBarProps {
 const PHASE_ORDER = ['discovery', 'scanning', 'analyzing'] as const;
 
 const PHASE_CONFIG = {
-    discovery: { label: 'Discovering Files', color: 'bg-blue-500',    glow: 'shadow-[0_0_8px_rgba(59,130,246,0.6)]',   text: 'text-blue-400' },
-    scanning:  { label: 'Extracting Data',   color: 'bg-amber-400',   glow: 'shadow-[0_0_8px_rgba(251,191,36,0.6)]',  text: 'text-amber-400' },
-    analyzing: { label: 'Linking Deps',      color: 'bg-emerald-500', glow: 'shadow-[0_0_8px_rgba(16,185,129,0.6)]', text: 'text-emerald-400' },
+    discovery: { label: 'Indexing', color: 'bg-blue-500', glow: 'shadow-[0_0_8px_rgba(59,130,246,0.6)]', text: 'text-blue-400' },
+    scanning: { label: 'Analyzing', color: 'bg-amber-400', glow: 'shadow-[0_0_8px_rgba(251,191,36,0.6)]', text: 'text-amber-400' },
+    analyzing: { label: 'Solving', color: 'bg-emerald-500', glow: 'shadow-[0_0_8px_rgba(16,185,129,0.6)]', text: 'text-emerald-400' },
 } as const;
 
 /** Returns the currently active scan phase. */
