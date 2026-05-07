@@ -149,7 +149,14 @@ export const useLibrary = () => {
                         const isValid = cfg.libraries.some((l: string) => l.toLowerCase() === current.toLowerCase());
 
                         if ((!current || !isValid) && cfg.libraries.length > 0) {
-                            selectLibrary(cfg.libraries[0]);
+                            const first = cfg.libraries[0];
+                            setActiveLibraryPath(first);
+                            setActiveLibIndex(0);
+                            localStorage.setItem("activeLibraryPath", first);
+                        } else if (isValid) {
+                            // Sync index if it was valid
+                            const idx = cfg.libraries.findIndex((l: string) => l.toLowerCase() === current.toLowerCase());
+                            if (idx !== -1) setActiveLibIndex(idx);
                         }
                     }
                 }
@@ -174,7 +181,13 @@ export const useLibrary = () => {
 
                             // If empty or invalid, select first available
                             if ((!current || !isValid) && data.libraries.length > 0) {
-                                selectLibrary(data.libraries[0]);
+                                const first = data.libraries[0];
+                                setActiveLibraryPath(first);
+                                setActiveLibIndex(0);
+                                localStorage.setItem("activeLibraryPath", first);
+                            } else if (isValid) {
+                                const idx = data.libraries.findIndex((l: string) => l.toLowerCase() === current.toLowerCase());
+                                if (idx !== -1) setActiveLibIndex(idx);
                             }
                         }
                     }

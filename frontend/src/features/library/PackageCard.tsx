@@ -4,7 +4,6 @@ import clsx from 'clsx';
 import { AlertCircle, Check, AlertTriangle, Power, Copy } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatBytes } from '../../utils/format';
-import PackageSkeleton from './components/PackageSkeleton';
 
 interface PackageCardProps {
     pkg: VarPackage;
@@ -91,21 +90,7 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
         onSelect(pkg, e);
     };
 
-    // ── Light Pass skeleton ───────────────────────────────────────────────────
-    // Render a placeholder until the Hard Pass has opened the zip.
-    // All hooks above have already run at this point — no Rules of Hooks violation.
-    if (pkg.scanPhase === 'discovered') {
-        return (
-            <div
-                ref={cardRef}
-                onClick={handleClick}
-                onContextMenu={(e) => onContextMenu(e, pkg)}
-                style={{ cursor: 'pointer' }}
-            >
-                <PackageSkeleton viewMode={viewMode} />
-            </div>
-        );
-    }
+
 
     // Visual State Logic
     let statusClass = "border-gray-700 opacity-60 grayscale";
@@ -187,6 +172,8 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
                         <div className={clsx("w-full h-full flex items-center justify-center border", pkg.isCorrupt ? "bg-red-900/40 border-red-500/30 text-red-500" : "text-gray-700 border-gray-700")}>
                             {pkg.isCorrupt ? (
                                 <span className="text-[10px] font-bold rotate-[-15deg]">ERROR</span>
+                            ) : pkg.scanPhase === 'discovered' ? (
+                                <div className="w-4 h-4 border-2 border-gray-600 border-t-gray-400 rounded-full animate-spin" />
                             ) : (
                                 <span className="text-[8px] font-bold">{pkg.hasThumbnail ? "..." : "NO IMG"}</span>
                             )}
@@ -254,6 +241,8 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
                             <div className="flex flex-col items-center justify-center text-red-500 font-bold opacity-80 rotate-[-15deg] border-4 border-red-500/50 p-2 rounded-xl">
                                 <span className="text-2xl tracking-widest">CORRUPT</span>
                             </div>
+                        ) : pkg.scanPhase === 'discovered' ? (
+                            <div className="w-10 h-10 border-4 border-gray-600 border-t-gray-400 rounded-full animate-spin" />
                         ) : (
                             <span className="text-4xl font-bold text-gray-700 select-none opacity-50">{pkg.hasThumbnail ? "..." : "VAR"}</span>
                         )}
