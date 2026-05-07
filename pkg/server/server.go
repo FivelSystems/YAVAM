@@ -16,6 +16,7 @@ import (
 	"yavam/pkg/models"
 	"yavam/pkg/services/auth"
 	"yavam/pkg/services/config"
+	"yavam/pkg/services/library"
 	"yavam/pkg/updater"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -415,17 +416,27 @@ func (s *Server) Start(port string, libraries []string) error {
 		defer s.scanWg.Done()
 
 		var pkgs []models.VarPackage
-		err := s.manager.ScanAndAnalyze(ctx, targetPath, func(p models.VarPackage) {
-			pkgs = append(pkgs, p)
-			// Broadcast package to web clients (incremental update)
-			s.Broadcast("package:scanned", p)
-		}, func(current, total int) {
-			// Broadcast progress to web clients
-			s.Broadcast("scan:progress", map[string]interface{}{
-				"current": current,
-				"total":   total,
-			})
-		})
+		err := s.manager.ScanFull(
+			ctx,
+			targetPath,
+			// Phase 1 — Light Pass: file discovered
+			func(pkg models.VarPackage) {
+				pkgs = append(pkgs, pkg)
+				s.Broadcast("package:discovered", pkg)
+			},
+			// Phase 2 — Hard Pass: full metadata
+			func(pkg models.VarPackage) {
+				s.Broadcast("package:scanned", pkg)
+			},
+			// Phase 3 — Link Pass: batch analysis
+			func(analyses []library.PackageAnalysis) {
+				s.Broadcast("scan:analysis:complete", analyses)
+			},
+			// Stage progress
+			func(sp library.ScanStageProgress) {
+				s.Broadcast("scan:stage", sp)
+			},
+		)
 		if err != nil {
 			s.Broadcast("scan:error", err.Error())
 			s.writeError(w, err.Error(), 500)
