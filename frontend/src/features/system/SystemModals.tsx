@@ -59,7 +59,8 @@ export const SystemModals: React.FC<SystemModalsProps> = ({
     // Consume Contexts
     const {
         serverEnabled, serverPort, localIP, serverLogs, publicAccess, authPollInterval,
-        toggleServer, togglePublicAccess, updateAuthPollInterval
+        toggleServer, togglePublicAccess, updateAuthPollInterval,
+        startServer, stopServer, setServerPort,
     } = useServerContext();
 
     // ServerContext misses setServerPort? Dashboard had internal logic but useServer manages it?
@@ -101,10 +102,7 @@ export const SystemModals: React.FC<SystemModalsProps> = ({
                 onToggleServer={toggleServer}
                 onTogglePublicAccess={togglePublicAccess}
                 setAuthPollInterval={updateAuthPollInterval}
-                // setServerPort? If context doesn't expose, we can't set. 
-                // SettingsDialog expects setServerPort probably. 
-                // Passing empty fn for now.
-                setServerPort={() => { }}
+                setServerPort={setServerPort}
 
                 // App Props
                 isGuest={isGuest}
@@ -118,12 +116,13 @@ export const SystemModals: React.FC<SystemModalsProps> = ({
                 maxToasts={maxToasts}
                 setMaxToasts={setMaxToasts}
 
-                // Actions
-                onStartServer={() => !serverEnabled && toggleServer()}
-                onStopServer={() => serverEnabled && toggleServer()}
+                // Actions — start/stop call the real backend RPCs (not the config toggle)
+                onStartServer={startServer}
+                onStopServer={stopServer}
                 handleClearData={handleClearData}
                 addToast={addToast}
             />
+
 
             {/* Upgrade Modal */}
             <UpgradeModal

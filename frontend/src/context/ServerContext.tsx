@@ -24,6 +24,8 @@ interface ServerContextType {
     toggleServer: () => Promise<void>;
     togglePublicAccess: () => Promise<void>;
     updateAuthPollInterval: (val: number) => Promise<void>;
+    startServer: () => Promise<void>;
+    stopServer: () => Promise<void>;
 }
 
 const ServerContext = createContext<ServerContextType | undefined>(undefined);
@@ -42,7 +44,9 @@ export const ServerProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         ...serverLogic,
         toggleServer: () => serverLogic.toggleServer(addToast),
         togglePublicAccess: () => serverLogic.togglePublicAccess(addToast),
-        updateAuthPollInterval: (val: number) => serverLogic.updateAuthPollInterval(val, addToast)
+        updateAuthPollInterval: (val: number) => serverLogic.updateAuthPollInterval(val, addToast),
+        startServer: () => serverLogic.startServer(addToast),
+        stopServer: () => serverLogic.stopServer(addToast),
     };
 
     return (

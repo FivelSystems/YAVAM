@@ -26,9 +26,6 @@ export const useServer = () => {
                     setServerPort(cfg.serverPort);
                     setPublicAccess(cfg.publicAccess);
                     setAuthPollInterval(cfg.authPollInterval);
-                    // LocalIP is usually fetched separately via GetLocalIP but context initialized it to "Loading..."
-                    // Let's grab IP too if possible or separate call? 
-                    // Dashboard used to call GetLocalIP() separately. Let's add that too.
                     // @ts-ignore
                     window.go.main.App.GetLocalIP().then((ip: string) => setLocalIP(ip));
                 }
@@ -38,6 +35,10 @@ export const useServer = () => {
 
     // -- Actions --
 
+    /**
+     * Toggles the "Run on Startup" config flag.
+     * This only persists the preference; it does NOT start/stop the live server process.
+     */
     const toggleServer = async (addToast: (msg: string, type: ToastType) => void) => {
         if (isTogglingServer) return;
         setIsTogglingServer(true);
@@ -53,6 +54,41 @@ export const useServer = () => {
                 addToast("Failed to toggle server: " + e, 'error');
             } finally {
                 setIsTogglingServer(false);
+            }
+        }
+    };
+
+    /**
+     * Starts the live HTTP server process immediately.
+     * This is separate from the "Run on Startup" preference.
+     */
+    const startServer = async (addToast: (msg: string, type: ToastType) => void) => {
+        // @ts-ignore
+        if (window.go?.main?.App) {
+            try {
+                // @ts-ignore
+                await window.go.main.App.StartServer();
+                // Backend emits "server:status:changed" → NetworkTab polls IsServerRunning()
+                addToast('Server started', 'success');
+            } catch (e: any) {
+                addToast('Failed to start server: ' + e, 'error');
+            }
+        }
+    };
+
+    /**
+     * Stops the live HTTP server process immediately.
+     * This is separate from the "Run on Startup" preference.
+     */
+    const stopServer = async (addToast: (msg: string, type: ToastType) => void) => {
+        // @ts-ignore
+        if (window.go?.main?.App) {
+            try {
+                // @ts-ignore
+                await window.go.main.App.StopServer();
+                addToast('Server stopped', 'info');
+            } catch (e: any) {
+                addToast('Failed to stop server: ' + e, 'error');
             }
         }
     };
@@ -112,7 +148,9 @@ export const useServer = () => {
 
         // Actions
         toggleServer,
+        startServer,
+        stopServer,
         togglePublicAccess,
-        updateAuthPollInterval
+        updateAuthPollInterval,
     };
 };
