@@ -18,6 +18,8 @@ export function CheckForUpdates():Promise<updater.UpdateInfo>;
 
 export function ClearAppData():Promise<void>;
 
+export function ClearThumbnailCache():Promise<void>;
+
 export function CopyFileToClipboard(arg1:string):Promise<void>;
 
 export function CopyPackagesToLibrary(arg1:Array<string>,arg2:string,arg3:boolean):Promise<Array<string>>;
@@ -56,6 +58,8 @@ export function GetPackageContents(arg1:string):Promise<Array<models.PackageCont
 
 export function GetPackageThumbnail(arg1:string):Promise<string>;
 
+export function GetThumbnailCacheSize():Promise<number>;
+
 export function GetUserDownloadsDir():Promise<string>;
 
 export function Greet(arg1:string):Promise<string>;
@@ -78,6 +82,8 @@ export function OpenAppDataFolder():Promise<void>;
 
 export function OpenFolderInExplorer(arg1:string):Promise<void>;
 
+export function PrioritizePackage(arg1:string):Promise<void>;
+
 export function RemoveConfiguredLibrary(arg1:string):Promise<void>;
 
 export function ReorderConfiguredLibraries(arg1:Array<string>):Promise<void>;
@@ -97,6 +103,8 @@ export function SelectDirectory():Promise<string>;
 export function SetAlwaysOnTop(arg1:boolean):Promise<void>;
 
 export function SetAuthPollInterval(arg1:number):Promise<void>;
+
+export function SetCurrentPage(arg1:Array<string>):Promise<void>;
 
 export function SetGridSize(arg1:number):Promise<void>;
 

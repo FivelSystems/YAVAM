@@ -54,6 +54,19 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setCurrentPage(1);
     }, [filterLogic.currentFilter, filterLogic.searchQuery, filterLogic.selectedTags, filterLogic.selectedCreator, filterLogic.selectedType]);
 
+    // Notify the backend Hard Pass about the current page so it gets priority.
+    const { prioritizePackages } = usePackageContext();
+    React.useEffect(() => {
+        if (filterLogic.filteredPkgs.length === 0) return;
+        const start = (currentPage - 1) * itemsPerPage;
+        const pagePaths = filterLogic.filteredPkgs
+            .slice(start, start + itemsPerPage)
+            .map(p => p.filePath);
+        if (pagePaths.length > 0) {
+            prioritizePackages(pagePaths);
+        }
+    }, [currentPage, itemsPerPage, filterLogic.filteredPkgs, prioritizePackages]);
+
 
     // Keybind: Focus Search
     useKeybindSubscription('focus_search', (e) => {

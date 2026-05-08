@@ -15,6 +15,7 @@ import (
 	"yavam/pkg/models"
 	"yavam/pkg/services/auth"
 	"yavam/pkg/services/config"
+	"yavam/pkg/services/library"
 	"yavam/pkg/updater"
 	"yavam/pkg/utils"
 
@@ -277,18 +278,38 @@ func (a *App) CancelScan() {
 	a.scanWg.Wait()
 }
 
+// SetCurrentPage tells the Hard Pass to prioritise the packages on the user's current page.
+// Call this on every page navigation with the file paths currently visible on screen.
+func (a *App) SetCurrentPage(paths []string) {
+	a.manager.SetCurrentPage(paths)
+}
+
+// PrioritizePackage bumps a single package to the front of the Hard Pass queue.
+// Call this when the user clicks a package card before it has finished scanning.
+func (a *App) PrioritizePackage(path string) {
+	a.manager.Prioritize([]string{path})
+}
+
+// ClearThumbnailCache deletes all cached package cover images.
+func (a *App) ClearThumbnailCache() error {
+	return a.manager.ClearThumbnailCache()
+}
+
+// GetThumbnailCacheSize returns the total size of the thumbnail cache in bytes.
+func (a *App) GetThumbnailCacheSize() (int64, error) {
+	return a.manager.ThumbnailCacheSize()
+}
+
 // ScanPackages triggers the scan process
 func (a *App) ScanPackages(vamPath string) error {
 	if vamPath == "" || vamPath == "." {
-		// Nothing to scan
 		return nil
 	}
 
-	// Cancel previous scan and wait
+	// Cancel any previous scan and wait for it to finish.
 	a.CancelScan()
 
 	a.scanMu.Lock()
-	// Create new context wrapped around app context
 	ctx, cancel := context.WithCancel(a.ctx)
 	a.scanCancel = cancel
 	a.scanMu.Unlock()
@@ -298,17 +319,32 @@ func (a *App) ScanPackages(vamPath string) error {
 		defer a.scanWg.Done()
 		defer cancel()
 
-		err := a.manager.ScanAndAnalyze(ctx, vamPath, func(pkg models.VarPackage) {
-			runtime.EventsEmit(a.ctx, "package:scanned", pkg)
-		}, func(current, total int) {
-			runtime.EventsEmit(a.ctx, "scan:progress", map[string]int{"current": current, "total": total})
-		})
+		err := a.manager.ScanFull(
+			ctx,
+			vamPath,
+			// Phase 1 — Light Pass: file discovered, no zip open yet
+			func(pkg models.VarPackage) {
+				runtime.EventsEmit(a.ctx, "package:discovered", pkg)
+			},
+			// Phase 2 — Hard Pass: full metadata (no thumbnail bytes — lazy-loaded from cache)
+			func(pkg models.VarPackage) {
+				runtime.EventsEmit(a.ctx, "package:scanned", pkg)
+			},
+			// Phase 3 — Link Pass: ALL analysis results in ONE batch event.
+			// This replaces N individual "package:analyzed" events which caused
+			// N × O(N) React state updates (O(N²) total) → freeze on large libraries.
+			func(analyses []library.PackageAnalysis) {
+				runtime.EventsEmit(a.ctx, "scan:analysis:complete", analyses)
+			},
+			// Stage progress: emitted across all three phases
+			func(sp library.ScanStageProgress) {
+				runtime.EventsEmit(a.ctx, "scan:stage", sp)
+			},
+		)
 
-		if err != nil {
-			if err != context.Canceled {
-				runtime.EventsEmit(a.ctx, "scan:error", err.Error())
-			}
-		} else {
+		if err != nil && err != context.Canceled {
+			runtime.EventsEmit(a.ctx, "scan:error", err.Error())
+		} else if err == nil {
 			runtime.EventsEmit(a.ctx, "scan:complete", true)
 		}
 	}()

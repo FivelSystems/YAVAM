@@ -68,10 +68,34 @@ func NewManager(sys system.SystemService, lib library.LibraryService, cfg config
 	return m
 }
 
-// ScanAndAnalyze delegates to LibraryService
+// ScanAndAnalyze delegates to LibraryService (legacy)
 func (m *Manager) ScanAndAnalyze(ctx context.Context, rootPath string, onPackage func(models.VarPackage), onProgress func(int, int)) error {
 	return m.library.Scan(ctx, rootPath, onPackage, onProgress)
 }
+
+// ScanFull runs the three-phase scan and delegates to LibraryService.
+func (m *Manager) ScanFull(
+	ctx context.Context,
+	rootPath string,
+	onDiscovered func(models.VarPackage),
+	onScanned func(models.VarPackage),
+	onAnalysisDone func([]library.PackageAnalysis),
+	onStage func(library.ScanStageProgress),
+) error {
+	return m.library.ScanFull(ctx, rootPath, onDiscovered, onScanned, onAnalysisDone, onStage)
+}
+
+// Prioritize bumps the given paths to the front of the Hard Pass queue.
+func (m *Manager) Prioritize(paths []string) { m.library.Prioritize(paths) }
+
+// SetCurrentPage notifies the scan engine that the given paths are on the current page.
+func (m *Manager) SetCurrentPage(paths []string) { m.library.SetCurrentPage(paths) }
+
+// ClearThumbnailCache removes all cached thumbnail files.
+func (m *Manager) ClearThumbnailCache() error { return m.library.ClearThumbnailCache() }
+
+// ThumbnailCacheSize returns the total byte size of the thumbnail cache.
+func (m *Manager) ThumbnailCacheSize() (int64, error) { return m.library.ThumbnailCacheSize() }
 
 // GetPackageContents delegates to LibraryService
 func (m *Manager) GetPackageContents(pkgPath string) ([]models.PackageContent, error) {

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect } from 'react';
 import { usePackages } from '../hooks/usePackages';
 import { useLibraryContext } from './LibraryContext';
 import { useKeybindSubscription } from './KeybindContext';
-import { VarPackage } from '../types';
+import { VarPackage, ScanStages } from '../types';
 
 interface PackageContextType {
     packages: VarPackage[];
@@ -14,13 +14,24 @@ interface PackageContextType {
     loading: boolean;
     setLoading: (loading: boolean) => void;
     scanError: string | null;
+
+    /** Per-phase progress for the stacked progress bar. */
+    scanStages: ScanStages;
+    setScanStages: (stages: ScanStages) => void;
+
+    /** Legacy alias (scanning phase only) — kept for any component still reading scanProgress. */
     scanProgress: { current: number; total: number };
-    setScanProgress: (progress: { current: number; total: number }) => void;
+
     scanPackages: () => Promise<void>;
     cancelScan: (options?: { resetLoading?: boolean }) => Promise<void>;
-    creatorStatus: Record<string, "normal" | "warning" | "error">;
-    typeStatus: Record<string, "normal" | "warning" | "error">;
-    analyzePackages: (pkgs: VarPackage[]) => VarPackage[]; // Helper exposed?
+
+    /** Bumps the given paths to the front of the Hard Pass queue. */
+    prioritizePackages: (paths: string[]) => void;
+    /** Bumps a single package to the front of the Hard Pass queue. */
+    prioritizePackage: (path: string) => void;
+
+    creatorStatus: Record<string, 'normal' | 'warning' | 'error'>;
+    typeStatus: Record<string, 'normal' | 'warning' | 'error'>;
     isCancelling: boolean;
 }
 
@@ -32,23 +43,17 @@ export const PackageProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     // Keybind: Refresh
     useKeybindSubscription('refresh', () => {
-        if (!packageLogic.loading) { // Reverted to packageLogic.loading to maintain syntactic correctness
+        if (!packageLogic.loading) {
             packageLogic.scanPackages();
         }
-    }, [packageLogic.scanPackages, packageLogic.loading]); // Added packageLogic.loading to dependencies
+    }, [packageLogic.scanPackages, packageLogic.loading]);
 
-    // Auto-scan when library changes?
-    // Dashboard had this logic:
-    // useEffect(() => { if (activeLibraryPath) handleScan(false); }, [activeLibraryPath]);
-    // The hook usePackages itself doesn't auto-scan on path change, it just updates internal ref/state.
-    // Dashboard useEffect triggered the scan. We should do it here.
-
+    // Auto-scan when library changes
     useEffect(() => {
         if (activeLibraryPath) {
             packageLogic.scanPackages();
         }
     }, [activeLibraryPath]);
-
 
     return (
         <PackageContext.Provider value={packageLogic}>
@@ -59,6 +64,6 @@ export const PackageProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
 export const usePackageContext = () => {
     const context = useContext(PackageContext);
-    if (!context) throw new Error("usePackageContext must be used within PackageProvider");
+    if (!context) throw new Error('usePackageContext must be used within PackageProvider');
     return context;
 };
