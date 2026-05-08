@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useKeybindSubscription } from '../context/KeybindContext';
 
 export interface PrivacySettings {
@@ -13,7 +13,8 @@ export interface PrivacySettings {
 }
 
 export const usePrivacySettings = (): PrivacySettings => {
-    // -- State Initialization (Lazy Load from localStorage) --
+    // localStorage is a fast, synchronous cache that prevents the settings
+    // from appearing as "off" during the async backend config load.
     const [censorThumbnails, setCensorThumbnails] = useState(() => {
         return localStorage.getItem('privacy_censorThumbnails') === 'true';
     });
@@ -28,28 +29,55 @@ export const usePrivacySettings = (): PrivacySettings => {
         return localStorage.getItem('privacy_hideCreatorNames') === 'true';
     });
 
-    // -- Persistence Effects --
+    // Guards the persistence effect from firing before the backend config is
+    // loaded. Without this, the effect fires on mount with stale localStorage
+    // defaults and overwrites config.json before we've even read it.
+    const configLoadedRef = useRef(false);
+
+    // -- Backend Sync on Mount (Source of Truth) --
+    // MUST be defined BEFORE the persistence effect so React runs it first.
     useEffect(() => {
+        // @ts-ignore
+        if (window.go?.main?.App?.GetConfig) {
+            // @ts-ignore
+            window.go.main.App.GetConfig().then((cfg: any) => {
+                // config.json is the authoritative source; override localStorage defaults.
+                const censor = cfg.censorThumbnails ?? cfg.privacyMode ?? false;
+                setCensorThumbnails(censor);
+                if (cfg.blurAmount !== undefined) setBlurAmount(cfg.blurAmount);
+                if (cfg.hidePackageNames !== undefined) setHidePackageNames(cfg.hidePackageNames);
+                if (cfg.hideCreatorNames !== undefined) setHideCreatorNames(cfg.hideCreatorNames);
+            }).catch(() => {}).finally(() => {
+                // Allow the persistence effect to save future user-triggered changes.
+                configLoadedRef.current = true;
+            });
+        } else {
+            // Web mode — localStorage is the only source.
+            configLoadedRef.current = true;
+        }
+    }, []);
+
+    // -- Persistence (fires when user changes a setting) --
+    useEffect(() => {
+        // Skip the on-mount fire that happens before the backend config is loaded.
+        // This prevents stale localStorage values from overwriting config.json.
+        if (!configLoadedRef.current) return;
+
         localStorage.setItem('privacy_censorThumbnails', String(censorThumbnails));
-    }, [censorThumbnails]);
-
-    useEffect(() => {
         localStorage.setItem('privacy_blurAmount', String(blurAmount));
-    }, [blurAmount]);
-
-    useEffect(() => {
         localStorage.setItem('privacy_hidePackageNames', String(hidePackageNames));
-    }, [hidePackageNames]);
-
-    useEffect(() => {
         localStorage.setItem('privacy_hideCreatorNames', String(hideCreatorNames));
-    }, [hideCreatorNames]);
+
+        // @ts-ignore
+        if (window.go?.main?.App?.SetPrivacyOptions) {
+            // @ts-ignore
+            window.go.main.App.SetPrivacyOptions(censorThumbnails, blurAmount, hidePackageNames, hideCreatorNames)
+                .catch(() => {});
+        }
+    }, [censorThumbnails, blurAmount, hidePackageNames, hideCreatorNames]);
 
     // -- Keybinds --
     useKeybindSubscription('toggle_privacy', () => {
-        // Toggle all privacy settings? Or just a specific one? 
-        // Usually toggles "Hide Everything" or reverts. 
-        // Let's assume it flips Censor Thumbnails for now as primary.
         setCensorThumbnails(prev => !prev);
     }, [setCensorThumbnails]);
 
