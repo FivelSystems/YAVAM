@@ -17,7 +17,7 @@ I personally have a dying hard drive with thousands of files, it's VERY slow and
 - **Privacy Settings**: Resolved a race condition where privacy mode and blur settings were not applying properly upon application launch.
 - **Network Settings**: Improved server initialization logic. The "Start Server" button now correctly triggers the server process independently instead of incorrectly manipulating the "Run on Startup" preference toggle.
 ### Added
-- **Scan Optimization (Issue [#34](https://github.com/FivelSystems/YAVAM/issues/34))**: Replaced the monolithic up-front zip scan with a three-phase pipeline:
+- **Scan Optimization (Issue #34)**: Replaced the monolithic up-front zip scan with a three-phase pipeline:
   - **Light Pass**: Filesystem walk only — package cards appear as animated skeletons within seconds of opening a library. No `.var` files are opened in this phase.
   - **Hard Pass**: Prioritized zip scan — packages on the current page are always processed first. Navigating to a new page or clicking an unscanned card immediately reprioritizes that work in the queue. Thumbnails appear as each package finishes.
   - **Link Pass**: Dependency resolution, duplicate detection, and orphan analysis run after all packages are scanned. Results (missing deps, obsolete, duplicate flags) are streamed back per-package via a `package:analyzed` event.
