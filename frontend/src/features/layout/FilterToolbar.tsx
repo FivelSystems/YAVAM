@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { clsx } from 'clsx';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -32,8 +32,15 @@ export const FilterToolbar: React.FC<FilterToolbarProps> = ({
         filteredPkgs
     } = useFilterContext();
 
-    // PackageContext provides availableTags and loading status
-    const { loading, scanProgress, scanPackages, cancelScan, availableTags } = usePackageContext();
+    // PackageContext provides scanStages (three-phase) and loading state
+    const { loading, scanStages, scanPackages, cancelScan, availableTags } = usePackageContext();
+
+    // Pending search — committed only on Enter or button press (prevents live re-filter mid-scan)
+    const [pendingSearch, setPendingSearch] = useState(searchQuery);
+
+    const handleSearchSubmit = () => {
+        setSearchQuery(pendingSearch);
+    };
 
     const sortOptions = [
         { id: 'name-asc', label: 'Name (A-Z)', icon: <ArrowUpAZ size={14} /> },
@@ -67,17 +74,42 @@ export const FilterToolbar: React.FC<FilterToolbarProps> = ({
                         <PanelLeft size={20} />
                     </button>
 
-                    <div className="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-lg w-full md:max-w-md">
+                    {/* Search form — submit-only to prevent live filter thrashing mid-scan */}
+                    <form
+                        onSubmit={(e) => { e.preventDefault(); handleSearchSubmit(); }}
+                        className="flex items-center gap-1 bg-gray-700 px-3 py-2 rounded-lg w-full md:max-w-md"
+                    >
                         <Search size={18} className="text-gray-400 shrink-0" />
                         <input
+                            id="search-input"
                             ref={inputRef}
                             className="bg-transparent outline-none w-full text-sm placeholder-gray-500 text-gray-200"
-                            placeholder="Search packages..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Search packages… (Enter to apply)"
+                            value={pendingSearch}
+                            onChange={(e) => setPendingSearch(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Escape') { setPendingSearch(''); setSearchQuery(''); } }}
                         />
+                        {/* Submit button (visible on mobile, hidden on desktop — desktop uses Enter) */}
+                        <button
+                            type="submit"
+                            className="md:hidden p-1 rounded text-gray-400 hover:text-white hover:bg-gray-600 transition-colors shrink-0"
+                            title="Search"
+                        >
+                            <Search size={15} />
+                        </button>
 
-                        {/* Desktop: Sorting Dropdown inside Search Bar (Hidden on Mobile) */}
+                        {pendingSearch && (
+                            <button
+                                type="button"
+                                onClick={() => { setPendingSearch(''); setSearchQuery(''); }}
+                                className="p-1 rounded text-gray-500 hover:text-white transition-colors shrink-0"
+                                title="Clear search"
+                            >
+                                <X size={14} />
+                            </button>
+                        )}
+
+                        {/* Desktop sort dropdown inside search bar */}
                         <div className="hidden md:block relative shrink-0">
                             <button
                                 onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
@@ -126,7 +158,7 @@ export const FilterToolbar: React.FC<FilterToolbarProps> = ({
                                 />
                             )}
                         </div>
-                    </div>
+                    </form>
                 </div>
 
                 {/* Right Group: Actions */}
@@ -241,10 +273,10 @@ export const FilterToolbar: React.FC<FilterToolbarProps> = ({
                         {loading ? (
                             <>
                                 <div className="md:hidden">
-                                    <ScanProgressBar current={scanProgress.current} total={scanProgress.total} variant="circular" />
+                                    <ScanProgressBar stages={scanStages} variant="circular" />
                                 </div>
                                 <div className="hidden md:block">
-                                    <ScanProgressBar current={scanProgress.current} total={scanProgress.total} variant="linear" />
+                                    <ScanProgressBar stages={scanStages} variant="linear" />
                                 </div>
                             </>
                         ) : (

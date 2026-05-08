@@ -26,6 +26,10 @@ export function ClearAppData() {
   return window['go']['main']['App']['ClearAppData']();
 }
 
+export function ClearThumbnailCache() {
+  return window['go']['main']['App']['ClearThumbnailCache']();
+}
+
 export function CopyFileToClipboard(arg1) {
   return window['go']['main']['App']['CopyFileToClipboard'](arg1);
 }
@@ -102,6 +106,10 @@ export function GetPackageThumbnail(arg1) {
   return window['go']['main']['App']['GetPackageThumbnail'](arg1);
 }
 
+export function GetThumbnailCacheSize() {
+  return window['go']['main']['App']['GetThumbnailCacheSize']();
+}
+
 export function GetUserDownloadsDir() {
   return window['go']['main']['App']['GetUserDownloadsDir']();
 }
@@ -146,6 +154,10 @@ export function OpenFolderInExplorer(arg1) {
   return window['go']['main']['App']['OpenFolderInExplorer'](arg1);
 }
 
+export function PrioritizePackage(arg1) {
+  return window['go']['main']['App']['PrioritizePackage'](arg1);
+}
+
 export function RemoveConfiguredLibrary(arg1) {
   return window['go']['main']['App']['RemoveConfiguredLibrary'](arg1);
 }
@@ -184,6 +196,10 @@ export function SetAlwaysOnTop(arg1) {
 
 export function SetAuthPollInterval(arg1) {
   return window['go']['main']['App']['SetAuthPollInterval'](arg1);
+}
+
+export function SetCurrentPage(arg1) {
+  return window['go']['main']['App']['SetCurrentPage'](arg1);
 }
 
 export function SetGridSize(arg1) {

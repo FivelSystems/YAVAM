@@ -41,8 +41,8 @@ const ActionContext = createContext<ActionContextType | undefined>(undefined);
 
 export const ActionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const {
-        packages, analyzePackages, setPackages, setLoading,
-        scanPackages, setScanProgress
+        packages, setPackages, setLoading,
+        scanPackages
     } = usePackageContext();
     const { selectedIds, setSelectedIds, setSelectedPackage, selectedPackage } = useSelectionContext();
     const { activeLibraryPath } = useLibraryContext();
@@ -57,9 +57,9 @@ export const ActionProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setSelectedIds,
         setSelectedPackage,
         addToast,
-        analyzePackages,
+        undefined, // analyzePackages removed — analysis now done in backend Link Pass
         setLoading,
-        setScanProgress
+        undefined  // setScanProgress removed — progress now driven by scan:stage events
     );
 
 
