@@ -6,7 +6,7 @@
 
 # Changelog
 
-## [1.3.17] - 2026-05-07
+## [1.3.17] - 2026-05-08
 This update aims to be friendlier towards slow hard drives by splitting the scan into 3 distinct phases, improving the initial loading time and allowing the user to interact with the application while the scan is in progress.
 
 I personally have a dying hard drive with thousands of files, it's VERY slow and having to wait for a full scan to complete before being able to do anything is a pain. 
@@ -14,6 +14,8 @@ I personally have a dying hard drive with thousands of files, it's VERY slow and
 ### Fixed
 - **Library Switching**: Clean stop between library selections now works properly even in web clients.
 - **Library Switching**: Packages from previous libraries will no longer appear after switching libraries from an unfinished scan process.
+- **Privacy Settings**: Resolved a race condition where privacy mode and blur settings were not applying properly upon application launch.
+- **Network Settings**: Improved server initialization logic. The "Start Server" button now correctly triggers the server process independently instead of incorrectly manipulating the "Run on Startup" preference toggle.
 ### Added
 - **Scan Optimization (Issue [#34](https://github.com/FivelSystems/YAVAM/issues/34))**: Replaced the monolithic up-front zip scan with a three-phase pipeline:
   - **Light Pass**: Filesystem walk only — package cards appear as animated skeletons within seconds of opening a library. No `.var` files are opened in this phase.
