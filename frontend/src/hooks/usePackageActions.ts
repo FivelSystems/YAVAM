@@ -12,9 +12,9 @@ export const usePackageActions = (
     setSelectedIds: (ids: Set<string>) => void,
     setSelectedPackage: (p: VarPackage | null) => void,
     addToast: (msg: string, type: 'info' | 'success' | 'warning' | 'error' | 'default') => void,
-    analyzePackages: (pkgs: VarPackage[]) => VarPackage[],
-    setLoading: (loading: boolean) => void,
-    setScanProgress: (progress: { current: number; total: number }) => void
+    analyzePackages?: (pkgs: VarPackage[]) => VarPackage[],
+    setLoading?: (loading: boolean) => void,
+    setScanProgress?: (progress: { current: number; total: number }) => void
 ) => {
     // -- Local State for Modals --
     const [installModal, setInstallModal] = useState<{ open: boolean; pkgs: VarPackage[] }>({ open: false, pkgs: [] });
@@ -49,7 +49,7 @@ export const usePackageActions = (
     // -- Core Actions --
 
     const recalculateDuplicates = useCallback((currentPkgs: VarPackage[]): VarPackage[] => {
-        return analyzePackages(currentPkgs);
+        return analyzePackages ? analyzePackages(currentPkgs) : currentPkgs;
     }, [analyzePackages]);
 
     const togglePackage = useCallback(async (pkg: VarPackage, merge = false, silent = false) => {
@@ -284,18 +284,18 @@ export const usePackageActions = (
         }
 
         if (action === 'enable-all' || action === 'disable-all') {
-            setLoading(true);
+            if (setLoading) setLoading(true);
             let processed = 0;
             const toToggle = targets.filter(p => action === 'enable-all' ? !p.isEnabled : p.isEnabled);
 
-            setScanProgress({ current: 0, total: toToggle.length });
+            if (setScanProgress) setScanProgress({ current: 0, total: toToggle.length });
 
             for (const p of toToggle) {
                 await togglePackage(p, false, true).catch(console.error);
                 processed++;
-                setScanProgress({ current: processed, total: toToggle.length });
+                if (setScanProgress) setScanProgress({ current: processed, total: toToggle.length });
             }
-            setLoading(false);
+            if (setLoading) setLoading(false);
             addToast(`${action === 'enable-all' ? 'Enabled' : 'Disabled'} ${processed} packages`, 'success');
             return;
         }
@@ -386,7 +386,7 @@ export const usePackageActions = (
         }
 
         const confirmCount = duplicates.length;
-        setLoading(true);
+        if (setLoading) setLoading(true);
         try {
             for (const d of duplicates) {
                 // @ts-ignore
@@ -430,7 +430,7 @@ export const usePackageActions = (
             console.error(e);
             addToast("Merge failed: " + e, "error");
         } finally {
-            setLoading(false);
+            if (setLoading) setLoading(false);
         }
     }, [packages, activeLibraryPath, setLoading, addToast, scanPackages]);
 
@@ -659,7 +659,7 @@ export const usePackageActions = (
             console.error("Optimization failed", e);
             errors.push("Critical Failure: " + e.message);
         } finally {
-            setLoading(false);
+            if (setLoading) setLoading(false);
             setOptimizationProgress(prev => ({
                 ...prev,
                 completed: true,
