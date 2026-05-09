@@ -6,6 +6,11 @@
 
 # Changelog
 
+## [1.3.18] - 2026-05-09
+
+### Fixed
+- **CRITICAL**: Fixed package toggle crashes (panic on backend, UI freeze on web). The backend now safely handles missing "disable" arguments and prevents recursive mutex locking.
+
 ## [1.3.17] - 2026-05-08
 This update aims to be friendlier towards slow hard drives by splitting the scan into 3 distinct phases, improving the initial loading time and allowing the user to interact with the application while the scan is in progress.
 
