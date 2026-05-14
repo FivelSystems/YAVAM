@@ -43,6 +43,12 @@ export const DEFAULT_KEYBINDS: KeybindDefinition[] = [
         defaultKeys: ["DELETE"]
     },
     {
+        id: "copy_file_to_clipboard",
+        label: "Copy File to Clipboard",
+        category: "actions",
+        defaultKeys: ["CTRL", "C"]
+    },
+    {
         id: "clear_selection",
         label: "Clear Selection / Close",
         category: "general",

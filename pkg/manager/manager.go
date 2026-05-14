@@ -190,9 +190,9 @@ func (m *Manager) DeleteToTrash(path string) error {
 	return m.system.DeleteToTrash(path)
 }
 
-// CopyFileToClipboard copies the file object to the clipboard (so it can be pasted in Explorer)
-func (m *Manager) CopyFileToClipboard(path string) error {
-	return m.system.CopyFileToClipboard(path)
+// CopyFilesToClipboard copies the file objects to the clipboard (so they can be pasted in Explorer)
+func (m *Manager) CopyFilesToClipboard(paths []string) error {
+	return m.system.CopyFilesToClipboard(paths)
 }
 
 // CutFileToClipboard copies the file to clipboard with "Move" effect (Cut)

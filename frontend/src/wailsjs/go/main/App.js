@@ -10,6 +10,10 @@ export function ApplyUpdate(arg1) {
   return window['go']['main']['App']['ApplyUpdate'](arg1);
 }
 
+export function BulkDeleteFilesToRecycleBin(arg1) {
+  return window['go']['main']['App']['BulkDeleteFilesToRecycleBin'](arg1);
+}
+
 export function CancelScan() {
   return window['go']['main']['App']['CancelScan']();
 }
@@ -30,8 +34,8 @@ export function ClearThumbnailCache() {
   return window['go']['main']['App']['ClearThumbnailCache']();
 }
 
-export function CopyFileToClipboard(arg1) {
-  return window['go']['main']['App']['CopyFileToClipboard'](arg1);
+export function CopyFilesToClipboard(arg1) {
+  return window['go']['main']['App']['CopyFilesToClipboard'](arg1);
 }
 
 export function CopyPackagesToLibrary(arg1, arg2, arg3) {

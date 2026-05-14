@@ -15,9 +15,10 @@ interface DependencyGroupProps {
     items: DependencyGroupItem[];
     emptyMessage?: string;
     onItemClick: (targetId: string) => void;
+    onItemContextMenu?: (pkg: VarPackage, e: React.MouseEvent) => void;
 }
 
-export const DependencyGroup = ({ title, items, emptyMessage = "No items.", onItemClick }: DependencyGroupProps) => {
+export const DependencyGroup = ({ title, items, emptyMessage = "No items.", onItemClick, onItemContextMenu }: DependencyGroupProps) => {
     const totalSize = useMemo(() => items.reduce((sum, item) => sum + (item.pkg?.size || 0), 0), [items]);
 
     return (
@@ -51,6 +52,7 @@ export const DependencyGroup = ({ title, items, emptyMessage = "No items.", onIt
                                     onItemClick(item.targetId);
                                 }
                             }}
+                            onContextMenu={onItemContextMenu}
                         />
                     ))
                 )}

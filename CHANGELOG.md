@@ -6,6 +6,21 @@
 
 # Changelog
 
+## [1.3.19] - 2026-05-14
+
+### Added
+- **Image Carousel**: Clicking the main thumbnail or any image in the "Contents" tab now opens a full-screen, navigable gallery of all images inside the package. (Issue #27)
+- **Dependency Context Menu**: You can now right-click any dependency in the Right Sidebar to quickly open the action menu (Enable/Disable, Resolve, Delete) without losing your place. (Issue #29)
+- **Keyboard Shortcuts**: Pressing `CTRL+C` while a package is selected will now copy its physical file path directly to your system clipboard. (Issue #35)
+
+### Fixed
+- **App Restarts**: Fixed an issue where restarting the application (e.g., during a self-update or factory reset) would cause it to hang or fail to open.
+- **Bulk Deletion**: Deleting multiple packages at once is now much more reliable. If a single file fails to delete, the rest will continue processing, and you'll receive granular feedback instead of a generic error.
+- **File Deletion**: Fixed a bug where deleting a package could fail if its file extension was manually toggled outside the app (e.g., from `.var` to `.var.disabled`) since the last scan.
+
+### Changed
+- **Internal Analysis**: Expanded the backend data models to explicitly track "Orphaned" and "Exact Duplicate" packages, laying the foundation for the upcoming Library Optimization engine.
+
 ## [1.3.18] - 2026-05-09
 
 ### Fixed

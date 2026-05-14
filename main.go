@@ -52,8 +52,8 @@ func main() {
 	shouldWipe := false
 	for _, arg := range os.Args {
 		if arg == "--yavam-wait-for-exit" {
-			log.Println("Wait flag detected. Sleeping 2s...")
-			time.Sleep(2 * time.Second)
+			log.Println("Wait flag detected. Sleeping 4s for parent to fully release singleton lock...")
+			time.Sleep(4 * time.Second)
 		}
 		if arg == "--factory-reset" {
 			shouldWipe = true

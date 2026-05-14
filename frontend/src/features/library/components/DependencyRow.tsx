@@ -10,9 +10,10 @@ interface DependencyRowProps {
     missingId?: string; // if missing
     indentLevel?: number;
     onClick: () => void;
+    onContextMenu?: (pkg: VarPackage, e: React.MouseEvent) => void;
 }
 
-export const DependencyRow = ({ pkg, missingId, indentLevel = 0, onClick }: DependencyRowProps) => {
+export const DependencyRow = ({ pkg, missingId, indentLevel = 0, onClick, onContextMenu }: DependencyRowProps) => {
     // Missing Dependency State
     if (!pkg) {
         return (
@@ -74,6 +75,7 @@ export const DependencyRow = ({ pkg, missingId, indentLevel = 0, onClick }: Depe
     return (
         <div
             onClick={onClick}
+            onContextMenu={onContextMenu && pkg ? (e) => { e.preventDefault(); onContextMenu(pkg, e); } : undefined}
             className={clsx(
                 "flex items-center gap-3 p-2 rounded-lg text-xs border transition-colors cursor-pointer group",
                 bgClass

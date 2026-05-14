@@ -135,33 +135,54 @@ export const usePackageActions = (
         if (files.length === 0) return;
 
         try {
-            let deletedCount = 0;
-            for (const filePath of files) {
+            let successCount = 0;
+            const failedFiles: string[] = [];
+
+            // @ts-ignore
+            if (window.go) {
                 // @ts-ignore
-                if (window.go) {
+                const results: { filePath: string; success: boolean; error?: string }[] =
                     // @ts-ignore
-                    await window.go.main.App.DeleteFileToRecycleBin(filePath);
-                } else {
+                    await window.go.main.App.BulkDeleteFilesToRecycleBin(files);
+
+                for (const r of results) {
+                    if (r.success) {
+                        successCount++;
+                    } else {
+                        failedFiles.push(r.filePath);
+                        console.error(`Delete failed for ${r.filePath}: ${r.error}`);
+                    }
+                }
+            } else {
+                // Web mode: sequential, best-effort
+                for (const filePath of files) {
                     const res = await fetchWithAuth('/api/delete', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ filePath: filePath, libraryPath: activeLibraryPath })
                     }).then(r => r.json());
-                    if (!res.success) throw new Error("Delete failed for " + filePath);
+                    if (res.success) successCount++;
+                    else failedFiles.push(filePath);
                 }
-                deletedCount++;
             }
 
-            if (deletedCount > 1) addToast(`Deleted ${deletedCount} packages`, 'success');
-            else addToast("Package deleted", 'success');
+            if (successCount > 0) {
+                addToast(
+                    successCount > 1 ? `Deleted ${successCount} packages` : 'Package deleted',
+                    failedFiles.length > 0 ? 'warning' : 'success'
+                );
+            }
+            if (failedFiles.length > 0) {
+                addToast(`${failedFiles.length} file(s) could not be deleted`, 'error');
+            }
 
             setDeleteConfirm({ open: false, pkg: null, pkgs: [] });
-            setSelectedIds(new Set()); // Clear selection
+            setSelectedIds(new Set());
             setSelectedPackage(null);
-            scanPackages(); // Refresh list after delete
+            scanPackages();
         } catch (e: any) {
             console.error(e);
-            addToast("Delete failed: " + (e.message || e), 'error');
+            addToast('Delete failed: ' + (e.message || e), 'error');
             setDeleteConfirm({ open: false, pkg: null });
         }
     }, [activeLibraryPath, addToast, scanPackages, setSelectedIds, setSelectedPackage]);
@@ -693,13 +714,15 @@ export const usePackageActions = (
         } catch (e) { console.error(e); }
     }, [addToast]);
 
-    const handleCopyFile = useCallback(async (pkg: VarPackage) => {
+    const handleCopyFiles = useCallback(async (pkgs: VarPackage[]) => {
         // @ts-ignore
         if (!window.go) return addToast("Not available in web mode", 'error');
+        if (!pkgs || pkgs.length === 0) return;
         try {
+            const paths = pkgs.map(p => p.filePath);
             // @ts-ignore
-            await window.go.main.App.CopyFileToClipboard(pkg.filePath);
-            addToast("File copied to clipboard", 'success');
+            await window.go.main.App.CopyFilesToClipboard(paths);
+            addToast(`${pkgs.length} file(s) copied to clipboard`, 'success');
         } catch (e) { console.error(e); }
     }, [addToast]);
 
@@ -727,7 +750,7 @@ export const usePackageActions = (
         handleExecuteDelete,
         handleOpenFolder,
         handleCopyPath,
-        handleCopyFile,
+        handleCopyFiles,
         handleCutFile,
 
         // Modal State
