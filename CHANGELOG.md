@@ -14,7 +14,7 @@
 - **Keyboard Shortcuts**: Pressing `CTRL+C` while a package is selected will now copy its physical file path directly to your system clipboard. (Issue #35)
 
 ### Fixed
-- **Bulk Toggle**: Fixed an issue where toggling multiple packages would not work properly. (Issue #40)
+- **Bulk Toggle**: Fixed an issue where toggling multiple packages would not work properly.
 - **App Restarts**: Fixed an issue where restarting the application (e.g., during a self-update or factory reset) would cause it to hang or fail to open.
 - **Bulk Deletion**: Deleting multiple packages at once is now much more reliable. If a single file fails to delete, the rest will continue processing, and you'll receive granular feedback instead of a generic error.
 - **File Deletion**: Fixed a bug where deleting a package could fail if its file extension was manually toggled outside the app (e.g., from `.var` to `.var.disabled`) since the last scan.

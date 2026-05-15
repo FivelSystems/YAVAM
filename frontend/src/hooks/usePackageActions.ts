@@ -95,20 +95,76 @@ export const usePackageActions = (
 
 
     const handleBulkToggle = useCallback(async (pkg: VarPackage) => {
-        // If multiple items selected and target is in selection, toggle all
+        // If multiple items selected and the clicked package is part of the selection, operate on all
         if (selectedIds.has(pkg.filePath) && selectedIds.size > 1) {
-            const targets = Array.from(selectedIds).map(id => packages.find(pk => pk.filePath === id)).filter(Boolean) as VarPackage[];
-            let successCount = 0;
+            const targets = Array.from(selectedIds)
+                .map(id => packages.find(pk => pk.filePath === id))
+                .filter(Boolean) as VarPackage[];
 
-            for (const p of targets) {
-                await togglePackage(p, false, true); // Silent
-                successCount++;
+            // Fire all requests in parallel — flipping the switch per package (core design)
+            const results = await Promise.allSettled(
+                targets.map(async (p) => {
+                    const targetEnabled = !p.isEnabled;
+
+                    // Skip packages already in the target state
+                    if (p.isEnabled === targetEnabled) return { pkg: p, newPath: p.filePath, targetEnabled };
+
+                    let newPath = p.filePath;
+                    // @ts-ignore
+                    if (window.go) {
+                        // @ts-ignore
+                        newPath = await window.go.main.App.TogglePackage(p.filePath, targetEnabled, activeLibraryPath, false);
+                    } else {
+                        const res = await fetchWithAuth('/api/toggle', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ filePath: p.filePath, enable: targetEnabled, merge: false, libraryPath: activeLibraryPath })
+                        }).then(r => r.json());
+                        if (!res.success) throw new Error(res.message || res.error || 'Unknown error');
+                        newPath = res.newPath;
+                    }
+                    return { pkg: p, newPath, targetEnabled };
+                })
+            );
+
+            // Count outcomes
+            const succeeded: { pkg: VarPackage; newPath: string; targetEnabled: boolean }[] = [];
+            const failed: string[] = [];
+            for (const result of results) {
+                if (result.status === 'fulfilled') {
+                    succeeded.push(result.value);
+                } else {
+                    const err = (result.reason as Error).toString();
+                    // Collision on one of them — inform but continue
+                    if (err.includes('already exists') || err.includes('already active')) {
+                        failed.push('collision');
+                    } else {
+                        failed.push(err);
+                    }
+                }
             }
-            addToast(`Toggled ${successCount} packages`, 'success');
+
+            // Single batched state update for all successful toggles
+            if (succeeded.length > 0) {
+                const updateMap = new Map(succeeded.map(s => [s.pkg.filePath, { newPath: s.newPath, targetEnabled: s.targetEnabled }]));
+                setPackages(prev => {
+                    const updated = prev.map(p => {
+                        if (updateMap.has(p.filePath)) {
+                            const data = updateMap.get(p.filePath)!;
+                            return { ...p, isEnabled: data.targetEnabled, filePath: data.newPath };
+                        }
+                        return p;
+                    });
+                    return recalculateDuplicates(updated);
+                });
+                addToast(`Toggled ${succeeded.length} package(s)${failed.length > 0 ? ` (${failed.length} failed)` : ''}`, succeeded.length > 0 ? 'success' : 'warning');
+            } else {
+                addToast('All toggles failed', 'error');
+            }
         } else {
             togglePackage(pkg);
         }
-    }, [selectedIds, packages, togglePackage, addToast]);
+    }, [selectedIds, packages, activeLibraryPath, togglePackage, addToast, setPackages, recalculateDuplicates]);
 
 
     const handleConfirmCollision = useCallback(() => {
