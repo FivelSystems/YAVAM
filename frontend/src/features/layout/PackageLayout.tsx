@@ -43,7 +43,7 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
     const {
         selectedIds, selectedPackage, setSelectedPackage,
         isDetailsPanelOpen, setIsDetailsPanelOpen,
-        handlePackageClick, handleContextMenu, setSelectedIds
+        handlePackageClick, handleContextMenu, setSelectedIds, setContextMenu
     } = useSelectionContext();
     const { activeLibraryPath } = useLibraryContext();
     const { handleSingleResolve, handleGetDependencyStatus } = useActionContext();
@@ -51,6 +51,16 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
 
     // Local UI State
     const [activeTab, setActiveTab] = useState<"details" | "contents">("details");
+
+    const handleSidebarContextMenu = React.useCallback((e: React.MouseEvent, pkg: VarPackage) => {
+        e.preventDefault();
+        setContextMenu({
+            open: true,
+            x: e.clientX,
+            y: e.clientY,
+            pkg: pkg
+        });
+    }, [setContextMenu]);
 
     // Scroll to top on page change
     // Scroll Management (Top vs Locate)
@@ -225,6 +235,7 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
                         censorThumbnails={censorThumbnails}
                         blurAmount={blurAmount}
                         isOffScreen={isOffScreen}
+                        onContextMenu={handleSidebarContextMenu}
                     />
                 )}
             </AnimatePresence>

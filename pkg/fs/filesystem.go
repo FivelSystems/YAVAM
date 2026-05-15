@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"unsafe"
 )
@@ -83,10 +84,38 @@ func (w *WindowsFileSystem) DeleteToTrash(path string) error {
 
 	ret, _, _ := procSHFileOperationW.Call(uintptr(unsafe.Pointer(fileOp)))
 	if ret != 0 {
+		// SHFileOperationW error code 2/3 = file or path not found.
+		// The package may have been toggled (.var ↔ .var.disabled) since the
+		// caller last read its path. Probe the alternate path and delete it
+		// if found; only treat as success if neither path exists.
+		if ret == 2 || ret == 3 {
+			altPath := toggledPath(absPath)
+			if altPath != "" {
+				if _, statErr := os.Stat(altPath); statErr == nil {
+					// File exists at the alternate path — delete that instead.
+					return w.DeleteToTrash(altPath)
+				}
+			}
+			// Neither path exists — treat as already deleted (idempotent).
+			return nil
+		}
 		return fmt.Errorf("SHFileOperationW failed with error code: %d", ret)
 	}
 
 	return nil
+}
+
+// toggledPath returns the .var.disabled counterpart of a .var path, or vice versa.
+// Returns empty string if the path does not match either extension.
+func toggledPath(path string) string {
+	lower := strings.ToLower(path)
+	switch {
+	case strings.HasSuffix(lower, ".var"):
+		return path + ".disabled"
+	case strings.HasSuffix(lower, ".var.disabled"):
+		return path[:len(path)-len(".disabled")]
+	}
+	return ""
 }
 
 func (w *WindowsFileSystem) OpenFolder(path string) error {

@@ -130,8 +130,8 @@ const DashboardContent = () => {
     } = useSelectionContext();
 
     const {
-        togglePackage, handleOpenFolder, setInstallModal, handleCopyPath,
-        handleCopyFile, handleCutFile, handleDeleteClick, handleInstantMerge, handleSingleResolve
+        handleBulkToggle, handleOpenFolder, setInstallModal, handleCopyPath,
+        handleCopyFiles, handleCutFile, handleDeleteClick, handleInstantMerge, handleSingleResolve
     } = useActionContext();
 
     // Drag & Drop (Upload)
@@ -313,7 +313,7 @@ const DashboardContent = () => {
                     pkg={contextMenu.pkg}
                     selectedCount={selectedIds.has(contextMenu.pkg.filePath) ? selectedIds.size : 1}
                     onClose={() => setContextMenu({ ...contextMenu, open: false })}
-                    onToggle={(p) => togglePackage(p)}
+                    onToggle={(p) => handleBulkToggle(p)}
                     onOpenFolder={handleOpenFolder}
                     onDownload={(p) => {
                         let targets = [p];
@@ -323,7 +323,16 @@ const DashboardContent = () => {
                         setInstallModal({ open: true, pkgs: targets });
                     }}
                     onCopyPath={handleCopyPath}
-                    onCopyFile={handleCopyFile}
+                    onCopyFiles={(pkgs) => {
+                        // If they clicked "Copy Selected Files" on a package that is selected, copy all selected
+                        const pkg = pkgs[0];
+                        if (pkg && selectedIds.has(pkg.filePath) && selectedIds.size > 1) {
+                            const targets = packages.filter(p => selectedIds.has(p.filePath));
+                            handleCopyFiles(targets);
+                        } else {
+                            handleCopyFiles(pkgs);
+                        }
+                    }}
                     onCutFile={handleCutFile}
                     onDelete={handleDeleteClick}
                     onMerge={(p) => handleInstantMerge(p, false)}

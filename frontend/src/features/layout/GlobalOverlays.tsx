@@ -30,7 +30,7 @@ interface GlobalOverlaysProps {
     onOpenFolder: (pkg: VarPackage) => void;
     onInstall: (pkg: VarPackage, selectedIds: Set<string>) => void;
     onCopyPath: (pkg: VarPackage) => void;
-    onCopyFile: (pkg: VarPackage) => void;
+    onCopyFiles: (pkgs: VarPackage[]) => void;
     onCutFile: (pkg: VarPackage) => void;
     onDelete: (pkg: VarPackage) => void;
     onMerge: (pkg: VarPackage) => void;
@@ -43,7 +43,7 @@ export const GlobalOverlays: React.FC<GlobalOverlaysProps> = ({
     onDrop, onWebUpload,
     contextMenu, setContextMenu, selectedIds,
     onToggle, onOpenFolder, onInstall,
-    onCopyPath, onCopyFile, onCutFile, onDelete,
+    onCopyPath, onCopyFiles, onCutFile, onDelete,
     onMerge, onMergeInPlace, onResolve
 }) => {
     return (
@@ -62,7 +62,7 @@ export const GlobalOverlays: React.FC<GlobalOverlaysProps> = ({
                     onOpenFolder={onOpenFolder}
                     onDownload={(pkg) => onInstall(pkg, selectedIds)}
                     onCopyPath={onCopyPath}
-                    onCopyFile={onCopyFile}
+                    onCopyFiles={onCopyFiles}
                     onCutFile={onCutFile}
                     onDelete={onDelete}
                     onMerge={onMerge}

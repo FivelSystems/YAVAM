@@ -11,6 +11,11 @@ import (
 	"time"
 )
 
+// CREATE_BREAKAWAY_FROM_JOB allows the child to escape the parent's Windows
+// Job Object. WebView2 (used by Wails) creates a job object that would
+// otherwise kill all child processes when the parent exits.
+const createBreakawayFromJob uint32 = 0x01000000
+
 // RestartApplication restarts the current application process.
 // It launches a new instance of the current executable and then terminates the current one.
 // exitFunc is an optional callback to trigger the application exit (e.g. runtime.Quit).
@@ -42,12 +47,12 @@ func RestartApplication(exitFunc func(), extraArgs ...string) error {
 	var cmd *exec.Cmd
 
 	if runtime.GOOS == "windows" {
-		// Use standard exec.Command with SysProcAttr for detachment
+		// CREATE_NEW_PROCESS_GROUP: new process group so Ctrl+C signals are isolated.
+		// createBreakawayFromJob: escape the parent's Job Object so the child
+		//   survives after the parent (Wails/WebView2) exits.
 		cmd = exec.Command(executable, append([]string{"--yavam-wait-for-exit"}, extraArgs...)...)
 		cmd.SysProcAttr = &syscall.SysProcAttr{
-			// CREATE_NEW_PROCESS_GROUP = 0x00000200
-			// This allows the new process to survive the parent's death
-			CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP,
+			CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP | createBreakawayFromJob,
 		}
 	} else {
 		// Linux/Mac standard execution

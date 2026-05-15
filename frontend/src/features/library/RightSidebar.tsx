@@ -11,6 +11,7 @@ import { usePackageContext } from '../../context/PackageContext';
 import { fetchWithAuth } from '../../services/api';
 import { formatBytes } from '../../utils/format';
 import { DependencyGroup } from './components/DependencyGroup';
+import { ImageCarouselModal, CarouselImage } from './components/ImageCarouselModal';
 
 export interface PackageContent {
     filePath: string;
@@ -34,12 +35,15 @@ interface RightSidebarProps {
     censorThumbnails?: boolean;
     blurAmount?: number;
     isOffScreen?: boolean;
+    onContextMenu?: (e: React.MouseEvent, pkg: VarPackage) => void;
 }
 
-const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilterByCreator, onDependencyClick, onTitleClick, selectedCreator, censorThumbnails = false, blurAmount = 10, isOffScreen = false }: RightSidebarProps) => {
+const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilterByCreator, onDependencyClick, onTitleClick, selectedCreator, censorThumbnails = false, blurAmount = 10, isOffScreen = false, onContextMenu }: RightSidebarProps) => {
 
     const [contents, setContents] = useState<PackageContent[]>([]);
     const [loading, setLoading] = useState(false);
+    const [carouselOpen, setCarouselOpen] = useState(false);
+    const [carouselIndex, setCarouselIndex] = useState(0);
     const thumbSrc = useThumbnail(pkg);
     const { packages } = usePackageContext();
 
@@ -118,6 +122,25 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
         });
     }, [pkg, packages]);
 
+    const carouselImages = useMemo<CarouselImage[]>(() => {
+        const images: CarouselImage[] = [];
+        if (thumbSrc) {
+            images.push({ src: thumbSrc, alt: 'Primary Thumbnail' });
+        }
+        contents.forEach(c => {
+            if (c.thumbnailBase64) {
+                images.push({ src: `data:image/jpeg;base64,${c.thumbnailBase64}`, alt: c.fileName });
+            }
+        });
+        return images;
+    }, [thumbSrc, contents]);
+
+    const openCarousel = (index: number) => {
+        if (carouselImages.length === 0) return;
+        setCarouselIndex(index);
+        setCarouselOpen(true);
+    };
+
     return (
         <motion.div
             initial={{ x: 400, opacity: 0 }}
@@ -156,7 +179,12 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
 
             <div className="flex-1 overflow-y-auto custom-scrollbar">
                 {/* Thumbnail - Reduced Height */}
-                <div className="h-48 w-full bg-gray-950 relative overflow-hidden group shrink-0">
+                <div 
+                    className={clsx("h-48 w-full bg-gray-950 relative overflow-hidden group shrink-0", carouselImages.length > 0 && "cursor-pointer")}
+                    onClick={() => {
+                        if (thumbSrc) openCarousel(0);
+                    }}
+                >
                     {pkg.hasThumbnail && thumbSrc ? (
                         <img
                             src={thumbSrc}
@@ -298,6 +326,7 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                                     items={depsItems}
                                     emptyMessage="No dependencies listed."
                                     onItemClick={onDependencyClick}
+                                    onItemContextMenu={onContextMenu ? (pkg, e) => onContextMenu(e, pkg) : undefined}
                                 />
                             </div>
 
@@ -308,6 +337,7 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                                     items={usedByItems}
                                     emptyMessage="No packages depend on this."
                                     onItemClick={onDependencyClick}
+                                    onItemContextMenu={onContextMenu ? (pkg, e) => onContextMenu(e, pkg) : undefined}
                                 />
                             </div>
                         </div>
@@ -328,7 +358,22 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                             ) : (
                                 <div className="grid grid-cols-2 gap-3">
                                     {contents.map((item, idx) => (
-                                        <div key={idx} className="group bg-gray-800 rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500 transition-colors">
+                                        <div 
+                                            key={idx} 
+                                            className={clsx("group bg-gray-800 rounded-lg overflow-hidden border border-gray-700 hover:border-gray-500 transition-colors", item.thumbnailBase64 && "cursor-pointer")}
+                                            onClick={() => {
+                                                if (item.thumbnailBase64) {
+                                                    // Find index in carousel (offset by 1 if there's a primary thumb)
+                                                    const offset = thumbSrc ? 1 : 0;
+                                                    // Count how many image contents came before this one to find exact index
+                                                    let imgCountBefore = 0;
+                                                    for (let i = 0; i < idx; i++) {
+                                                        if (contents[i].thumbnailBase64) imgCountBefore++;
+                                                    }
+                                                    openCarousel(offset + imgCountBefore);
+                                                }
+                                            }}
+                                        >
                                             <div className="aspect-[4/5] bg-gray-900 relative overflow-hidden">
                                                 {item.thumbnailBase64 ? (
                                                     <img
@@ -372,6 +417,15 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
             <div className="p-3 border-t border-gray-800 bg-gray-900 text-xs text-gray-500 font-mono text-center truncate">
                 {pkg.filePath}
             </div>
+
+            <ImageCarouselModal
+                images={carouselImages}
+                isOpen={carouselOpen}
+                initialIndex={carouselIndex}
+                onClose={() => setCarouselOpen(false)}
+                censorThumbnails={censorThumbnails}
+                blurAmount={blurAmount}
+            />
         </motion.div>
     );
 };

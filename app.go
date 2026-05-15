@@ -171,6 +171,26 @@ func (a *App) DeleteFileToRecycleBin(path string) error {
 	return a.manager.DeleteToTrash(path)
 }
 
+// BulkDeleteFilesToRecycleBin deletes multiple files to the recycle bin.
+// Every file is attempted regardless of prior failures.
+// Returns one BulkDeleteResult per input path so the UI can report per-file outcomes.
+func (a *App) BulkDeleteFilesToRecycleBin(paths []string) []models.BulkDeleteResult {
+	results := make([]models.BulkDeleteResult, 0, len(paths))
+	for _, path := range paths {
+		res := models.BulkDeleteResult{FilePath: path}
+		if err := a.manager.ValidatePath(path); err != nil {
+			res.Error = err.Error()
+		} else if err := a.manager.DeleteToTrash(path); err != nil {
+			res.Error = err.Error()
+		} else {
+			res.Success = true
+		}
+		results = append(results, res)
+	}
+	return results
+}
+
+
 // CopyPackagesToLibrary copies a list of package files to a destination library
 // Returns list of collided filenames (if overwrite=false) or error
 func (a *App) CopyPackagesToLibrary(filePaths []string, destLibPath string, overwrite bool) ([]string, error) {
@@ -189,10 +209,10 @@ func (a *App) CheckCollisions(filePaths []string, destLibPath string) ([]string,
 	return a.manager.CheckCollisions(filePaths, destLibPath)
 }
 
-func (a *App) CopyFileToClipboard(path string) {
-	err := a.manager.CopyFileToClipboard(path)
+func (a *App) CopyFilesToClipboard(paths []string) {
+	err := a.manager.CopyFilesToClipboard(paths)
 	if err != nil {
-		fmt.Println("Error copying file to clipboard:", err)
+		fmt.Println("Error copying files to clipboard:", err)
 	}
 }
 
