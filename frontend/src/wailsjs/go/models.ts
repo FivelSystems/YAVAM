@@ -107,6 +107,22 @@ export namespace manager {
 
 export namespace models {
 	
+	export class BulkDeleteResult {
+	    filePath: string;
+	    success: boolean;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new BulkDeleteResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.filePath = source["filePath"];
+	        this.success = source["success"];
+	        this.error = source["error"];
+	    }
+	}
 	export class FileDetail {
 	    name: string;
 	    size: number;

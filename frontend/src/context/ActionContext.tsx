@@ -21,7 +21,7 @@ interface ActionContextType {
     handleExecuteDelete: (files: string[]) => Promise<void>;
     handleOpenFolder: (pkg: any) => Promise<void>;
     handleCopyPath: (pkg: any) => Promise<void>;
-    handleCopyFile: (pkg: any) => Promise<void>;
+    handleCopyFiles: (pkgs: any[]) => Promise<void>;
     handleCutFile: (pkg: any) => Promise<void>;
 
     // Modal State
@@ -64,7 +64,6 @@ export const ActionProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
 
     // Keybind: Delete
-    // Keybind: Delete
     useKeybindSubscription('delete_selected', () => {
         if (selectedIds.size > 0) {
             // Recycle existing logic: calling handleDeleteClick with ANY selected package triggers the bulk delete logic.
@@ -74,6 +73,18 @@ export const ActionProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 : packages.find(p => selectedIds.has(p.filePath));
 
             if (target) actionLogic.handleDeleteClick(target);
+        }
+    }, [selectedIds, packages, actionLogic, selectedPackage]);
+
+    // Keybind: CTRL+C — copy selected .var file(s) to clipboard
+    useKeybindSubscription('copy_file_to_clipboard', () => {
+        // @ts-ignore
+        if (!window.go) return; // Desktop-only (clipboard file copy requires native API)
+        const targets = packages.filter(p => selectedIds.has(p.filePath));
+        if (targets.length > 0) {
+            actionLogic.handleCopyFiles(targets);
+        } else if (selectedPackage) {
+            actionLogic.handleCopyFiles([selectedPackage]);
         }
     }, [selectedIds, packages, actionLogic, selectedPackage]);
 

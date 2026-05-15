@@ -21,7 +21,7 @@ type SystemService interface {
 	GetDiskSpace(path string) (DiskSpaceInfo, error)
 	OpenFolder(path string) error
 	DeleteToTrash(path string) error
-	CopyFileToClipboard(path string) error
+	CopyFilesToClipboard(paths []string) error
 	CutFileToClipboard(path string) error
 	GetFileDetails(paths []string) ([]models.FileDetail, error)
 }
@@ -59,10 +59,20 @@ func (s *defaultSystemService) DeleteToTrash(path string) error {
 	return s.fs.DeleteToTrash(path)
 }
 
-func (s *defaultSystemService) CopyFileToClipboard(path string) error {
-	// Use PowerShell to set the clipboard (Works on Windows 10/11)
-	// Set-Clipboard -Path conflicts with string input, so we use pipe or LiteralPath
-	cmd := exec.Command("powershell", "-NoProfile", "-Command", fmt.Sprintf("Set-Clipboard -LiteralPath '%s'", path))
+func (s *defaultSystemService) CopyFilesToClipboard(paths []string) error {
+	cmd := exec.Command("powershell", "-NoProfile", "-Command", "$paths = @($input); Set-Clipboard -LiteralPath $paths")
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return err
+	}
+	
+	go func() {
+		defer stdin.Close()
+		for _, p := range paths {
+			fmt.Fprintln(stdin, p)
+		}
+	}()
+
 	return cmd.Run()
 }
 

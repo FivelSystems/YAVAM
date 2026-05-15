@@ -25,6 +25,8 @@ type VarPackage struct {
 	IsDuplicate     bool     `json:"isDuplicate"`
 	IsFavorite      bool     `json:"isFavorite"`
 	IsHidden        bool     `json:"isHidden"`
+	IsOrphan        bool     `json:"isOrphan"`        // true = no other package in the library depends on this one
+	IsExactDuplicate bool    `json:"isExactDuplicate"` // true = same version+size exists at another path
 	Type            string   `json:"type"`
 	Categories      []string `json:"categories"`
 	Tags            []string `json:"tags,omitempty"`
@@ -50,6 +52,13 @@ type ResolveConflictResult struct {
 	Merged   int    `json:"merged"`
 	Disabled int    `json:"disabled"`
 	NewPath  string `json:"newPath"`
+}
+
+// BulkDeleteResult reports the outcome for a single file in a bulk delete operation.
+type BulkDeleteResult struct {
+	FilePath string `json:"filePath"`
+	Success  bool   `json:"success"`
+	Error    string `json:"error,omitempty"`
 }
 
 // FileDetail represents basic file information for UI display

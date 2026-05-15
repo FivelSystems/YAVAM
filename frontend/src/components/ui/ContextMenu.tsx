@@ -12,7 +12,7 @@ interface ContextMenuProps {
     onOpenFolder: (pkg: VarPackage) => void;
     onDownload: (pkg: VarPackage) => void;
     onCopyPath: (pkg: VarPackage) => void;
-    onCopyFile: (pkg: VarPackage) => void;
+    onCopyFiles: (pkgs: VarPackage[]) => void;
     onCutFile: (pkg: VarPackage) => void;
     onDelete: (pkg: VarPackage) => void;
     onMerge: (pkg: VarPackage) => void;
@@ -20,7 +20,7 @@ interface ContextMenuProps {
     onResolve: (pkg: VarPackage) => void;
 }
 
-const ContextMenu = ({ x, y, pkg, selectedCount = 0, onClose, onToggle, onOpenFolder, onDownload, onCopyPath, onCopyFile, onCutFile, onDelete, onMerge, onMergeInPlace, onResolve }: ContextMenuProps) => {
+const ContextMenu = ({ x, y, pkg, selectedCount = 0, onClose, onToggle, onOpenFolder, onDownload, onCopyPath, onCopyFiles, onCutFile, onDelete, onMerge, onMergeInPlace, onResolve }: ContextMenuProps) => {
     const ref = useRef<HTMLDivElement>(null);
     const [position, setPosition] = useState({ top: y, left: x });
     // @ts-ignore
@@ -139,11 +139,11 @@ const ContextMenu = ({ x, y, pkg, selectedCount = 0, onClose, onToggle, onOpenFo
             {!isWeb && (
                 <>
                     <button
-                        onClick={() => { onCopyFile(pkg); onClose(); }}
+                        onClick={() => { onCopyFiles([pkg]); onClose(); }}
                         className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
                     >
                         <Copy size={16} className="text-gray-400" />
-                        Copy File
+                        {selectedCount > 1 ? "Copy Selected Files" : "Copy File"}
                     </button>
 
                     <button
