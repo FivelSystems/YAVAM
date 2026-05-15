@@ -130,7 +130,7 @@ const DashboardContent = () => {
     } = useSelectionContext();
 
     const {
-        togglePackage, handleOpenFolder, setInstallModal, handleCopyPath,
+        handleBulkToggle, handleOpenFolder, setInstallModal, handleCopyPath,
         handleCopyFiles, handleCutFile, handleDeleteClick, handleInstantMerge, handleSingleResolve
     } = useActionContext();
 
@@ -313,7 +313,7 @@ const DashboardContent = () => {
                     pkg={contextMenu.pkg}
                     selectedCount={selectedIds.has(contextMenu.pkg.filePath) ? selectedIds.size : 1}
                     onClose={() => setContextMenu({ ...contextMenu, open: false })}
-                    onToggle={(p) => togglePackage(p)}
+                    onToggle={(p) => handleBulkToggle(p)}
                     onOpenFolder={handleOpenFolder}
                     onDownload={(p) => {
                         let targets = [p];
