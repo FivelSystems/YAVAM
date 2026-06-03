@@ -14,6 +14,10 @@ export function BulkDeleteFilesToRecycleBin(arg1) {
   return window['go']['main']['App']['BulkDeleteFilesToRecycleBin'](arg1);
 }
 
+export function BulkDeleteFilesToRecycleBinAsync(arg1) {
+  return window['go']['main']['App']['BulkDeleteFilesToRecycleBinAsync'](arg1);
+}
+
 export function CancelScan() {
   return window['go']['main']['App']['CancelScan']();
 }

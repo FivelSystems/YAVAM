@@ -72,7 +72,7 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
         libraries, activeLibIndex, selectLibrary,
         removeLibrary, reorderLibraries, browseAndAdd
     } = useLibraryContext();
-    const { handleSidebarAction } = useActionContext();
+    const { handleSidebarAction, handleDeleteClick } = useActionContext();
 
     // Local State
     const [collapsed, setCollapsed] = useState({ status: false, creators: true, types: false });
@@ -469,6 +469,28 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
                         <button onClick={() => { handleSidebarAction('install-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
                             <Download size={14} className="text-blue-400" /> Install All to Library
                         </button>
+                        {/* Delete All Corrupt — only shown for the Corrupt status group */}
+                        {contextMenu.groupType === 'status' && contextMenu.key === STATUS_FILTERS.CORRUPT && (() => {
+                            const corruptPkgs = packages.filter(p => p.isCorrupt);
+                            if (corruptPkgs.length === 0) return null;
+                            return (
+                                <>
+                                    <div className="border-b border-gray-700/50 my-1"></div>
+                                    <button
+                                        onClick={() => {
+                                            setContextMenu(null);
+                                            // Feed the first corrupt package to handleDeleteClick
+                                            // (it will detect the full set via selectedIds or use the pkgs list directly)
+                                            // We pass the package list directly via the multi-select path.
+                                            handleDeleteClick(corruptPkgs[0], corruptPkgs);
+                                        }}
+                                        className="w-full text-left px-3 py-2 hover:bg-red-900/40 flex items-center gap-2 text-sm text-red-400"
+                                    >
+                                        <Trash2 size={14} className="text-red-400" /> Delete ({corruptPkgs.length})
+                                    </button>
+                                </>
+                            );
+                        })()}
                     </div>
                 );
             })()}

@@ -12,6 +12,8 @@ export function ApplyUpdate(arg1:string):Promise<void>;
 
 export function BulkDeleteFilesToRecycleBin(arg1:Array<string>):Promise<Array<models.BulkDeleteResult>>;
 
+export function BulkDeleteFilesToRecycleBinAsync(arg1:Array<string>):Promise<void>;
+
 export function CancelScan():Promise<void>;
 
 export function CheckCollisions(arg1:Array<string>,arg2:string):Promise<Array<string>>;

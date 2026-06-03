@@ -190,6 +190,48 @@ func (a *App) BulkDeleteFilesToRecycleBin(paths []string) []models.BulkDeleteRes
 	return results
 }
 
+// BulkDeleteFilesToRecycleBinAsync starts a background deletion of multiple files.
+// It returns immediately — the caller should NOT await any return value.
+// Progress is streamed via two Wails events:
+//
+//	"delete:progress" — fired after each file: { current, total, filePath, success, error }
+//	"delete:complete" — fired once when all files are done: { succeeded, failed[] }
+func (a *App) BulkDeleteFilesToRecycleBinAsync(paths []string) {
+	go func() {
+		total := len(paths)
+		succeeded := 0
+		failed := make([]string, 0)
+
+		for i, path := range paths {
+			var errStr string
+			if err := a.manager.ValidatePath(path); err != nil {
+				errStr = err.Error()
+			} else if err := a.manager.DeleteToTrash(path); err != nil {
+				errStr = err.Error()
+			} else {
+				succeeded++
+			}
+
+			if errStr != "" {
+				failed = append(failed, path)
+			}
+
+			runtime.EventsEmit(a.ctx, "delete:progress", map[string]interface{}{
+				"current":  i + 1,
+				"total":    total,
+				"filePath": path,
+				"success":  errStr == "",
+				"error":    errStr,
+			})
+		}
+
+		runtime.EventsEmit(a.ctx, "delete:complete", map[string]interface{}{
+			"succeeded": succeeded,
+			"failed":    failed,
+		})
+	}()
+}
+
 
 // CopyPackagesToLibrary copies a list of package files to a destination library
 // Returns list of collided filenames (if overwrite=false) or error

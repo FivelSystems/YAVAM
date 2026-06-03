@@ -14,7 +14,11 @@ export const usePackageActions = (
     addToast: (msg: string, type: 'info' | 'success' | 'warning' | 'error' | 'default') => void,
     analyzePackages?: (pkgs: VarPackage[]) => VarPackage[],
     setLoading?: (loading: boolean) => void,
-    setScanProgress?: (progress: { current: number; total: number }) => void
+    setScanProgress?: (progress: { current: number; total: number }) => void,
+    addProgressToast?: (message: string, current: number, total: number) => string,
+    updateToast?: (id: string, patch: any) => void,
+    completeProgressToast?: (id: string, message: string, type: 'success' | 'warning' | 'error', dismissAfterMs?: number) => void,
+    removeToast?: (id: string) => void
 ) => {
     // -- Local State for Modals --
     const [installModal, setInstallModal] = useState<{ open: boolean; pkgs: VarPackage[] }>({ open: false, pkgs: [] });
@@ -177,7 +181,12 @@ export const usePackageActions = (
 
     // -- Deletion Logic --
 
-    const handleDeleteClick = useCallback((pkg: VarPackage) => {
+    const handleDeleteClick = useCallback((pkg: VarPackage, pkgsOverride?: VarPackage[]) => {
+        // If an explicit list is provided (e.g. from sidebar), use it directly.
+        if (pkgsOverride && pkgsOverride.length > 0) {
+            setDeleteConfirm({ open: true, pkg, pkgs: pkgsOverride, count: pkgsOverride.length });
+            return;
+        }
         // Multi-selection check
         if (selectedIds.has(pkg.filePath) && selectedIds.size > 1) {
             const targets = packages.filter(p => selectedIds.has(p.filePath));
@@ -190,58 +199,149 @@ export const usePackageActions = (
     const handleExecuteDelete = useCallback(async (files: string[]) => {
         if (files.length === 0) return;
 
-        try {
+        // 1. Close the modal immediately — UI stays responsive.
+        setDeleteConfirm({ open: false, pkg: null, pkgs: [] });
+
+        // 2. Optimistic removal — remove from local state right away.
+        const fileSet = new Set(files);
+        setPackages(prev => prev.filter(p => !fileSet.has(p.filePath)));
+        setSelectedIds(new Set());
+        setSelectedPackage(null);
+
+        // @ts-ignore
+        if (window.go) {
+            // --- Desktop (Wails) — non-blocking async ---
+
+            // 3. Show a live progress toast.
+            const label = files.length > 1
+                ? `Deleting ${files.length} packages…`
+                : 'Deleting package…';
+            const toastId = addProgressToast
+                ? addProgressToast(label, 0, files.length)
+                : null;
+
+            // Guard: ensures the completion handler only fires once even if
+            // EventsOn accumulates stale listeners across rapid calls.
+            let fired = false;
+
+            const onComplete = (data: any) => {
+                if (fired) return;
+                fired = true;
+
+                // Unsubscribe both channels by name — clears ALL listeners,
+                // preventing stale handlers from firing on the next deletion.
+                if (window.runtime) {
+                    window.runtime.EventsOff('delete:progress');
+                    window.runtime.EventsOff('delete:complete');
+                }
+
+                const succeeded: number = data.succeeded ?? 0;
+                const failed: string[] = data.failed ?? [];
+                const allOk = failed.length === 0;
+
+                if (toastId && completeProgressToast) {
+                    // Transition the progress toast to its final state in-place.
+                    const finalMsg = succeeded > 1
+                        ? `Deleted ${succeeded} packages${!allOk ? ` (⚠️ ${failed.length} failed)` : ''}`
+                        : succeeded === 1
+                            ? 'Package deleted'
+                            : `All ${files.length} deletions failed`;
+                    const finalType = succeeded === 0 ? 'error' : allOk ? 'success' : 'warning';
+                    completeProgressToast(toastId, finalMsg, finalType, 3500);
+                } else {
+                    // Fallback if toast APIs not available.
+                    if (succeeded > 0) addToast(
+                        succeeded > 1 ? `Deleted ${succeeded} packages` : 'Package deleted',
+                        allOk ? 'success' : 'warning'
+                    );
+                }
+
+                if (failed.length > 0) {
+                    console.error('Failed deletes:', failed);
+                }
+
+                // Final reconciliation scan.
+                scanPackages();
+            };
+
+            // 4. Unsubscribe any leftover listeners from a previous deletion
+            //    BEFORE registering new ones. This is the key fix for duplication.
+            if (window.runtime) {
+                window.runtime.EventsOff('delete:progress');
+                window.runtime.EventsOff('delete:complete');
+
+                window.runtime.EventsOn('delete:progress', (data: any) => {
+                    if (toastId && updateToast) {
+                        updateToast(toastId, {
+                            progress: { current: data.current, total: data.total }
+                        });
+                    }
+                });
+
+                window.runtime.EventsOn('delete:complete', onComplete);
+            }
+
+            // 5. Fire-and-forget — returns instantly, deletion runs in goroutine.
+            // @ts-ignore
+            window.go.main.App.BulkDeleteFilesToRecycleBinAsync(files);
+
+        } else {
+            // --- Web mode — sequential with per-item progress toast ---
+            const label = files.length > 1
+                ? `Deleting ${files.length} packages…`
+                : 'Deleting package…';
+            const toastId = addProgressToast
+                ? addProgressToast(label, 0, files.length)
+                : null;
+
             let successCount = 0;
             const failedFiles: string[] = [];
 
-            // @ts-ignore
-            if (window.go) {
-                // @ts-ignore
-                const results: { filePath: string; success: boolean; error?: string }[] =
-                    // @ts-ignore
-                    await window.go.main.App.BulkDeleteFilesToRecycleBin(files);
-
-                for (const r of results) {
-                    if (r.success) {
-                        successCount++;
-                    } else {
-                        failedFiles.push(r.filePath);
-                        console.error(`Delete failed for ${r.filePath}: ${r.error}`);
-                    }
-                }
-            } else {
-                // Web mode: sequential, best-effort
-                for (const filePath of files) {
+            for (let i = 0; i < files.length; i++) {
+                const filePath = files[i];
+                try {
                     const res = await fetchWithAuth('/api/delete', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ filePath: filePath, libraryPath: activeLibraryPath })
+                        body: JSON.stringify({ filePath, libraryPath: activeLibraryPath })
                     }).then(r => r.json());
+
                     if (res.success) successCount++;
                     else failedFiles.push(filePath);
+                } catch {
+                    failedFiles.push(filePath);
+                }
+
+                // Update progress toast after each file.
+                if (toastId && updateToast) {
+                    updateToast(toastId, { progress: { current: i + 1, total: files.length } });
                 }
             }
 
-            if (successCount > 0) {
-                addToast(
+            // Transition the progress toast to its final state in-place.
+            if (toastId && completeProgressToast) {
+                const allOk = failedFiles.length === 0;
+                const finalMsg = successCount > 1
+                    ? `Deleted ${successCount} packages${!allOk ? ` (⚠️ ${failedFiles.length} failed)` : ''}`
+                    : successCount === 1
+                        ? 'Package deleted'
+                        : `All ${files.length} deletions failed`;
+                const finalType = successCount === 0 ? 'error' : allOk ? 'success' : 'warning';
+                completeProgressToast(toastId, finalMsg, finalType, 3500);
+            } else {
+                if (toastId && removeToast) removeToast(toastId);
+                if (successCount > 0) addToast(
                     successCount > 1 ? `Deleted ${successCount} packages` : 'Package deleted',
                     failedFiles.length > 0 ? 'warning' : 'success'
                 );
-            }
-            if (failedFiles.length > 0) {
-                addToast(`${failedFiles.length} file(s) could not be deleted`, 'error');
+                if (failedFiles.length > 0) {
+                    addToast(`${failedFiles.length} file(s) could not be deleted`, 'error');
+                }
             }
 
-            setDeleteConfirm({ open: false, pkg: null, pkgs: [] });
-            setSelectedIds(new Set());
-            setSelectedPackage(null);
             scanPackages();
-        } catch (e: any) {
-            console.error(e);
-            addToast('Delete failed: ' + (e.message || e), 'error');
-            setDeleteConfirm({ open: false, pkg: null });
         }
-    }, [activeLibraryPath, addToast, scanPackages, setSelectedIds, setSelectedPackage]);
+    }, [activeLibraryPath, addToast, addProgressToast, updateToast, completeProgressToast, removeToast, scanPackages, setSelectedIds, setSelectedPackage, setPackages]);
 
 
     // -- Bulk Operations (Sidebar) --

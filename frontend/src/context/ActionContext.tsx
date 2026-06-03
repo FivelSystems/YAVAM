@@ -17,7 +17,7 @@ interface ActionContextType {
     handleSingleResolve: (pkg: any) => void;
     handleConfirmOptimization: (enableMerge: boolean, resolutionStrategy: 'latest' | 'manual' | 'none' | 'delete-older', manualPlan: any) => Promise<void>;
     handleConfirmCollision: () => void;
-    handleDeleteClick: (pkg: any) => void;
+    handleDeleteClick: (pkg: any, pkgsOverride?: any[]) => void;
     handleExecuteDelete: (files: string[]) => Promise<void>;
     handleOpenFolder: (pkg: any) => Promise<void>;
     handleCopyPath: (pkg: any) => Promise<void>;
@@ -46,7 +46,7 @@ export const ActionProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } = usePackageContext();
     const { selectedIds, setSelectedIds, setSelectedPackage, selectedPackage } = useSelectionContext();
     const { activeLibraryPath } = useLibraryContext();
-    const { addToast } = useToasts();
+    const { addToast, addProgressToast, updateToast, completeProgressToast, removeToast } = useToasts();
 
     const actionLogic = usePackageActions(
         packages,
@@ -56,10 +56,14 @@ export const ActionProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         selectedIds,
         setSelectedIds,
         setSelectedPackage,
-        addToast,
+        addToast as (msg: string, type: 'info' | 'success' | 'warning' | 'error' | 'default') => void,
         undefined, // analyzePackages removed — analysis now done in backend Link Pass
         setLoading,
-        undefined  // setScanProgress removed — progress now driven by scan:stage events
+        undefined,  // setScanProgress removed — progress now driven by scan:stage events
+        addProgressToast,
+        updateToast,
+        completeProgressToast,
+        removeToast
     );
 
 
