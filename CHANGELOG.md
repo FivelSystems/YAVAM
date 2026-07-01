@@ -7,9 +7,6 @@
 # Changelog
 
 ## [Unreleased]
-_No changes yet — in active development on `main`._
-
-## [1.4.0] - 2026-07-01
 
 ### Added
 - **Update Channels**: A new **Stable / Unstable** selector under `Settings → Application → Updates`. Stay on tested **Stable** releases, or opt into **Unstable** to preview weekly in-development builds early. Switching back to Stable is always available, and your data is preserved either way.
