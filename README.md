@@ -83,6 +83,7 @@ This is built with **Wails** (Go + React + TypeScript). We keep the codebase cle
 irm -useb get.scoop.sh | iex
 scoop install git go nodejs-lts
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
+go get modernc.org/sqlite
 ```
 
 ### Build It

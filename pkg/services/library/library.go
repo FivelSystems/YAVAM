@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"yavam/pkg/cache"
+	"yavam/pkg/database"
 	"yavam/pkg/fs"
 	"yavam/pkg/scanner"
 	"yavam/pkg/services/system"
@@ -14,6 +15,7 @@ type defaultLibraryService struct {
 	system     system.SystemService
 	fs         fs.FileSystem
 	thumbCache *cache.ThumbnailCache
+	db         *database.DB // nil = no persistence (tests / legacy callers)
 
 	// active holds state for the currently-running scan so priority bumps
 	// from SetCurrentPage / Prioritize can reach the orchestrator.
@@ -22,7 +24,8 @@ type defaultLibraryService struct {
 
 // NewLibraryService constructs a defaultLibraryService.
 // The thumbnail cache is stored in %AppData%/YAVAM/thumbnails/ and is created if absent.
-func NewLibraryService(sys system.SystemService, fileSystem fs.FileSystem) LibraryService {
+// Pass a *database.DB to enable scan persistence; pass nil to disable it (e.g. in tests).
+func NewLibraryService(sys system.SystemService, fileSystem fs.FileSystem, db *database.DB) LibraryService {
 	if fileSystem == nil {
 		fileSystem = &fs.WindowsFileSystem{}
 	}
@@ -40,5 +43,6 @@ func NewLibraryService(sys system.SystemService, fileSystem fs.FileSystem) Libra
 		system:     sys,
 		fs:         fileSystem,
 		thumbCache: tc,
+		db:         db,
 	}
 }

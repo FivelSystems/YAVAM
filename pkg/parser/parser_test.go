@@ -106,3 +106,65 @@ func TestThumbnailPriority(t *testing.T) {
 		"Saves/scene/a_scene.jpg":  "a_thumb",
 	}, "z_thumb")
 }
+
+// TestLicenseTypeParsing verifies that licenseType is read from meta.json
+// at zero extra I/O cost (the zip is already open during the Hard Pass).
+func TestLicenseTypeParsing(t *testing.T) {
+	cases := []struct {
+		name        string
+		metaJSON    string
+		wantLicense string
+	}{
+		{
+			name:        "CC BY",
+			metaJSON:    `{"creator":"A","packageName":"B","version":"1","licenseType":"CC BY"}`,
+			wantLicense: "CC BY",
+		},
+		{
+			name:        "PC",
+			metaJSON:    `{"creator":"A","packageName":"B","version":"1","licenseType":"PC"}`,
+			wantLicense: "PC",
+		},
+		{
+			name:        "PC EA",
+			metaJSON:    `{"creator":"A","packageName":"B","version":"1","licenseType":"PC EA"}`,
+			wantLicense: "PC EA",
+		},
+		{
+			name:        "missing licenseType",
+			metaJSON:    `{"creator":"A","packageName":"B","version":"1"}`,
+			wantLicense: "",
+		},
+		{
+			name:        "empty licenseType",
+			metaJSON:    `{"creator":"A","packageName":"B","version":"1","licenseType":""}`,
+			wantLicense: "",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Build a minimal .var zip in a temp file.
+			tmpFile := filepath.Join(t.TempDir(), "test.var")
+			buf := new(bytes.Buffer)
+			w := zip.NewWriter(buf)
+			f, _ := w.Create("meta.json")
+			f.Write([]byte(tc.metaJSON))
+			w.Close()
+
+			if err := os.WriteFile(tmpFile, buf.Bytes(), 0644); err != nil {
+				t.Fatalf("write temp var: %v", err)
+			}
+
+			meta, _, _, err := ParseVarMetadata(tmpFile)
+			if err != nil {
+				t.Fatalf("ParseVarMetadata: %v", err)
+			}
+
+			if meta.LicenseType != tc.wantLicense {
+				t.Errorf("LicenseType = %q, want %q", meta.LicenseType, tc.wantLicense)
+			}
+		})
+	}
+}
+

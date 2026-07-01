@@ -6,6 +6,7 @@ type MetaJSON struct {
 	PackageName  string                 `json:"packageName"`
 	Version      string                 `json:"version"`
 	Description  string                 `json:"description,omitempty"`
+	LicenseType  string                 `json:"licenseType,omitempty"` // e.g. "CC BY", "PC", "PC EA"
 	Dependencies map[string]interface{} `json:"dependencies,omitempty"`
 	ContentList  []string               `json:"contentList,omitempty"`
 	Tags         []string               `json:"tags,omitempty"`
@@ -27,6 +28,7 @@ type VarPackage struct {
 	IsHidden        bool     `json:"isHidden"`
 	IsOrphan        bool     `json:"isOrphan"`        // true = no other package in the library depends on this one
 	IsExactDuplicate bool    `json:"isExactDuplicate"` // true = same version+size exists at another path
+	LicenseType     string   `json:"licenseType"`     // propagated from Meta.LicenseType after scan
 	Type            string   `json:"type"`
 	Categories      []string `json:"categories"`
 	Tags            []string `json:"tags,omitempty"`
