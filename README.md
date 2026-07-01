@@ -58,10 +58,17 @@ Once you turn on the server, just type your PC's IP into any browser:
 ---
 
 ## 🔮 Roadmap (The fun stuff coming soon!)
-- **v1.3.1**: **Released** 🚀 (Factory Reset, Crash Recovery, Privacy Refinements, Keybinds).
-- **v1.4.0**: **Granular Control** (Hide specific "private" libraries from the web view 🤫).
-- **v1.5.0**: **Bulk Downloads** (Grab tons of files as one big ZIP).
+- **v1.3.x**: **Released** 🚀 (Factory Reset, Crash Recovery, Privacy Refinements, Keybinds, Scan Optimization).
+- **v1.3.20**: **Released** 🚀 (**Stable/Unstable update channels**).
+- **v1.4.0**: **In development** (Local database foundation).
+- **v1.5.0**: **Granular Control** (Hide specific "private" libraries from the web view 🤫) & **Bulk Downloads** (Grab tons of files as one big ZIP).
 - **v1.8.0**: **Hub Integration** (Find missing dependencies online automatically!).
+
+### 🧪 Stable vs Unstable
+Prefer a rock-solid experience, or want to peek at new features early? Head to
+`Settings → Application → Updates` and pick your channel. **Stable** gets tested
+releases; **Unstable** delivers weekly in-development builds. You can switch back
+anytime — your data is always kept.
 
 ---
 
@@ -97,6 +104,10 @@ wails build
 ```
 
 You'll find your fresh `YAVAM.exe` in the `build/bin/` folder. Happy coding! 💜
+
+### Contributing
+Want to help out? See **[CONTRIBUTING.md](.github/CONTRIBUTING.md)** for our
+branching model, commit conventions, and release process.
 
 ---
 
