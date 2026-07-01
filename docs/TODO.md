@@ -13,6 +13,40 @@
   our "no raw console commands" rule. Replace with a native Windows clipboard API
   (set `CF_HDROP` via a syscall or a pure-Go clipboard lib) so no process spawns.
 
+- [ ] **Sub-Dependencies not behaving as expected.**
+  Packages like Ye666.Arriety only have the following dependencies: 
+  * prestigitis.clothing-201010.latest
+  * MacGruber.PostMagic.3
+  * Vs1.vs1_H098_Demi.1
+  * Vs1.vs1_H094_Laurel.1
+  It is expected that sub-dependencies should resolve from the following content:
+  "Ye666.Arrietty.latest" : { 
+         "licenseType" : "PC", 
+         "dependencies" : { 
+            "MacGruber.PostMagic.3" : { 
+               "licenseType" : "CC BY-SA", 
+               "dependencies" : { 
+               }
+            }, 
+            "prestigitis.clothing-201010.latest" : { 
+               "missing" : "true", 
+               "licenseType" : "MISSING", 
+               "dependencies" : { 
+               }
+            }, 
+            "vs1.vs1_H098_Demi.latest" : { 
+               "licenseType" : "CC BY", 
+               "dependencies" : { 
+                  "vs1.vs1_H094_Laurel.latest" : { 
+                     "licenseType" : "CC BY", 
+                     "dependencies" : { 
+                     }
+                  }
+               }
+            }
+         }
+  However another package shows an extremely long list of sub-dependencies that are not present in the actual meta.json content file. This needs to be analyzed, fixed and tested.
+
 ---
 
 ### 1.3.11 Patch (Fixed):
