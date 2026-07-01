@@ -2,80 +2,52 @@ package manager
 
 import (
 	"fmt"
-	"yavam/pkg/services/config"
+	"log"
 )
 
-// Legacy wrappers to maintain API compatibility during refactor.
-// These now delegate to the injected ConfigService.
+// Library CRUD — all operations delegate to the SQLite DB.
+// The config.json libraries array was zeroed out during the migration in
+// NewManager and is no longer written to or read from for library management.
 
-// GetLibraries returns the list of configured libraries
+// GetLibraries returns the list of configured library paths, ordered by sort_order.
+// Falls back gracefully if the DB is unavailable.
 func (m *Manager) GetLibraries() []string {
-	// Provide safe default if config service missing (e.g. tests)
-	if m.config == nil {
+	if m.db == nil {
 		return []string{}
 	}
-	cfg := m.config.Get()
-	if cfg == nil {
+	paths, err := m.db.GetLibraryPaths()
+	if err != nil {
+		log.Printf("[Manager] GetLibraries DB error: %v", err)
 		return []string{}
 	}
-
-	// ConfigService.Get() returns *Config. We should copy if we want thread safety at this level?
-	// ConfigService handles its own locking, but returns a pointer.
-	// Copy to be safe from modifications.
-	libs := make([]string, len(cfg.Libraries))
-	copy(libs, cfg.Libraries)
-	return libs
-}
-
-// SetLibraries updates the library list and saves config
-func (m *Manager) SetLibraries(libs []string) error {
-	if m.config == nil {
-		return fmt.Errorf("config service not initialized")
+	if paths == nil {
+		return []string{}
 	}
-	return m.config.Update(func(c *config.Config) {
-		c.Libraries = libs
-	})
+	return paths
 }
 
-// AddLibrary adds a library path if not exists
+// SetLibraries replaces the entire library list in the DB with the given paths,
+// preserving any existing per-library settings (label, permissions, etc.).
+// Paths not in the new list are removed. This is used for reordering.
+func (m *Manager) SetLibraries(paths []string) error {
+	if m.db == nil {
+		return fmt.Errorf("database not available")
+	}
+	return m.db.SetLibraryOrder(paths)
+}
+
+// AddLibrary adds a library path with default permissions if it does not already exist.
 func (m *Manager) AddLibrary(path string) error {
-	if m.config == nil {
-		return fmt.Errorf("config service not initialized")
+	if m.db == nil {
+		return fmt.Errorf("database not available")
 	}
-
-	// We need to check existence inside the Update/Lock to be atomic?
-	// Or check first? ConfigService.Update locks.
-	return m.config.Update(func(c *config.Config) {
-		for _, l := range c.Libraries {
-			if l == path {
-				return // Already exists, logic handling? Update doesn't return error from specific logic easily.
-			}
-		}
-		c.Libraries = append(c.Libraries, path)
-	})
+	return m.db.UpsertLibrary(path)
 }
 
-// RemoveLibrary removes a library path
+// RemoveLibrary removes a library and all its associated package records.
 func (m *Manager) RemoveLibrary(path string) error {
-	if m.config == nil {
-		return fmt.Errorf("config service not initialized")
+	if m.db == nil {
+		return fmt.Errorf("database not available")
 	}
-	return m.config.Update(func(c *config.Config) {
-		newLibs := []string{}
-		for _, l := range c.Libraries {
-			if l != path {
-				newLibs = append(newLibs, l)
-			}
-		}
-		c.Libraries = newLibs
-	})
+	return m.db.DeleteLibrary(path)
 }
-
-// These methods were previously on *Manager in config.go or implicit?
-// We need to match whatever App expects.
-// App calls: GetLibraries, AddLibrary, RemoveLibrary, SetLibraries.
-// We covered those.
-
-// LoadConfig/SaveConfig were called internally or by App?
-// App doesn't call them directly usually, Manager did.
-// Manager.NewManager called LoadConfig. Now ConfigService loads itself.

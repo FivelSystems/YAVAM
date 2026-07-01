@@ -41,7 +41,7 @@ func (m *MockSystemService) CutFileToClipboard(path string) error {
 
 func TestInstall(t *testing.T) {
 	mockSys := &MockSystemService{}
-	lib := NewLibraryService(mockSys, nil)
+	lib := NewLibraryService(mockSys, nil, nil)
 
 	// Setup Temp Dirs
 	srcDir := t.TempDir()
@@ -73,7 +73,7 @@ func TestInstall(t *testing.T) {
 
 func TestInstall_Collision(t *testing.T) {
 	mockSys := &MockSystemService{}
-	lib := NewLibraryService(mockSys, nil)
+	lib := NewLibraryService(mockSys, nil, nil)
 
 	srcDir := t.TempDir()
 	destDir := t.TempDir()
@@ -116,7 +116,7 @@ func TestInstall_Collision(t *testing.T) {
 
 func TestToggle(t *testing.T) {
 	mockSys := &MockSystemService{}
-	lib := NewLibraryService(mockSys, nil)
+	lib := NewLibraryService(mockSys, nil, nil)
 
 	tmpDir := t.TempDir()
 	pkgPath := filepath.Join(tmpDir, "package.var")
@@ -149,7 +149,7 @@ func TestToggle(t *testing.T) {
 
 func TestCheckCollisions(t *testing.T) {
 	mockSys := &MockSystemService{}
-	lib := NewLibraryService(mockSys, nil)
+	lib := NewLibraryService(mockSys, nil, nil)
 
 	srcDir := t.TempDir()
 	destDir := t.TempDir()
@@ -184,7 +184,7 @@ func TestCheckCollisions(t *testing.T) {
 
 func TestInstall_Disabled(t *testing.T) {
 	mockSys := &MockSystemService{}
-	lib := NewLibraryService(mockSys, nil)
+	lib := NewLibraryService(mockSys, nil, nil)
 
 	srcDir := t.TempDir()
 	destDir := t.TempDir()

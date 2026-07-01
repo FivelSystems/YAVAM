@@ -12,7 +12,7 @@ func TestInstall_PermissionDenied(t *testing.T) {
 	// This test attempts to provoke a permission error.
 
 	mockSys := &MockSystemService{}
-	lib := NewLibraryService(mockSys, nil)
+	lib := NewLibraryService(mockSys, nil, nil)
 
 	srcDir := t.TempDir()
 	destDir := t.TempDir()

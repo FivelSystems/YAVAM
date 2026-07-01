@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
+	"yavam/pkg/database"
 	"yavam/pkg/models"
 	"yavam/pkg/services/config"
 	"yavam/pkg/services/library"
@@ -19,6 +21,7 @@ type Manager struct {
 	// Scanner removed (moved to service)
 	system   system.SystemService
 	library  library.LibraryService
+	db       *database.DB
 	mu       sync.Mutex
 	DataPath string
 	config   config.ConfigService
@@ -32,9 +35,13 @@ func (m *Manager) UpdateConfig(fn func(*config.Config)) error {
 	return m.config.Update(fn)
 }
 
-// Close cleans up resources
+// Close cleans up resources including the database connection.
 func (m *Manager) Close() error {
-	// Placeholder for future cleanup (e.g. database connections)
+	if m.db != nil {
+		if err := m.db.Close(); err != nil {
+			log.Printf("[Manager] DB close error: %v", err)
+		}
+	}
 	return nil
 }
 
@@ -47,22 +54,42 @@ func NewManager(sys system.SystemService, lib library.LibraryService, cfg config
 	if sys == nil {
 		sys = system.NewSystemService(nil)
 	}
+
+	// Open the SQLite database.
+	var db *database.DB
+	dbPath := filepath.Join(dataPath, "yavam.db")
+	var dbErr error
+	db, dbErr = database.Open(dbPath)
+	if dbErr != nil {
+		log.Printf("[Manager] Failed to open database: %v (continuing without persistence)", dbErr)
+	}
+
 	if lib == nil {
-		// Default to file based library service
-		// We need to construct it. It needs sys and fs.
-		// Since we don't have fs here directly anymore (it's inside sys),
-		// we might need to expose fs from sys or just create a new fs instance.
-		// Simply creating a new WindowsFileSystem is safe.
-		// OR we change NewManager sig to take everything or rely on caller (main.go).
-		// Let's assume caller provides it, or we create default.
-		lib = library.NewLibraryService(sys, nil)
+		lib = library.NewLibraryService(sys, nil, db)
 	}
 
 	m := &Manager{
 		system:   sys,
 		library:  lib,
+		db:       db,
 		config:   cfg,
 		DataPath: dataPath,
+	}
+
+	// One-time migration: copy libraries from config.json into the DB.
+	// This is idempotent (ON CONFLICT DO NOTHING) — safe to call on every launch.
+	if db != nil && cfg != nil {
+		if c := cfg.Get(); c != nil && len(c.Libraries) > 0 {
+			if err := db.MigrateLibrariesFromConfig(c.Libraries); err != nil {
+				log.Printf("[Manager] Library migration warning: %v", err)
+			} else {
+				// Zero out the config.json libraries array so the DB is the
+				// single source of truth going forward.
+				_ = cfg.Update(func(c *config.Config) {
+					c.Libraries = []string{}
+				})
+			}
+		}
 	}
 
 	return m

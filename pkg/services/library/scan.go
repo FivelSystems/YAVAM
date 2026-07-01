@@ -33,9 +33,11 @@ func (s *defaultLibraryService) Scan(ctx context.Context, rootPath string, onPac
 	}
 
 	orc := &scanOrchestrator{
-		thumbCache: s.thumbCache,
-		highCh:     make(chan string, 512),
-		bumpPaths:  make(chan []string, 64),
+		thumbCache:  s.thumbCache,
+		db:          s.db,
+		libraryPath: rootPath,
+		highCh:      make(chan string, 512),
+		bumpPaths:   make(chan []string, 64),
 		onDiscovered: func(p models.VarPackage) {},
 		onScanned: func(p models.VarPackage) {
 			if onPackage != nil {
@@ -79,6 +81,8 @@ func (s *defaultLibraryService) ScanFull(
 
 	orc := &scanOrchestrator{
 		thumbCache:     s.thumbCache,
+		db:             s.db,
+		libraryPath:    rootPath,
 		highCh:         make(chan string, 512),
 		bumpPaths:      make(chan []string, 64),
 		onDiscovered:   onDiscovered,

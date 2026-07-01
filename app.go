@@ -116,18 +116,13 @@ func (a *App) startup(ctx context.Context) {
 	cfg := a.manager.GetConfig()
 	if cfg.ServerEnabled {
 		go func() {
-			// Small delay to ensure UI ready? Or just start.
-			// Start on default port 8080 or need config for port?
-			// Defaulting to 8080 for now as it's not in config yet.
-			// Path defaults to active (Vam) path.
-			// Config VamPath might be empty if just setup,
-			// but if ServerEnabled is true, VamPath should be set.
 			port := cfg.ServerPort
 			if port == "" {
 				port = "18888"
 			}
-			// We need to pass the libraries as well
-			if err := a.server.Start(port, cfg.Libraries); err == nil {
+			// Use GetLibraries() — reads from DB, not from config.json
+			// (config.json libraries array is zeroed after Phase 2 migration)
+			if err := a.server.Start(port, a.manager.GetLibraries()); err == nil {
 				runtime.EventsEmit(a.ctx, "server:status:changed", true)
 			}
 		}()
@@ -654,9 +649,17 @@ func (a *App) FinishSetup() error {
 	return a.manager.FinishSetup()
 }
 
-// GetConfig returns the current configuration
+// GetConfig returns the current configuration.
+// The `libraries` field is always populated from the DB (single source of truth
+// after migration), never from config.json. A copy is returned to avoid
+// mutating the shared config state.
 func (a *App) GetConfig() *config.Config {
-	return a.manager.GetConfig()
+	cfg := a.manager.GetConfig()
+	// Return a shallow copy with Libraries overridden from the DB.
+	// This is the authoritative path after the Phase 2 migration.
+	cfgCopy := *cfg
+	cfgCopy.Libraries = a.manager.GetLibraries()
+	return &cfgCopy
 }
 
 // CheckForUpdates checks if a new version is available
@@ -734,7 +737,7 @@ func (a *App) StartServer() error {
 		port = "18888"
 	}
 
-	err := a.server.Start(port, cfg.Libraries)
+	err := a.server.Start(port, a.manager.GetLibraries())
 	if err == nil {
 		runtime.EventsEmit(a.ctx, "server:status:changed", true)
 	}
@@ -858,10 +861,19 @@ func (a *App) ImportSettings() error {
 		return fmt.Errorf("failed to unzip backup: %w", err)
 	}
 
-	// 3. Verify content
-	if _, err := os.Stat(filepath.Join(tempDir, "config.json")); os.IsNotExist(err) {
-		logger("[Import] Invalid backup: config.json missing\n")
-		return fmt.Errorf("invalid backup: config.json not found")
+	// 3. Verify content — accept zips that contain config.json OR yavam.db (or both).
+	// New backups include yavam.db; older backups only had config.json.
+	hasConfig := false
+	hasDB := false
+	if _, err := os.Stat(filepath.Join(tempDir, "config.json")); err == nil {
+		hasConfig = true
+	}
+	if _, err := os.Stat(filepath.Join(tempDir, "yavam.db")); err == nil {
+		hasDB = true
+	}
+	if !hasConfig && !hasDB {
+		logger("[Import] Invalid backup: neither config.json nor yavam.db found\n")
+		return fmt.Errorf("invalid backup: missing config.json and yavam.db")
 	}
 
 	// 4. Overwrite DataPath
