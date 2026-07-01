@@ -6,7 +6,7 @@ import { VarPackage, DependencyLocation } from '../../types';
 import { useThumbnail } from '../../hooks/useThumbnail';
 
 import { findPackageByFamily, getBlurStyle } from './utils';
-import { getDependencySummary } from '../../utils/dependency';
+import { resolveDependency } from '../../utils/dependency';
 import { usePackageContext } from '../../context/PackageContext';
 import { fetchWithAuth } from '../../services/api';
 import { formatBytes } from '../../utils/format';
@@ -92,17 +92,23 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
 
     if (!pkg) return null;
 
-    const depsInfo = useMemo(() => {
-        if (!pkg) return { nodes: [], missing: [], totalSize: 0 };
-        return getDependencySummary(pkg, packages);
-    }, [pkg, packages]);
+    // The package's DIRECT declared dependencies, in a stable (declared) order.
+    // This list is a property of the package's meta.json, so it does not change
+    // when you switch libraries — only each item's status/label does.
+    const directDeps = useMemo(
+        () => (pkg.meta?.dependencies ? Object.keys(pkg.meta.dependencies) : []),
+        [pkg]
+    );
 
     // Resolve items not present in the current library to whichever library holds
     // them, so cross-library entries can be labelled and jumped to. Desktop only.
     useEffect(() => {
         if (!pkg || !window.go) { setExternalMap({}); return; }
         const ids = new Set<string>();
-        depsInfo.missing.forEach(id => ids.add(id));
+        directDeps.forEach(depId => {
+            const res = resolveDependency(depId, packages);
+            if (!res.pkg && res.status !== 'system') ids.add(depId);
+        });
         (pkg.referencedBy || []).forEach(fam => {
             if (!findPackageByFamily(packages, fam)) ids.add(fam);
         });
@@ -113,26 +119,29 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
             .then((map: Record<string, DependencyLocation>) => { if (active) setExternalMap(map || {}); })
             .catch(() => { if (active) setExternalMap({}); });
         return () => { active = false; };
-    }, [pkg, packages, depsInfo]);
+    }, [pkg, packages, directDeps]);
 
+    // One row per direct dependency, resolved locally → in another library → missing.
+    // Built-in (vam.core) deps are omitted; they aren't packages.
     const depsItems = useMemo(() => {
-        return [
-            ...depsInfo.missing.map(depId => {
+        const items: DependencyGroupItem[] = [];
+        for (const depId of directDeps) {
+            const res = resolveDependency(depId, packages);
+            if (res.status === 'system') continue;
+            if (res.pkg) {
+                items.push({ pkg: res.pkg, targetId: res.pkg.filePath, depth: 0 });
+            } else {
                 const ext = externalMap[depId];
-                return {
+                items.push({
                     missingId: depId,
                     targetId: depId,
                     depth: 0,
                     external: ext?.found ? { libraryLabel: ext.libraryLabel, isEnabled: ext.isEnabled } : undefined,
-                };
-            }),
-            ...depsInfo.nodes.map(node => ({
-                pkg: node.pkg,
-                targetId: node.pkg.filePath,
-                depth: Math.max(0, node.depth - 1)
-            }))
-        ];
-    }, [depsInfo, externalMap]);
+                });
+            }
+        }
+        return items;
+    }, [directDeps, packages, externalMap]);
 
     const usedByItems = useMemo(() => {
         if (!pkg || !pkg.referencedBy) return [];
