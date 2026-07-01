@@ -25,8 +25,23 @@ export interface VarPackage {
     isOrphan?: boolean;
     referencedBy?: string[];
     obsoletedBy?: string;
+    /** ISO 8601 package creation date; used for date sorting. */
+    creationDate?: string;
     /** Tracks how much we know about this package from the three-phase scan. */
     scanPhase: ScanPhase;
+}
+
+/** Where a dependency/dependent lives, for cross-library jump from the panel. */
+export interface DependencyLocation {
+    query: string;
+    found: boolean;
+    libraryPath: string;
+    libraryLabel: string;
+    filePath: string;
+    packageName: string;
+    creator: string;
+    version: string;
+    isEnabled: boolean;
 }
 
 /** Payload of the "package:analyzed" event — dep/dup/orphan flags per package. */

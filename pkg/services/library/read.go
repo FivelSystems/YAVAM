@@ -3,12 +3,14 @@ package library
 import (
 	"archive/zip"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"yavam/pkg/database"
 	"yavam/pkg/models"
 	"yavam/pkg/parser"
 )
@@ -168,6 +170,106 @@ func (s *defaultLibraryService) GetThumbnail(pkgPath string) ([]byte, error) {
 	}
 
 	return thumbBytes, nil
+}
+
+// GetCachedPackages reconstructs a library's packages from the DB index for the
+// cache-first grid: it rebuilds each package's dependency map from the persisted
+// graph and runs the SAME LinkPass a live scan uses, so cached and freshly
+// scanned analysis (duplicates, orphans, missing deps) are identical. Returns
+// (nil, nil) when persistence is unavailable or the library is unscanned.
+func (s *defaultLibraryService) GetCachedPackages(libraryPath string) ([]models.VarPackage, error) {
+	if s.db == nil || libraryPath == "" {
+		return nil, nil
+	}
+
+	rows, err := s.db.GetPackagesByLibraryPath(libraryPath)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+
+	declaredByKey, err := s.db.GetDeclaredDependencies()
+	if err != nil {
+		return nil, err
+	}
+
+	pkgs := make([]models.VarPackage, 0, len(rows))
+	for _, r := range rows {
+		p := rowToPackage(r, libraryPath)
+		if ds := declaredByKey[strings.ToLower(r.PackageKey)]; len(ds) > 0 {
+			m := make(map[string]interface{}, len(ds))
+			for _, d := range ds {
+				m[d] = nil
+			}
+			p.Meta.Dependencies = m
+		}
+		pkgs = append(pkgs, p)
+	}
+
+	analyses := AnalyzePackages(pkgs, s.db)
+	byPath := make(map[string]PackageAnalysis, len(analyses))
+	for _, a := range analyses {
+		byPath[a.FilePath] = a
+	}
+	for i := range pkgs {
+		if a, ok := byPath[pkgs[i].FilePath]; ok {
+			pkgs[i].MissingDeps = a.MissingDeps
+			pkgs[i].IsDuplicate = a.IsDuplicate
+			pkgs[i].IsExactDuplicate = a.IsExactDuplicate
+			pkgs[i].IsOrphan = a.IsOrphan
+			pkgs[i].ReferencedBy = a.ReferencedBy
+			pkgs[i].ObsoletedBy = a.ObsoletedBy
+		}
+	}
+	return pkgs, nil
+}
+
+// rowToPackage reconstructs a VarPackage from a stored index row. The absolute
+// FilePath re-applies the ".disabled" suffix for disabled packages so it matches
+// what a live scan emits — the frontend dedupes cached vs scanned rows by filePath.
+func rowToPackage(r database.PackageRow, libraryPath string) models.VarPackage {
+	absPath := filepath.Join(libraryPath, filepath.FromSlash(r.RelPath))
+	fileName := r.FileName
+	if !r.IsEnabled {
+		absPath += ".disabled"
+		fileName += ".disabled"
+	}
+
+	return models.VarPackage{
+		FilePath:      absPath,
+		FileName:      fileName,
+		Size:          r.SizeBytes,
+		IsEnabled:     r.IsEnabled,
+		IsCorrupt:     r.IsCorrupt,
+		HasThumbnail:  !r.IsCorrupt, // optimistic; lazy load handles misses, the scan corrects
+		ThumbnailPath: r.ThumbnailPath,
+		LicenseType:   r.LicenseType,
+		Type:          r.Type,
+		CreationDate:  r.CreationDate,
+		Categories:    unmarshalStringSlice(r.CategoriesJSON),
+		Tags:          unmarshalStringSlice(r.TagsJSON),
+		Meta: models.MetaJSON{
+			Creator:     r.Creator,
+			PackageName: r.PackageName,
+			Version:     r.Version,
+			Description: r.Description,
+			LicenseType: r.LicenseType,
+		},
+	}
+}
+
+// unmarshalStringSlice is the inverse of marshalStringSlice.
+func unmarshalStringSlice(s string) []string {
+	if s == "" || s == "[]" {
+		return nil
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(s), &out); err != nil {
+		return nil
+	}
+	return out
 }
 
 func (s *defaultLibraryService) GetCounts(libraries []string) map[string]int {

@@ -15,6 +15,7 @@ import (
 	"yavam/pkg/services/config"
 	"yavam/pkg/services/library"
 	"yavam/pkg/services/system"
+	"yavam/pkg/utils"
 )
 
 type Manager struct {
@@ -47,8 +48,12 @@ func (m *Manager) Close() error {
 
 func NewManager(sys system.SystemService, lib library.LibraryService, cfg config.ConfigService) *Manager {
 	configDir, _ := os.UserConfigDir()
-	// Standard Location: %AppData%\YAVAM
+	// Standard Location: %AppData%\YAVAM. YAVAM_DATA_DIR overrides it — used by
+	// tests to keep the real user database untouched, and usable for portable installs.
 	dataPath := filepath.Join(configDir, "YAVAM")
+	if override := os.Getenv("YAVAM_DATA_DIR"); override != "" {
+		dataPath = override
+	}
 	os.MkdirAll(dataPath, 0755)
 
 	if sys == nil {
@@ -129,6 +134,17 @@ func (m *Manager) GetPackageContents(pkgPath string) ([]models.PackageContent, e
 	return m.library.GetPackageContents(pkgPath)
 }
 
+// GetCachedPackages returns a library's packages from the DB index for instant
+// (cache-first) grid paint, before a background scan reconciles with disk.
+func (m *Manager) GetCachedPackages(libraryPath string) ([]models.VarPackage, error) {
+	return m.library.GetCachedPackages(libraryPath)
+}
+
+// LocateDependencies resolves dependency/dependent ids to the library holding each.
+func (m *Manager) LocateDependencies(ids []string) map[string]models.DependencyLocation {
+	return m.library.LocateDependencies(ids)
+}
+
 // DisableOldVersions disables all versions of a package except the latest
 // DisableOldVersions delegates to LibraryService
 func (m *Manager) DisableOldVersions(pkgs []models.VarPackage, creator string, packageName string, vamPath string) error {
@@ -161,12 +177,12 @@ func (m *Manager) ValidatePath(path string) error {
 	if path == "" {
 		return fmt.Errorf("path is empty")
 	}
-	cleanTarget := strings.ToLower(filepath.Clean(path))
+	cleanTarget := utils.CanonPath(path)
 
 	libs := m.GetLibraries()
 	allowed := false
 	for _, lib := range libs {
-		cleanLib := strings.ToLower(filepath.Clean(lib))
+		cleanLib := utils.CanonPath(lib)
 		if cleanTarget == cleanLib {
 			allowed = true
 			break

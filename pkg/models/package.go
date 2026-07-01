@@ -26,8 +26,10 @@ type VarPackage struct {
 	IsDuplicate     bool     `json:"isDuplicate"`
 	IsFavorite      bool     `json:"isFavorite"`
 	IsHidden        bool     `json:"isHidden"`
-	IsOrphan        bool     `json:"isOrphan"`        // true = no other package in the library depends on this one
+	IsOrphan        bool     `json:"isOrphan"`        // true = no other package depends on this one
 	IsExactDuplicate bool    `json:"isExactDuplicate"` // true = same version+size exists at another path
+	ReferencedBy    []string `json:"referencedBy,omitempty"` // families that depend on this package
+	ObsoletedBy     string   `json:"obsoletedBy,omitempty"`  // reason this copy is obsolete/redundant
 	LicenseType     string   `json:"licenseType"`     // propagated from Meta.LicenseType after scan
 	Type            string   `json:"type"`
 	Categories      []string `json:"categories"`
@@ -68,4 +70,19 @@ type FileDetail struct {
 	Name string `json:"name"`
 	Size int64  `json:"size"`
 	Path string `json:"path"`
+}
+
+// DependencyLocation tells the UI which library holds a dependency (or dependent),
+// so a cross-library entry in the details panel can be labelled and clicked to
+// jump to that library. Found is false when no library contains the family.
+type DependencyLocation struct {
+	Query        string `json:"query"`        // the id/family that was asked about
+	Found        bool   `json:"found"`
+	LibraryPath  string `json:"libraryPath"`  // library holding it ("" if not found)
+	LibraryLabel string `json:"libraryLabel"` // display name for the label
+	FilePath     string `json:"filePath"`     // absolute path to select on jump
+	PackageName  string `json:"packageName"`
+	Creator      string `json:"creator"`
+	Version      string `json:"version"`
+	IsEnabled    bool   `json:"isEnabled"`
 }

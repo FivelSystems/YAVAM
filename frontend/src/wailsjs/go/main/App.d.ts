@@ -44,6 +44,8 @@ export function FinishSetup():Promise<void>;
 
 export function GetAppVersion():Promise<string>;
 
+export function GetCachedPackages(arg1:string):Promise<Array<models.VarPackage>>;
+
 export function GetChangelog():Promise<string>;
 
 export function GetConfig():Promise<config.Config>;
@@ -81,6 +83,8 @@ export function IsConfigured():Promise<boolean>;
 export function IsServerRunning():Promise<boolean>;
 
 export function ListSessions():Promise<Array<auth.User>>;
+
+export function LocateDependencies(arg1:Array<string>):Promise<Record<string, models.DependencyLocation>>;
 
 export function Log(arg1:string,arg2:string):Promise<void>;
 

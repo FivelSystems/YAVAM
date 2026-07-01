@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { AlertTriangle } from 'lucide-react';
-import { VarPackage } from '../../types';
+import { VarPackage, DependencyLocation } from '../../types';
 import CardGrid from '../library/CardGrid';
 import { Pagination } from '../../components/common/Pagination';
 import RightSidebar from '../library/RightSidebar';
@@ -19,7 +19,7 @@ interface PackageLayoutProps {
 
     // Locating
     highlightedRequest?: { id: string; ts: number } | null;
-    onLocatePackage: (pkg: VarPackage) => void;
+    onLocatePackage: (pkg: VarPackage, opts?: { select?: boolean }) => void;
     scrollContainerRef: React.RefObject<HTMLDivElement>;
 
     // Privacy
@@ -45,12 +45,28 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
         isDetailsPanelOpen, setIsDetailsPanelOpen,
         handlePackageClick, handleContextMenu, setSelectedIds, setContextMenu
     } = useSelectionContext();
-    const { activeLibraryPath } = useLibraryContext();
+    const { activeLibraryPath, selectLibrary } = useLibraryContext();
     const { handleSingleResolve, handleGetDependencyStatus } = useActionContext();
     const { addToast } = useToasts();
 
     // Local UI State
     const [activeTab, setActiveTab] = useState<"details" | "contents">("details");
+
+    // Deferred locate target: set when we switch libraries to reach a cross-library
+    // dependency; the effect below selects it once that library's packages load.
+    const pendingLocateRef = React.useRef<string | null>(null);
+    const normPath = (p: string) => p.replace(/\\/g, '/').toLowerCase();
+
+    React.useEffect(() => {
+        if (!pendingLocateRef.current) return;
+        const match = packages.find(p => normPath(p.filePath) === pendingLocateRef.current);
+        if (match) {
+            pendingLocateRef.current = null;
+            // Locate + highlight in the grid. Keep the current selection/sidebar —
+            // select:false stops the locate logic from focusing the jumped-to package.
+            onLocatePackage(match, { select: false });
+        }
+    }, [packages, onLocatePackage]);
 
     const handleSidebarContextMenu = React.useCallback((e: React.MouseEvent, pkg: VarPackage) => {
         e.preventDefault();
@@ -87,8 +103,56 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
         }
     }, [highlightedRequest, scrollContainerRef]);
 
+    // Jump to whichever library holds `id`, then locate it there once it loads.
+    // Resolves by family, so it lands on the best available version; when an exact
+    // version was requested and differs, the toast says so. Shared by the
+    // dependency-panel clicks and the sidebar title lookup.
+    const jumpAcrossLibraries = (id: string, displayName: string, expectedVersion?: string) => {
+        if (!window.go) {
+            addToast(`Package not found in library: ${displayName}`, "error");
+            return;
+        }
+        window.go.main.App.LocateDependencies([id])
+            .then((map: Record<string, DependencyLocation>) => {
+                const loc = map[id];
+                if (!loc || !loc.found) {
+                    addToast(`Not found in any library: ${displayName}`, "error");
+                    return;
+                }
+                if (normPath(loc.libraryPath) === normPath(activeLibraryPath)) {
+                    addToast(`Package not found in library: ${displayName}`, "error");
+                    return;
+                }
+                pendingLocateRef.current = normPath(loc.filePath);
+                selectLibrary(loc.libraryPath);
+                const versionNote = expectedVersion && (loc.version || "").toLowerCase() !== expectedVersion.toLowerCase()
+                    ? ` — exact version not found, showing v${loc.version}`
+                    : "";
+                addToast(`Switching to “${loc.libraryLabel}” for ${loc.packageName || displayName}${versionNote}`, "info");
+            })
+            .catch(() => addToast(`Package not found: ${displayName}`, "error"));
+    };
+
+    // True lookup for the sidebar title: locate in the current library if present,
+    // otherwise jump to the library that actually holds it. Fixes clicking the
+    // title of a stale selection (from a previously-open library) navigating to a
+    // page that has nothing.
+    const handleLocate = (target: VarPackage) => {
+        const targetId = `${target.meta.creator}.${target.meta.packageName}.${target.meta.version}`.toLowerCase();
+        const inLibrary = packages.find(p =>
+            normPath(p.filePath) === normPath(target.filePath) ||
+            `${p.meta.creator}.${p.meta.packageName}.${p.meta.version}`.toLowerCase() === targetId
+        );
+        if (inLibrary) {
+            onLocatePackage(inLibrary);
+            return;
+        }
+        jumpAcrossLibraries(targetId, target.meta.packageName || target.fileName);
+    };
+
     const handleDependencyClick = (depId: string) => {
         const cleanDep = depId.replace(/\\/g, '/').toLowerCase();
+        let requestedVersion = ""; // explicit numeric version, if one was asked for
 
         // 1. Try Path Match First (For "Used By" lookups where path is known)
         let found = packages.find(p => p.filePath.replace(/\\/g, '/').toLowerCase() === cleanDep);
@@ -101,53 +165,39 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
             });
         }
 
-        // 3. Fallback / "Latest" Resolution
+        // 3. Family fallback: resolve to the best AVAILABLE version in this library.
+        //    We no longer dead-end on a version mismatch — the exact version is often
+        //    not the copy installed. If we substitute, we warn below.
         if (!found) {
             let searchCreator = "";
             let searchPkg = "";
             let searchVersion = "";
 
-            // Parsing Logic: Handle names with dots (e.g. Creator.My.Package.Name.1)
-            // Strategy: Assume format is Creator.PackageName.Version
-            // We split by FIRST dot for Creator, and LAST dot for Version.
-            // Everything in between is PackageName.
-
+            // Parse "Creator.PackageName.Version": first dot splits the creator,
+            // last dot splits the version, the middle is the (possibly dotted) name.
             const firstDot = cleanDep.indexOf('.');
             const lastDot = cleanDep.lastIndexOf('.');
-
             if (firstDot > 0 && lastDot > firstDot) {
                 searchCreator = cleanDep.substring(0, firstDot);
                 searchPkg = cleanDep.substring(firstDot + 1, lastDot);
                 searchVersion = cleanDep.substring(lastDot + 1);
             } else if (firstDot > 0) {
-                // Fallback: Creator.Package (No version or latest implied)
                 searchCreator = cleanDep.substring(0, firstDot);
                 searchPkg = cleanDep.substring(firstDot + 1);
             }
+            if (!isNaN(parseInt(searchVersion)) && searchVersion !== 'latest') {
+                requestedVersion = searchVersion;
+            }
 
-            // Only attempt fallback if we successfully parsed a Creator and Package
             if (searchCreator && searchPkg) {
-                // Determine if we should allow vague matching (finding ANY version)
-                // We allow it ONLY if version is 'latest' or ambiguous.
-                // We BLOCK it if a specific numeric version was requested but not found (Step 2 failed).
-                const isExplicitVersion = !isNaN(parseInt(searchVersion)) && searchVersion !== 'latest';
-
-                if (isExplicitVersion) {
-                    addToast(`Specific version not found: ${depId}`, "error");
-                    return; // STRICT MODE: Do not jump to different version
-                }
-
-                // If loose/latest, find best candidate
                 const candidates = packages.filter(p =>
                     (p.meta.creator || "").toLowerCase() === searchCreator &&
                     (p.meta.packageName || "").toLowerCase() === searchPkg
                 );
-
                 if (candidates.length > 0) {
-                    // Sort Descending (Newest First)
-                    candidates.sort((a, b) => {
-                        return (b.meta.version || "").localeCompare(a.meta.version || "", undefined, { numeric: true });
-                    });
+                    candidates.sort((a, b) =>
+                        (b.meta.version || "").localeCompare(a.meta.version || "", undefined, { numeric: true })
+                    );
                     found = candidates[0];
                 }
             }
@@ -160,11 +210,16 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
         }
 
         if (found) {
-            // Found it! No toast for success/fuzzy match as per user request.
+            // Warn only when we had to substitute a different version than requested.
+            if (requestedVersion && (found.meta.version || "").toLowerCase() !== requestedVersion) {
+                addToast(`Exact version not found (${depId}) — showing v${found.meta.version}`, "info");
+            }
             onLocatePackage(found);
-        } else {
-            addToast(`Package not found in library: ${depId}`, "error");
+            return;
         }
+
+        // 5. Not in this library — jump to whichever library holds the best copy.
+        jumpAcrossLibraries(depId, depId, requestedVersion);
     };
 
     // Calculate View Slice & Off-Screen Status
@@ -229,7 +284,7 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
                         onTabChange={setActiveTab}
                         onFilterByCreator={(c) => setSelectedCreator(c)}
                         onDependencyClick={handleDependencyClick}
-                        onTitleClick={onLocatePackage}
+                        onTitleClick={handleLocate}
                         getDependencyStatus={handleGetDependencyStatus}
                         selectedCreator={selectedCreator}
                         censorThumbnails={censorThumbnails}

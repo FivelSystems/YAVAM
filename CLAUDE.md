@@ -1,8 +1,8 @@
 # CLAUDE.md
 
-Guidance for Claude Code (and other AI agents) working in this repository.
-See [AGENTS.md](AGENTS.md) for the full persona/rule set; this file is the
-practical quick-start and the source of truth for conventions.
+The single guidance file for AI agents (Claude Code, Copilot, Cursor, etc.)
+working in this repository. It is both the practical quick-start and the source
+of truth for conventions and rules.
 
 ## Project
 
@@ -13,6 +13,26 @@ server for phone/tablet access. It never modifies game files.
 **Stack:** [Wails v2](https://wails.io/) — Go backend + React 18 + TypeScript +
 Vite + Tailwind CSS frontend. Local persistence via SQLite (`modernc.org/sqlite`,
 pure-Go, no CGO for the DB).
+
+## Prime directives
+
+- **Explicit consent to publish.** Never `git push` (or otherwise share code
+  externally) without the user's approval of the current state.
+- **Constructive pushback over compliance.** If a request is insecure,
+  non-performant, or wrong, stop and explain why, then offer a better path. Don't
+  ship "working but messy" code.
+- **Security first.** This app runs a local web server and touches the user's
+  filesystem. Never expose full filesystem access; validate every path.
+- **Portable.** The app runs without installation — no registry keys, no fixed
+  system paths. Use dynamic paths (`os.UserHomeDir`, etc.).
+- **No broken windows.** If you pass a function missing error handling, fix it.
+
+## Domain knowledge
+
+Before designing features that touch VaM internals (parsing, dependencies, scene
+structure) or the frontend architecture, read the relevant spec:
+- [docs/domain/virt-a-mate.md](docs/domain/virt-a-mate.md)
+- [docs/domain/frontend-architecture.md](docs/domain/frontend-architecture.md)
 
 ## Commands
 
@@ -46,11 +66,15 @@ fatal.
 - `pkg/database` — SQLite layer. Migrations are **append-only and forward-only**
   (`pkg/database/migration.go`); never edit an existing migration, only add one.
 - `pkg/updater` — self-update + release-channel logic.
+- `pkg/utils` — shared, dependency-free helpers (extract here when a rule repeats).
 
 **Frontend (`frontend/src/`)**
-- Functional components with TypeScript interfaces; Tailwind for all styling.
+- Functional components with TypeScript interfaces; Tailwind for all styling
+  (no CSS-in-JS or `.css` files beyond `index.css`). Use CSS variables for colors
+  to keep future theming possible. Mobile view is a first-class concern.
+- State via React Context or hooks; avoid Redux unless truly needed.
 - Reuse existing UI primitives (`components/ui/`) and settings components before
-  writing new ones.
+  writing new ones. If you write a pattern twice, extract a component.
 - No native `alert`/`confirm`; use the Modal/Toast components.
 
 ### Data model (important)
@@ -61,7 +85,38 @@ fatal.
   are mirrored *from* config.json into the DB on launch, so an older build that
   predates the DB still works off config.json.
 - **Settings split:** host/system settings → `config.json` (backend). Per-device
-  view preferences (grid size, sort) → `localStorage` (client).
+  view preferences (grid size, sort) → `localStorage` (client). Rule of thumb: if
+  a mobile user needs a different value than the desktop user, it's `localStorage`.
+
+## Code quality & style
+
+- **Self-documenting code.** Prefer readable code over comments. Comments explain
+  *how a system/architecture works and why* — not what each line does. Delete
+  comments that merely restate the code.
+- **Apply design patterns deliberately.** For non-trivial work, evaluate where a
+  pattern fits (and where it doesn't), and say so.
+- **DRY & SOLID.** Extract repeated rules into one definition (`pkg/utils` or a
+  shared component); keep single responsibility and inject dependencies.
+- **Human-readable names.** No cryptic abbreviations, single-letter names with no
+  meaning, or magic numbers — name the constant or the concept.
+
+## Documentation voice
+
+Every `.md` file (README, CHANGELOG, `docs/`, ROADMAP, TODO) is **public
+documentation for everyone who reads the repository** — not a private notebook or
+a message to the maintainer. Write accordingly:
+
+- **Never address the maintainer or narrate a conversation.** No "per your call",
+  "here's what I'd do", "as you asked", "my perspective". State decisions and facts
+  in a neutral, third-person voice. If you must attribute a decision, say who made
+  it in the third person (e.g. "verified live by the maintainer").
+- **Not local-only scratch notes.** Don't reference chat sessions, the current
+  agent, or "between sessions". A reader with no context should understand it.
+- **"You" means any reader/contributor, never the maintainer.** Contributor-facing
+  guidance (like this file) may address the reader; user-facing docs (CHANGELOG,
+  README) speak to the end user about the product.
+- This applies to edits too: when you touch an existing `.md` file, fix any
+  conversational leftovers you find rather than matching them.
 
 ## Release channels & updates
 
@@ -80,10 +135,14 @@ pre-release identifiers**. The `YAVAM_UPDATE_URL` env var overrides the API base
 We use [Conventional Branch](https://conventionalbranch.org/) and
 [Conventional Commits](https://www.conventionalcommits.org/). Details:
 - [docs/BRANCHING.md](docs/BRANCHING.md) — branch model (`main`, `release/vX.Y.Z`,
-  `feature/`, `bugfix/`, `chore/`, `docs/`). `dev` is retired.
+  `feature/`, `bugfix/`, `chore/`, `docs/`). `dev` is retired. `main` feeds the
+  **Unstable** channel; cutting a `release/vX.Y.Z` branch publishes **Stable**.
 - [docs/RELEASING.md](docs/RELEASING.md) — how to cut a release, versioning, and
   the changelog convention.
 - [docs/WORKFLOWS.md](docs/WORKFLOWS.md) — how the CI workflows are wired.
+
+Commit style is `type(scope): description` (`feat`, `fix`, `refactor`, `test`,
+`chore`, `docs`; scopes like `backend`, `frontend`, `ui`, `security`, `docs`).
 
 ## Conventions & gotchas
 
@@ -92,11 +151,15 @@ We use [Conventional Branch](https://conventionalbranch.org/) and
   invalid pre-release order (see RELEASING.md).
 - **CHANGELOG.md** follows [Keep a Changelog](https://keepachangelog.com/): keep
   `## [Unreleased]` during dev; rename it to `## [X.Y.Z] - date` at release.
-  Release notes are extracted from these headings by CI.
-- **Go:** standard-library-first; validate every filesystem path with
-  `IsPathAllowed` before access; never shell out (`cmd`/`powershell`) for file
-  operations; add/adjust `*_test.go` when touching logic.
-- **Never commit secrets, tokens, or hardcoded personal paths.** Use dynamic
-  paths (`os.UserHomeDir`, etc.).
-- Run `go build ./...`, `go test ./...`, and `npx tsc --noEmit` before considering
-  a change done.
+  Release notes are extracted from these headings by CI. Group entries under
+  `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`.
+- **Go:** standard-library-first; validate every filesystem path against the
+  configured libraries (`Manager.ValidatePath`) before access; never shell out
+  (`cmd`/`powershell`) for file operations; add/adjust `*_test.go` when touching
+  logic. Ensure thread-safety in `manager` and `server`.
+- **Security review** when touching `auth`, `server`, `filesystem`, `config`, or
+  `logging`: no secrets/tokens/personal paths committed; no PII or session tokens
+  in logs; sanitize all frontend/HTTP inputs; keep `.gitignore` covering keys and
+  build artifacts. Record findings in `docs/SECURITY_AUDIT.md`.
+- Run `go build ./...`, `go test ./...`, `go vet ./...`, and `npx tsc --noEmit`
+  before considering a change done.

@@ -146,7 +146,10 @@ const DashboardContent = () => {
     const [highlightedRequest, setHighlightedRequest] = useState<{ id: string; ts: number } | null>(null);
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const handleLocatePackage = (targetPkg: VarPackage) => {
+    const handleLocatePackage = (targetPkg: VarPackage, opts?: { select?: boolean }) => {
+        // select defaults true (locating usually implies focusing). Cross-library
+        // jumps pass select:false so the sidebar keeps its current selection.
+        const allowSelect = opts?.select !== false;
         let finalPkg = targetPkg;
 
         // 1. Check if visible in current filter
@@ -164,7 +167,7 @@ const DashboardContent = () => {
                 finalPkg = equivalent;
 
                 // Update selection to match local instance (Fixes "Ghost Selection" from other lib)
-                if (selectedPackage?.filePath !== equivalent.filePath) {
+                if (allowSelect && selectedPackage?.filePath !== equivalent.filePath) {
                     setSelectedPackage(equivalent);
                 }
                 // Re-check visibility

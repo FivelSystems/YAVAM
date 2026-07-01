@@ -8,6 +8,8 @@ export interface DependencyGroupItem {
     missingId?: string;
     targetId: string;
     depth?: number;
+    /** Set when the item is not in the current library but exists in another. */
+    external?: { libraryLabel: string; isEnabled: boolean };
 }
 
 interface DependencyGroupProps {
@@ -46,12 +48,9 @@ export const DependencyGroup = ({ title, items, emptyMessage = "No items.", onIt
                             key={`${item.targetId}-${item.depth || 0}`}
                             pkg={item.pkg}
                             missingId={item.missingId}
+                            external={item.external}
                             indentLevel={item.depth || 0}
-                            onClick={() => {
-                                if (!item.missingId) {
-                                    onItemClick(item.targetId);
-                                }
-                            }}
+                            onClick={() => onItemClick(item.targetId)}
                             onContextMenu={onItemContextMenu}
                         />
                     ))

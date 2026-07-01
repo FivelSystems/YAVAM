@@ -281,13 +281,56 @@ func (o *scanOrchestrator) runThreePhase(ctx context.Context, rawPkgs []models.V
 	//             = O(N) work regardless of library size.
 	o.onStage(ScanStageProgress{Stage: StageAnalyzing, Current: 0, Total: total})
 
-	local := NewLocalResolver(scannedPkgs)
-	analyses := LinkPass(scannedPkgs, local)
+	// Persist this library's dependency edges first so the global graph the
+	// analysis reads includes them. Non-fatal: a DB error must not break the scan.
+	if o.db != nil {
+		persistDependencies(o.db, scannedPkgs)
+	}
+
+	// Duplicate detection is per-set; dependency/orphan/used-by analysis resolves
+	// against the global (cross-library) graph in the DB.
+	analyses := AnalyzePackages(scannedPkgs, o.db)
 
 	o.onStage(ScanStageProgress{Stage: StageAnalyzing, Current: total, Total: total, Done: true})
 	o.onAnalysisDone(analyses) // single batch callback
 
 	return nil
+}
+
+// logicalKey is the lower-cased "Creator.PackageName.Version" identity of a
+// package — the dependent side of a dependency edge.
+func logicalKey(p models.VarPackage) string {
+	return strings.ToLower(fmt.Sprintf("%s.%s.%s", p.Meta.Creator, p.Meta.PackageName, p.Meta.Version))
+}
+
+// persistDependencies writes each scanned package's dependency edges. Edges link
+// on family (see depFamily) so reverse lookups are version-agnostic. Every
+// scanned package's key is passed as a dependent so stale edges are cleared even
+// for packages that now declare none.
+func persistDependencies(db *database.DB, pkgs []models.VarPackage) {
+	dependentKeys := make([]string, 0, len(pkgs))
+	var edges []database.DependencyRow
+	for _, p := range pkgs {
+		if p.IsCorrupt || p.Meta.Creator == "" {
+			continue
+		}
+		depKey := logicalKey(p)
+		depFam := familyOf(p)
+		dependentKeys = append(dependentKeys, depKey)
+
+		for rawDep := range p.Meta.Dependencies {
+			edges = append(edges, database.DependencyRow{
+				DependentKey:       depKey,
+				DependentFamily:    depFam,
+				DependencyDeclared: strings.ToLower(strings.TrimSpace(rawDep)),
+				DependencyFamily:   depFamily(rawDep),
+			})
+		}
+	}
+
+	if err := db.ReplaceDependencies(dependentKeys, edges); err != nil {
+		log.Printf("[Scanner] DB dependency persist error: %v", err)
+	}
 }
 
 // nextPath returns the next path to scan, preferring highCh over normalQueue.

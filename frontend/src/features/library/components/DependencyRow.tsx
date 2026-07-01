@@ -1,4 +1,4 @@
-import { Check, AlertCircle, AlertTriangle, Box, Power, Unlink, X, Copy, CornerDownRight } from 'lucide-react';
+import { Check, AlertCircle, AlertTriangle, Box, Power, Unlink, X, Copy, CornerDownRight, FolderInput } from 'lucide-react';
 import clsx from 'clsx';
 import { VarPackage } from '../../../types';
 import { getPackageStatus } from '../utils';
@@ -6,16 +6,52 @@ import { PACKAGE_STATUS } from '../../../constants';
 import { formatBytes } from '../../../utils/format';
 
 interface DependencyRowProps {
-    pkg?: VarPackage; // if found
-    missingId?: string; // if missing
+    pkg?: VarPackage; // if found in the current library
+    missingId?: string; // if not found locally
+    external?: { libraryLabel: string; isEnabled: boolean }; // set when it lives in another library
     indentLevel?: number;
     onClick: () => void;
     onContextMenu?: (pkg: VarPackage, e: React.MouseEvent) => void;
 }
 
-export const DependencyRow = ({ pkg, missingId, indentLevel = 0, onClick, onContextMenu }: DependencyRowProps) => {
-    // Missing Dependency State
+// A small blue badge naming the library an external dependency lives in.
+const LibraryBadge = ({ label }: { label: string }) => (
+    <span className="shrink-0 px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 text-[10px] font-medium max-w-[45%] truncate flex items-center gap-1">
+        <FolderInput size={10} /> {label}
+    </span>
+);
+
+export const DependencyRow = ({ pkg, missingId, external, indentLevel = 0, onClick, onContextMenu }: DependencyRowProps) => {
+    // Not in the current library.
     if (!pkg) {
+        // In another library: colour by its enable state (like a normal row); only
+        // the library label is blue. Clickable — jumps to that library and locates.
+        if (external) {
+            const bgClass = external.isEnabled
+                ? "bg-green-500/10 border-green-500/20 text-green-300 hover:bg-green-500/20"
+                : "bg-gray-800 border-gray-600 text-gray-400 hover:bg-gray-700";
+            const icon = external.isEnabled
+                ? <Check size={14} className="text-green-500 shrink-0" />
+                : <Power size={14} className="text-gray-400 shrink-0" />;
+            return (
+                <div
+                    onClick={onClick}
+                    className={clsx("flex items-center gap-3 p-2 rounded-lg text-xs border transition-colors cursor-pointer group", bgClass)}
+                    title={`In library “${external.libraryLabel}” — click to switch and locate: ${missingId}`}
+                >
+                    {indentLevel > 0 && (
+                        <div className="text-gray-600 shrink-0">
+                            <CornerDownRight size={12} />
+                        </div>
+                    )}
+                    {icon}
+                    <span className="truncate flex-1 min-w-0 font-mono">{missingId}</span>
+                    <LibraryBadge label={external.libraryLabel} />
+                </div>
+            );
+        }
+
+        // Genuinely missing from every library.
         return (
             <div
                 onClick={onClick}
