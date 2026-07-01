@@ -32,32 +32,49 @@ only) — nothing below is shipped to Stable users yet.
   [WORKFLOWS.md](WORKFLOWS.md), [CLAUDE.md](../CLAUDE.md),
   [.github/CONTRIBUTING.md](../.github/CONTRIBUTING.md); Conventional Branch adopted.
 
-## 🔴 P0 — Finish Phase 2 before anything else (regression)
+## 🟡 P0 — Finish Phase 2 (regression) — **substantially done, on `feat/sqlite-read-path`**
 
-The SQLite migration is **not complete**, and it currently regresses core behavior.
-This blocks everything above it in the value chain (search, cleanup, pocket all
-depend on reliable package + dependency data). Diagnosis from this session:
+The SQLite migration regressed core behavior. This blocked everything above it in
+the value chain (search, cleanup, pocket all depend on reliable package +
+dependency data). Original diagnosis and the fixes applied this session:
 
-1. **The `dependencies` table is never written.** `LinkPass`
-   ([pkg/services/library/analysis.go](../pkg/services/library/analysis.go))
-   computes dependency/orphan/duplicate analysis **in memory** and emits it via the
-   `package:analyzed` event — but there is **no `INSERT INTO dependencies`** anywhere.
-   The empty table is "not implemented yet," not corruption.
-2. **Frontend looks empty/missing** because the analysis isn't persisted or served
-   consistently from the DB — the read path is half-migrated.
-3. **Library path casing is inconsistent** (some lowercase, some not). SQLite text
-   matching on `libraries.path` / `packages.rel_path` is **case-sensitive**, so
-   inconsistent casing breaks the library↔package association and makes rows appear
-   to vanish. Dependency *key* matching already lowercases both sides (fine); the
-   **path** normalization is the culprit.
+1. ~~**The `dependencies` table is never written.**~~ ✅ **Fixed, then redesigned
+   for [#45](https://github.com/FivelSystems/YAVAM/issues/45).** The scan persists
+   the dependency graph (`persistDependencies` in
+   [scan_orchestrator.go](../pkg/services/library/scan_orchestrator.go)), scoped by
+   dependent key so re-scanning one library refreshes only its edges. Crucially the
+   graph is now **family-anchored** (migration v3): edges store `dependency_family`
+   (`creator.name`) as the matching key, not the versioned string — because VaM
+   deps use `.latest`/pinned versions that rarely match the installed copy, which
+   is exactly why reverse "used by" was empty. Resolution is **cross-library and
+   derived globally** (`DependencyGraph`/`AnalyzePackages` in
+   [dependency_graph.go](../pkg/services/library/dependency_graph.go)): a dep is
+   satisfied iff any package of that family exists in any library, and "used by"
+   spans libraries. `LinkPass` keeps duplicate/obsolete detection.
+2. ~~**Frontend looks empty/missing** (read path half-migrated).~~ ✅ **Fixed.**
+   The read path is wired: `GetCachedPackages`
+   ([read.go](../pkg/services/library/read.go)) reconstructs the package list from
+   the index, rebuilds each package's dependency map from the persisted graph, and
+   runs the **same `LinkPass`** a live scan uses — so the cached view's analysis is
+   identical to a fresh scan. The grid is painted **cache-first**, then a launch
+   scan **revalidates** against disk (chosen model: cache-first + rescan-on-launch);
+   files deleted since the last scan are pruned on `scan:complete`.
+3. ~~**Library path casing is inconsistent**, breaking the library↔package
+   association.~~ ✅ **Fixed.** A single canonical-path helper
+   ([utils.CanonPath](../pkg/utils/path.go)) is now the one definition of "same
+   path"; `Manager.ValidatePath` and the DB layer both call it. `libraries.path`
+   keeps its original display casing; a new `path_norm` column (migration v2) is the
+   case-insensitive matching key, backfilled/deduped in Go on open
+   (`reconcilePathNorm`) so it can never drift from lookups.
 
-**The Phase 2 completion work (its own branch + conversation):**
-- Canonicalize paths once (single normalization helper) on write *and* lookup.
-- Persist the dependency graph to `dependencies` (dependent_id, dependency_id,
-  is_resolved) during `LinkPass` — the reverse-dependency map already exists in
-  memory, so both directions ("needs" and "used by") become fast, indexed queries.
-- Serve package + analysis state from the DB reliably; reconcile the scan → DB →
-  frontend flow.
+**Remaining before calling Phase 2 fully closed:**
+- Manual verification in the running app (cache-first paint, deletion pruning,
+  casing-variant libraries). ✅ Dependency "used by" fix (#45) **verified live in the
+  app by the user** — works well.
+- ✅ `referencedBy`/`obsoletedBy` now carried by `models.VarPackage`, so the cached
+  view has them too.
+- Optional: extend cache-first to **web mode** (`/api/packages`); today it's
+  desktop-only (guarded by `window.go`).
 
 ## My perspective (what you asked)
 
@@ -74,6 +91,11 @@ patch for fixes. Keep phases as a *priority-ordered backlog*, and let `2.0.0` me
    foundation. Bring it *ahead* of Phase 3 (library management) and Phase 5
    (ratings/favorites). Suggest splitting it: **4a smart searchbar** (tokens, filters)
    first — high value, self-contained — then **4b sidebar redesign / creator view**.
+   - **Idea (captured, not scheduled):** now that #45 is fixed, the details panel's
+     **"Needs" and "Used By" lists can get large** — a package can have dozens of
+     dependents. Each list wants its own **filter/search field** (and likely
+     count + collapse). Good fit for 4b (sidebar redesign); the data is already
+     indexed by family, so filtering is cheap.
 3. Phase 5 (ratings/favorites/license) — small, rides on the same DB, good quick wins.
 4. Phase 3 (library management) — valuable but heavier and security-sensitive.
 5. Phases 6–10 as before.

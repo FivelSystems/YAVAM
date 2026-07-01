@@ -11,11 +11,21 @@
 ### Added
 - **Update Channels**: A new **Stable / Unstable** selector under `Settings → Application → Updates`. Stay on tested **Stable** releases, or opt into **Unstable** to preview weekly in-development builds early. Switching back to Stable is always available, and your data is preserved either way.
 - **Manual Update Check**: A "Check now" button in the Updates section lets you check your selected channel on demand instead of waiting for the startup check.
+- **Instant Grid on Launch**: Opening a library now shows its packages immediately from the local index while a fresh scan reconciles with disk in the background — no more waiting on an empty grid. Files deleted since the last scan drop off automatically once the scan completes.
+- **Cross-Library Dependencies**: In the details panel, a dependency or "Used By" entry that lives in a *different* library is now labelled with that library's name and is clickable — clicking switches to that library and **locates & highlights** the package in the grid (your current selection and open panel stay put). Those rows are coloured by the target's enabled/disabled state, so only the library label is blue. Previously such entries were unclickable and could leave the grid empty.
 
 ### Changed
 - **Local Database (Foundation)**: Package and library metadata is now indexed into a local SQLite database, laying the groundwork for faster startups, persistent ratings/favourites, and upcoming features. Your `config.json` remains the source of truth for configured library paths, so the change is fully backward-compatible.
+- **Dependency Version Fallback**: Clicking a dependency whose exact version isn't installed no longer dead-ends with "specific version not found". YAVAM now takes you to the newest available copy — locally or in another library — with a heads-up that the exact version wasn't found.
 - **Deletion**: Improved package deletion behaviour for more reliable and predictable results.
 - **Release Pipeline**: Reworked the release process around the new Stable and Unstable channels. See [docs/RELEASING.md](docs/RELEASING.md).
+
+### Fixed
+- **"Used By" Now Works ([#45](https://github.com/FivelSystems/YAVAM/issues/45))**: Reverse dependency lookup was matching on the exact versioned id, so a package that was clearly required by others showed an empty "Used By" — because dependents almost always reference it via `.latest` or a different version. Dependencies are now linked by package family (creator + name), so "Used By" resolves regardless of version, **across all your libraries**, and orphan detection is no longer thrown off by `.latest` references. "Used By" entries are also de-duplicated (they no longer repeat the same package several times).
+- **Library Not Loading on Launch**: Fixed a regression where the initially-selected library could come up empty until you pressed Rescan.
+- **Missing / Vanishing Packages**: Fixed a regression where referencing a library under a different drive-letter or folder casing (e.g. `D:\VaM` vs `d:\vam`) could create duplicate index entries and make packages appear to disappear. Library paths are now matched case-insensitively while their original display casing is preserved.
+- **Smoother Scanning**: The grid no longer flickers or feels sluggish while a scan runs. Cards only update when their data actually changes, so you can browse uninterrupted as content fills in the background.
+- **Test Isolation**: Automated tests no longer write fixture libraries (e.g. `C:\Allowed`) into the real application database.
 
 ## [1.3.19] - 2026-05-14
 
