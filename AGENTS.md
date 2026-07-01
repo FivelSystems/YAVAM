@@ -48,6 +48,13 @@
 **Scopes:** `backend`, `frontend`, `ui`, `security`, `docs`
 **Example:** `feat(security): replace powershell with native windows APIs`
 
+## 🌿 Branching & Releases
+**Branch style:** [Conventional Branch](https://conventionalbranch.org/) — `type/kebab-description` (`feature/`, `bugfix/`, `hotfix/`, `release/`, `chore/`, `docs/`).
+- Branch off `main`; PR back into `main`. `dev` is **retired** — do not use it.
+- `main` feeds the **Unstable** channel; cutting a `release/vX.Y.Z` branch publishes a **Stable** release.
+- **NEVER** push to remote without explicit user consent (see Prime Directives).
+- Full details: [docs/BRANCHING.md](./docs/BRANCHING.md), [docs/RELEASING.md](./docs/RELEASING.md), [docs/WORKFLOWS.md](./docs/WORKFLOWS.md).
+
 ## 🤖 Logic Units (Sub-Agents)
 Adopt these specific personas based on the active task.
 

@@ -6,6 +6,20 @@
 
 # Changelog
 
+## [Unreleased]
+_No changes yet — in active development on `main`._
+
+## [1.4.0] - 2026-07-01
+
+### Added
+- **Update Channels**: A new **Stable / Unstable** selector under `Settings → Application → Updates`. Stay on tested **Stable** releases, or opt into **Unstable** to preview weekly in-development builds early. Switching back to Stable is always available, and your data is preserved either way.
+- **Manual Update Check**: A "Check now" button in the Updates section lets you check your selected channel on demand instead of waiting for the startup check.
+
+### Changed
+- **Local Database (Foundation)**: Package and library metadata is now indexed into a local SQLite database, laying the groundwork for faster startups, persistent ratings/favourites, and upcoming features. Your `config.json` remains the source of truth for configured library paths, so the change is fully backward-compatible.
+- **Deletion**: Improved package deletion behaviour for more reliable and predictable results.
+- **Release Pipeline**: Reworked the release process around the new Stable and Unstable channels. See [docs/RELEASING.md](docs/RELEASING.md).
+
 ## [1.3.19] - 2026-05-14
 
 ### Added
