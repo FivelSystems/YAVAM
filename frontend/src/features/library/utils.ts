@@ -81,6 +81,30 @@ export const findBestPackageMatch = (allPackages: VarPackage[], targetId: string
 };
 
 /**
+ * Resolves a package FAMILY ("creator.name") to its best local copy by EXACT
+ * family match (enabled first, then highest version). Unlike findBestPackageMatch,
+ * it never prefix-matches — used for "Used By" families, where prefix matching
+ * would collapse distinct families (e.g. "creator.timeline" and
+ * "creator.timelinecontrol") onto one package and duplicate the entry.
+ */
+export const findPackageByFamily = (allPackages: VarPackage[], family: string): VarPackage | undefined => {
+    if (!family || !allPackages) return undefined;
+    const fam = family.toLowerCase();
+
+    const candidates = allPackages.filter(p =>
+        `${p.meta?.creator || ''}.${p.meta?.packageName || ''}`.toLowerCase() === fam
+    );
+    if (candidates.length === 0) return undefined;
+
+    candidates.sort((a, b) => {
+        if (a.isEnabled && !b.isEnabled) return -1;
+        if (!a.isEnabled && b.isEnabled) return 1;
+        return (b.meta.version || '').localeCompare(a.meta.version || '', undefined, { numeric: true });
+    });
+    return candidates[0];
+};
+
+/**
  * Returns the inline style for privacy blurring if enabled.
  */
 export const getBlurStyle = (censor: boolean, blur: number) =>

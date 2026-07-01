@@ -2,15 +2,15 @@ import { useState, useEffect, useMemo } from 'react';
 import { X, Box, FileImage, User, Scissors, Copy, AlertCircle, Puzzle, Music, Image as ImageIcon } from 'lucide-react';
 import clsx from 'clsx';
 import { motion } from 'framer-motion';
-import { VarPackage } from '../../types';
+import { VarPackage, DependencyLocation } from '../../types';
 import { useThumbnail } from '../../hooks/useThumbnail';
 
-import { findBestPackageMatch, getBlurStyle } from './utils';
+import { findPackageByFamily, getBlurStyle } from './utils';
 import { getDependencySummary } from '../../utils/dependency';
 import { usePackageContext } from '../../context/PackageContext';
 import { fetchWithAuth } from '../../services/api';
 import { formatBytes } from '../../utils/format';
-import { DependencyGroup } from './components/DependencyGroup';
+import { DependencyGroup, DependencyGroupItem } from './components/DependencyGroup';
 import { ImageCarouselModal, CarouselImage } from './components/ImageCarouselModal';
 
 export interface PackageContent {
@@ -44,6 +44,9 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
     const [loading, setLoading] = useState(false);
     const [carouselOpen, setCarouselOpen] = useState(false);
     const [carouselIndex, setCarouselIndex] = useState(0);
+    // Dependencies/dependents not in the current library, resolved to the library
+    // that holds them (keyed by the queried id/family).
+    const [externalMap, setExternalMap] = useState<Record<string, DependencyLocation>>({});
     const thumbSrc = useThumbnail(pkg);
     const { packages } = usePackageContext();
 
@@ -94,33 +97,67 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
         return getDependencySummary(pkg, packages);
     }, [pkg, packages]);
 
+    // Resolve items not present in the current library to whichever library holds
+    // them, so cross-library entries can be labelled and jumped to. Desktop only.
+    useEffect(() => {
+        if (!pkg || !window.go) { setExternalMap({}); return; }
+        const ids = new Set<string>();
+        depsInfo.missing.forEach(id => ids.add(id));
+        (pkg.referencedBy || []).forEach(fam => {
+            if (!findPackageByFamily(packages, fam)) ids.add(fam);
+        });
+        if (ids.size === 0) { setExternalMap({}); return; }
+
+        let active = true;
+        window.go.main.App.LocateDependencies(Array.from(ids))
+            .then((map: Record<string, DependencyLocation>) => { if (active) setExternalMap(map || {}); })
+            .catch(() => { if (active) setExternalMap({}); });
+        return () => { active = false; };
+    }, [pkg, packages, depsInfo]);
+
     const depsItems = useMemo(() => {
         return [
-            ...depsInfo.missing.map(depId => ({
-                missingId: depId,
-                targetId: depId,
-                depth: 0
-            })),
+            ...depsInfo.missing.map(depId => {
+                const ext = externalMap[depId];
+                return {
+                    missingId: depId,
+                    targetId: depId,
+                    depth: 0,
+                    external: ext?.found ? { libraryLabel: ext.libraryLabel, isEnabled: ext.isEnabled } : undefined,
+                };
+            }),
             ...depsInfo.nodes.map(node => ({
                 pkg: node.pkg,
                 targetId: node.pkg.filePath,
                 depth: Math.max(0, node.depth - 1)
             }))
         ];
-    }, [depsInfo]);
+    }, [depsInfo, externalMap]);
 
     const usedByItems = useMemo(() => {
         if (!pkg || !pkg.referencedBy) return [];
-        return pkg.referencedBy.map(refId => {
-            const resolvedPkg = findBestPackageMatch(packages, refId);
-            return {
-                pkg: resolvedPkg || undefined,
-                missingId: !resolvedPkg ? refId : undefined,
-                targetId: resolvedPkg ? resolvedPkg.filePath : refId,
-                depth: 0
-            };
-        });
-    }, [pkg, packages]);
+        const seen = new Set<string>();
+        const items: DependencyGroupItem[] = [];
+        for (const refId of pkg.referencedBy) {
+            const fam = refId.toLowerCase();
+            if (seen.has(fam)) continue; // referencedBy is by family; never list one twice
+            seen.add(fam);
+
+            const resolvedPkg = findPackageByFamily(packages, refId);
+            if (resolvedPkg) {
+                items.push({ pkg: resolvedPkg, targetId: resolvedPkg.filePath, depth: 0 });
+            } else {
+                const ext = externalMap[refId];
+                items.push({
+                    missingId: refId,
+                    targetId: refId,
+                    depth: 0,
+                    external: ext?.found ? { libraryLabel: ext.libraryLabel, isEnabled: ext.isEnabled } : undefined,
+                });
+            }
+        }
+        return items;
+    }, [pkg, packages, externalMap]);
 
     const carouselImages = useMemo<CarouselImage[]>(() => {
         const images: CarouselImage[] = [];

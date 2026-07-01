@@ -8,6 +8,62 @@ const EMPTY_STAGES: ScanStages = {
     analyzing: { current: 0, total: 0, done: false },
 };
 
+// Signature of the fields that affect how a package renders, filters, and sorts.
+// Comparing signatures lets the scan skip no-op updates so memoized cards and the
+// sorted view don't churn when a rescan re-confirms data the grid already shows.
+const pkgSignature = (p: VarPackage): string => [
+    p.isEnabled, p.isCorrupt, p.hasThumbnail, p.thumbnailBase64 ? 1 : 0,
+    p.isDuplicate, p.isExactDuplicate, p.isOrphan, p.missingDeps?.length || 0,
+    p.obsoletedBy || '', (p.referencedBy || []).join(','),
+    p.size, p.fileName, p.type || '', p.creationDate, p.scanPhase,
+    p.meta?.creator, p.meta?.packageName, p.meta?.version,
+    (p.categories || []).join(','), (p.tags || []).join(','),
+].join('|');
+
+// applyScanned merges a Hard Pass result over an existing row. The Hard Pass
+// carries file + metadata but NOT analysis (dep/dup/orphan run later), so its
+// default flags must never overwrite flags already on the row — otherwise status
+// badges flicker off and back on. Returns the existing reference unchanged when
+// nothing render-relevant differs, so React.memo skips the card.
+const applyScanned = (existing: VarPackage | undefined, incoming: VarPackage): VarPackage => {
+    const base = existing ?? incoming;
+    const merged: VarPackage = {
+        ...base,
+        filePath: incoming.filePath,
+        fileName: incoming.fileName,
+        size: incoming.size,
+        meta: incoming.meta,
+        type: incoming.type,
+        categories: incoming.categories,
+        tags: incoming.tags,
+        creationDate: incoming.creationDate,
+        thumbnailPath: incoming.thumbnailPath,
+        hasThumbnail: incoming.hasThumbnail,
+        thumbnailBase64: incoming.thumbnailBase64 || base.thumbnailBase64,
+        isCorrupt: incoming.isCorrupt,
+        isEnabled: incoming.filePath.endsWith('.var'),
+        // Never downgrade a row the cache already analyzed back to 'scanned'.
+        scanPhase: base.scanPhase === 'analyzed' ? 'analyzed' : 'scanned',
+    };
+    return existing && pkgSignature(existing) === pkgSignature(merged) ? existing : merged;
+};
+
+// applyAnalysis writes Link Pass results onto a row, reusing the existing
+// reference when the flags already match (cache-first often already has them).
+const applyAnalysis = (p: VarPackage, a: PackageAnalysis): VarPackage => {
+    const merged: VarPackage = {
+        ...p,
+        missingDeps: a.missingDeps ?? [],
+        isDuplicate: a.isDuplicate,
+        isExactDuplicate: a.isExactDuplicate,
+        isOrphan: a.isOrphan,
+        obsoletedBy: a.obsoletedBy,
+        referencedBy: a.referencedBy,
+        scanPhase: 'analyzed',
+    };
+    return pkgSignature(p) === pkgSignature(merged) ? p : merged;
+};
+
 export const usePackages = (activeLibraryPath: string) => {
     const [packages, setPackages] = useState<VarPackage[]>([]);
     const [scanError, setScanError] = useState<string | null>(null);
@@ -24,6 +80,13 @@ export const usePackages = (activeLibraryPath: string) => {
 
     // Sync tracker: normalised paths we've already added to avoid ghost duplicates.
     const knownPathsRef = useRef(new Set<string>());
+
+    // Revalidate bookkeeping: paths the scan observed on disk, and whether the
+    // grid was painted from cache (so scan:complete prunes now-deleted files).
+    const seenThisScanRef = useRef(new Set<string>());
+    const cacheSeededRef = useRef(false);
+
+    const normPath = (p: string) => p.replace(/\\/g, '/').toLowerCase();
 
     // ── Cancel ────────────────────────────────────────────────────────────────
     const cancelScan = useCallback(async (options: { resetLoading?: boolean } = {}) => {
@@ -76,10 +139,38 @@ export const usePackages = (activeLibraryPath: string) => {
         const currentId = ++scanSessionId.current;
         setLoading(true);
         setScanError(null);
-        setPackages([]);
-        setFilteredPkgs([]);
         setScanStages(EMPTY_STAGES);
         knownPathsRef.current.clear();
+        seenThisScanRef.current.clear();
+        cacheSeededRef.current = false;
+
+        // ── Cache-first paint, then revalidate via the scan below ──────────────
+        // Seeding knownPathsRef stops the Light Pass re-adding cached rows as
+        // skeletons (avoids a full→skeleton→full flicker); the Hard Pass still
+        // updates them in place, and deleted files are pruned on scan:complete.
+        if (window.go) {
+            let cached: VarPackage[] = [];
+            try {
+                cached = await window.go.main.App.GetCachedPackages(activeLibraryPath);
+            } catch {
+                cached = [];
+            }
+            // A newer scan superseded us during the await (e.g. a library switch, or
+            // config validation nudging activeLibraryPath on launch). Abort so we
+            // don't clear the grid, steal listeners, or cancel the winning scan.
+            if (scanSessionId.current !== currentId) return;
+
+            if (cached && cached.length > 0) {
+                cached.forEach(p => knownPathsRef.current.add(normPath(p.filePath)));
+                cacheSeededRef.current = true;
+                setPackages(cached.map(p => ({ ...p, scanPhase: 'analyzed' as const })));
+            } else {
+                setPackages([]);
+            }
+        } else {
+            setPackages([]);
+        }
+        setFilteredPkgs([]);
 
         if (window.runtime) {
             // Remove stale listeners
@@ -108,6 +199,8 @@ export const usePackages = (activeLibraryPath: string) => {
                 }, delay);
             };
 
+            const libNorm = currentScanPath.replace(/\\/g, '/').toLowerCase();
+
             const batchFlush = () => {
                 if (scanSessionId.current !== currentId) return;
 
@@ -117,30 +210,31 @@ export const usePackages = (activeLibraryPath: string) => {
                 if (toDiscover.length === 0 && toScan.length === 0) return;
 
                 setPackages(prev => {
-                    // Build a mutable map for fast updates.
                     const map = new Map<string, VarPackage>(prev.map(p => [p.filePath, p]));
+                    let changed = false;
 
                     for (const p of toDiscover) {
-                        const norm = p.filePath.replace(/\\/g, '/').toLowerCase();
-                        if (!knownPathsRef.current.has(norm)) {
-                            knownPathsRef.current.add(norm);
-                            const libNorm = currentScanPath.replace(/\\/g, '/').toLowerCase();
-                            if (!norm.includes(libNorm)) continue;
-                            map.set(p.filePath, { ...p, isEnabled: p.filePath.endsWith('.var'), scanPhase: 'discovered' });
-                        }
+                        const norm = normPath(p.filePath);
+                        if (knownPathsRef.current.has(norm)) continue;
+                        knownPathsRef.current.add(norm);
+                        if (!norm.includes(libNorm)) continue;
+                        map.set(p.filePath, { ...p, isEnabled: p.filePath.endsWith('.var'), scanPhase: 'discovered' });
+                        changed = true;
                     }
 
                     for (const p of toScan) {
                         const existing = map.get(p.filePath);
-                        map.set(p.filePath, {
-                            ...(existing ?? p),
-                            ...p,
-                            isEnabled: p.filePath.endsWith('.var'),
-                            scanPhase: 'scanned',
-                        });
+                        const merged = applyScanned(existing, p);
+                        if (merged !== existing) {
+                            map.set(p.filePath, merged);
+                            changed = true;
+                        }
                     }
 
-                    return Array.from(map.values());
+                    // Returning prev unchanged makes React skip the re-render and the
+                    // downstream sort — so re-confirming already-correct cache rows
+                    // during a rescan never disturbs the grid being browsed.
+                    return changed ? Array.from(map.values()) : prev;
                 });
             };
 
@@ -148,6 +242,7 @@ export const usePackages = (activeLibraryPath: string) => {
             // @ts-ignore
             window.runtime.EventsOn('package:discovered', (data: VarPackage) => {
                 if (scanSessionId.current !== currentId) return;
+                seenThisScanRef.current.add(normPath(data.filePath));
                 discoveredBuffer.push(data);
                 const now = Date.now();
                 if (now - lastFlush > 200) scheduleFlush(true);
@@ -158,6 +253,7 @@ export const usePackages = (activeLibraryPath: string) => {
             // @ts-ignore
             window.runtime.EventsOn('package:scanned', (data: VarPackage) => {
                 if (scanSessionId.current !== currentId) return;
+                seenThisScanRef.current.add(normPath(data.filePath));
                 scannedBuffer.push(data);
                 const now = Date.now();
                 if (now - lastFlush > 200) scheduleFlush(true);
@@ -171,20 +267,17 @@ export const usePackages = (activeLibraryPath: string) => {
             window.runtime.EventsOn('scan:analysis:complete', (analyses: PackageAnalysis[]) => {
                 if (scanSessionId.current !== currentId) return;
                 const byPath = new Map(analyses.map(a => [a.filePath, a]));
-                setPackages(prev => prev.map(p => {
-                    const a = byPath.get(p.filePath);
-                    if (!a) return p;
-                    return {
-                        ...p,
-                        missingDeps: a.missingDeps ?? [],
-                        isDuplicate: a.isDuplicate,
-                        isExactDuplicate: a.isExactDuplicate,
-                        isOrphan: a.isOrphan,
-                        obsoletedBy: a.obsoletedBy,
-                        referencedBy: a.referencedBy,
-                        scanPhase: 'analyzed' as const,
-                    };
-                }));
+                setPackages(prev => {
+                    let changed = false;
+                    const next = prev.map(p => {
+                        const a = byPath.get(p.filePath);
+                        if (!a) return p;
+                        const merged = applyAnalysis(p, a);
+                        if (merged !== p) changed = true;
+                        return merged;
+                    });
+                    return changed ? next : prev;
+                });
             });
 
             // Stage progress → update the stacked progress bar
@@ -204,12 +297,20 @@ export const usePackages = (activeLibraryPath: string) => {
                 if (flushTimer) clearTimeout(flushTimer);
                 batchFlush();
 
-                // Build available tags from final package list
+                // Reconcile the cache-painted grid with disk: drop any entry the
+                // scan never observed (its file was deleted since the last scan),
+                // then build available tags from the final package list.
                 setPackages(prev => {
+                    // Only prune when the scan actually observed files; an empty
+                    // seen-set means the scan was interrupted/cancelled, and pruning
+                    // would wrongly wipe the cache-painted grid.
+                    const reconciled = (cacheSeededRef.current && seenThisScanRef.current.size > 0)
+                        ? prev.filter(p => seenThisScanRef.current.has(normPath(p.filePath)))
+                        : prev;
                     const tags = new Set<string>();
-                    prev.forEach(p => p.tags?.forEach(t => tags.add(t)));
+                    reconciled.forEach(p => p.tags?.forEach(t => tags.add(t)));
                     setTimeout(() => setAvailableTags(Array.from(tags).sort()), 0);
-                    return prev;
+                    return reconciled;
                 });
                 setLoading(false);
             });

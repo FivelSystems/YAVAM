@@ -69,7 +69,6 @@ const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, 
     return (
         <div ref={containerRef} className="h-full">
             <motion.div
-                layout
                 key={viewMode} // Forces re-mount on view switch to prevent morphing artifacts
                 className={viewMode === 'list'
                     ? "flex flex-col gap-2 pb-20 p-4"
