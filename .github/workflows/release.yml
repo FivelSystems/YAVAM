@@ -1,17 +1,89 @@
-name: Release Build
+# Stable Release
+#
+# Triggered by creating (or pushing to) a `release/vX.Y.Z` branch.
+# The workflow reads the version from the BRANCH NAME, and the git TAG is the
+# uniqueness lock: a given version is published exactly once, ever. Pushing more
+# commits to the same release branch is a no-op once its tag exists — to ship a
+# fix, bump to the next patch and create `release/vX.Y.(Z+1)`.
+#
+# Publishes with prerelease: false, so it appears in GitHub's /releases/latest
+# endpoint that the in-app updater's STABLE channel reads.
+
+name: Stable Release
 
 on:
   push:
-    tags: [ "v*" ]
+    branches:
+      - 'release/v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, e.g. 1.4.0 (leave blank to derive from the current branch name)'
+        required: false
+
+permissions:
+  contents: write
 
 jobs:
+  # Cheap gate on Linux: figure out the version and decide whether we should
+  # release at all. This is what makes re-pushing a release branch safe.
+  check:
+    name: Resolve version & guard
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      should_release: ${{ steps.guard.outputs.should_release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # need full history + tags for the guard
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            # refs/heads/release/v1.4.0 -> 1.4.0
+            BRANCH="${GITHUB_REF#refs/heads/}"
+            VERSION="${BRANCH#release/v}"
+          fi
+          if [ -z "$VERSION" ] || [ "$VERSION" = "${GITHUB_REF#refs/heads/}" ]; then
+            echo "::error::Could not derive a version. Expected a release/vX.Y.Z branch or a workflow_dispatch 'version' input."
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $VERSION (tag v$VERSION)"
+
+      - name: Idempotency guard (skip if already released)
+        id: guard
+        shell: bash
+        run: |
+          if git rev-parse "refs/tags/${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+            echo "::notice::Tag ${{ steps.version.outputs.tag }} already exists — this version was already released. Skipping."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate wails.json matches branch version
+        if: steps.guard.outputs.should_release == 'true'
+        shell: bash
+        run: |
+          WJSON=$(jq -r '.info.productVersion' wails.json)
+          if [ "$WJSON" != "${{ steps.version.outputs.version }}" ]; then
+            echo "::error::wails.json productVersion ($WJSON) does not match the release branch version (${{ steps.version.outputs.version }}). Bump wails.json before creating the release branch."
+            exit 1
+          fi
+
   build:
-    name: Release Build
+    name: Build & publish stable
+    needs: check
+    if: needs.check.outputs.should_release == 'true'
     runs-on: windows-latest
-
-    permissions:
-      contents: write
-
     steps:
       - uses: actions/checkout@v4
 
@@ -19,7 +91,7 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: '1.21'
-          
+
       - name: Setup Node
         uses: actions/setup-node@v3
         with:
@@ -41,22 +113,16 @@ jobs:
         run: |
           go run cmd/sign-update/main.go build/bin/yavam.exe
 
-      - name: Extract Version
-        shell: pwsh
-        run: |
-          $json = Get-Content wails.json | ConvertFrom-Json
-          $version = $json.info.productVersion
-          echo "VERSION=$version" >> $env:GITHUB_ENV
-          Write-Host "Detected Version: $version"
-
       - name: Extract Release Notes
         shell: pwsh
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
         run: |
           $changelog = Get-Content CHANGELOG.md
           $start = 0
           $end = 0
           $notes = @()
-          
+
           # Find the current version section
           for ($i=0; $i -lt $changelog.Count; $i++) {
             if ($changelog[$i] -match "^## \[v?$($env:VERSION)\]") {
@@ -86,8 +152,8 @@ jobs:
             build/bin/yavam.exe.sig
           draft: false
           prerelease: false
-          tag_name: ${{ github.ref_name }}
-          name: ${{ format('YAVAM {0}', github.ref_name) }}
+          tag_name: ${{ needs.check.outputs.tag }}
+          name: ${{ format('YAVAM {0}', needs.check.outputs.tag) }}
           body_path: RELEASE_NOTES.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
