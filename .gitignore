@@ -35,3 +35,6 @@ user_preferences.json
 # Security Keys
 update.key
 update.pub
+
+# Agent local state (memory, per-user settings)
+.claude/
