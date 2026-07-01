@@ -76,32 +76,31 @@ dependency data). Original diagnosis and the fixes applied this session:
 - Optional: extend cache-first to **web mode** (`/api/packages`); today it's
   desktop-only (guarded by `window.go`).
 
-## My perspective (what you asked)
+## Versioning & prioritization
 
-**Versioning is artificial.** Mapping phases 1→10 onto `1.4.0, 1.4.5, 1.5.0 … 2.0.0`
-pre-commits version numbers to work that hasn't happened. Recommendation: **decouple
-versions from phases.** A version is just what ships — minor bump for a feature set,
-patch for fixes. Keep phases as a *priority-ordered backlog*, and let `2.0.0` mean
-"the vision is substantially delivered," not "phase 10."
+**Versioning is decoupled from phases.** Mapping phases 1→10 onto fixed numbers
+(`1.4.0, 1.4.5, 1.5.0 … 2.0.0`) pre-commits versions to work that hasn't happened.
+Instead, a version is just what ships — a minor bump for a feature set, a patch for
+fixes. The phases remain a *priority-ordered backlog*, and `2.0.0` means "the vision
+is substantially delivered," not "phase 10 is done."
 
-**Priority order is off — here's the reorder I'd make:**
+**Priority order (reprioritized from the original 1→10 sequence):**
 1. **Finish Phase 2 (P0 above).** Non-negotiable; the foundation is currently broken.
-2. **Phase 4 — Smart search (raised, per your call).** Once package + dependency data
-   is reliable, search is the highest user-value feature and it sits directly on that
-   foundation. Bring it *ahead* of Phase 3 (library management) and Phase 5
-   (ratings/favorites). Suggest splitting it: **4a smart searchbar** (tokens, filters)
-   first — high value, self-contained — then **4b sidebar redesign / creator view**.
-   - **Idea (captured, not scheduled):** now that #45 is fixed, the details panel's
-     **"Needs" and "Used By" lists can get large** — a package can have dozens of
-     dependents. Each list wants its own **filter/search field** (and likely
-     count + collapse). Good fit for 4b (sidebar redesign); the data is already
-     indexed by family, so filtering is cheap.
+2. **Phase 4 — Smart search (priority raised).** Once package + dependency data is
+   reliable, search is the highest user-value feature and it sits directly on that
+   foundation, so it moves *ahead* of Phase 3 (library management) and Phase 5
+   (ratings/favorites). It splits into **4a smart searchbar** (tokens, filters) —
+   high value, self-contained — then **4b sidebar redesign / creator view**.
+   - **Related idea (captured, not scheduled):** now that #45 is fixed, the details
+     panel's **"Needs" and "Used By" lists can get large** — a package can have
+     dozens of dependents. Each list would benefit from its own **filter/search
+     field** (plus count + collapse). Good fit for 4b (sidebar redesign); the data
+     is already indexed by family, so filtering is cheap.
 3. Phase 5 (ratings/favorites/license) — small, rides on the same DB, good quick wins.
 4. Phase 3 (library management) — valuable but heavier and security-sensitive.
 5. Phases 6–10 as before.
 
 Rationale: search and ratings are *thin* layers on a solid data model and deliver
-visible value fast; library-management and pocket are *thick* and can wait until the
-foundation is proven. Do the boring foundational fix first, then the fun search work
-lands on something trustworthy — "more accurate, faster, reliable than before," which
-is exactly the goal.
+visible value fast; library-management and pocket work are *thick* and can wait until
+the foundation is proven. The foundational fix comes first so the search work lands
+on something trustworthy — more accurate, faster, and more reliable than before.

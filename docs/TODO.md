@@ -1,8 +1,8 @@
 # TODO / Annotations
 
-> **This file is where we leave to-do notes and known issues** found during
-> development, so nothing is lost between sessions. Add an entry the moment you
-> spot something, even if you can't fix it right away.
+> **Development to-do notes and known issues** found while working on YAVAM,
+> tracked here so nothing gets lost. Add an entry as soon as an issue is spotted,
+> even if it can't be fixed right away.
 
 ## Known issues / to investigate
 
@@ -10,8 +10,9 @@
   shells out to PowerShell (`exec.Command("powershell", …, "Set-Clipboard …")`) in
   [pkg/services/system/system.go:63](../pkg/services/system/system.go#L63), so
   copying a file / pressing `CTRL+C` briefly pops a console window. This violates
-  our "no raw console commands" rule. Replace with a native Windows clipboard API
-  (set `CF_HDROP` via a syscall or a pure-Go clipboard lib) so no process spawns.
+  the project's "no raw console commands" rule. Replace with a native Windows
+  clipboard API (set `CF_HDROP` via a syscall or a pure-Go clipboard lib) so no
+  process spawns.
 
 - [ ] **Sub-Dependencies not behaving as expected.**
   Packages like Ye666.Arriety only have the following dependencies: 

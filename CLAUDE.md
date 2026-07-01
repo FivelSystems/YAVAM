@@ -100,6 +100,24 @@ fatal.
 - **Human-readable names.** No cryptic abbreviations, single-letter names with no
   meaning, or magic numbers — name the constant or the concept.
 
+## Documentation voice
+
+Every `.md` file (README, CHANGELOG, `docs/`, ROADMAP, TODO) is **public
+documentation for everyone who reads the repository** — not a private notebook or
+a message to the maintainer. Write accordingly:
+
+- **Never address the maintainer or narrate a conversation.** No "per your call",
+  "here's what I'd do", "as you asked", "my perspective". State decisions and facts
+  in a neutral, third-person voice. If you must attribute a decision, say who made
+  it in the third person (e.g. "verified live by the maintainer").
+- **Not local-only scratch notes.** Don't reference chat sessions, the current
+  agent, or "between sessions". A reader with no context should understand it.
+- **"You" means any reader/contributor, never the maintainer.** Contributor-facing
+  guidance (like this file) may address the reader; user-facing docs (CHANGELOG,
+  README) speak to the end user about the product.
+- This applies to edits too: when you touch an existing `.md` file, fix any
+  conversational leftovers you find rather than matching them.
+
 ## Release channels & updates
 
 Two channels, chosen by the user in `Settings → Application → Updates`
