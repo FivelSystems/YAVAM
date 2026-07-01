@@ -58,8 +58,8 @@ Once you turn on the server, just type your PC's IP into any browser:
 ---
 
 ## 🔮 Roadmap (The fun stuff coming soon!)
-- **v1.3.x**: **Released** 🚀 (Factory Reset, Crash Recovery, Privacy Refinements, Keybinds, Scan Optimization).
-- **v1.4.0**: **Released** 🚀 (Local database foundation + **Stable/Unstable update channels**).
+- **v1.3.19**: **Latest release** 🚀 (Factory Reset, Crash Recovery, Privacy Refinements, Keybinds, Scan Optimization).
+- **v1.4.0**: **In development (Unstable)** 🚧 (Local database foundation + **Stable/Unstable update channels**).
 - **v1.5.0**: **Granular Control** (Hide specific "private" libraries from the web view 🤫) & **Bulk Downloads** (Grab tons of files as one big ZIP).
 - **v1.8.0**: **Hub Integration** (Find missing dependencies online automatically!).
 

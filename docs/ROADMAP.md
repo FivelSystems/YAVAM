@@ -1,85 +1,85 @@
-# Refactoring Roadmap: Journey to v1.4.0+
+# YAVAM Roadmap
 
-This roadmap guides the evolution of YAVAM.
-**Current Status:** v1.3.4 (Stability & Logic Hardening).
-**Next Major Milestone:** v1.4.0 (Robustness & diagnostics).
+> **Living overview.** The detailed per-phase vision (specs, schema, UI) lives in
+> [roadmap/YAVAM-2.0-vision.md](roadmap/YAVAM-2.0-vision.md). This file is the
+> current, reprioritized plan and status — update it as things ship.
+>
+> Last updated: 2026-07-01
 
-## ✅ Completed Phases (v1.0.0 - v1.3.3)
+## Status snapshot
 
-### Phase 1: The Safety Net (Security Hardening) - **DONE**
-- [x] **Step 1.1: Ban `cmd /C`**: Replaced all shell calls with native Go syscalls.
-- [x] **Step 1.2: Lockdown `pkg/server`**: `PathValidator` implemented, `127.0.0.1` binding enforced.
-- [x] **Step 1.3: Add Tests**: Unit tests added for Manager and LibraryService.
+**Last released version: 1.3.19.** 1.4.0 is **in development** (Unstable channel
+only) — nothing below is shipped to Stable users yet.
 
-### Phase 2: Decoupling the Backend (Issue #5) - **DONE**
-- [x] **Step 2.1: Extract `FileSystem` Interface**: `pkg/fs` created.
-- [x] **Step 2.2: Split Manager**: Decoupled into `LibraryService` and `SystemService`.
-- [x] **Step 2.3: Context Management**: Thread-safe operations implemented.
+| Phase (vision) | Theme | Status |
+| --- | --- | --- |
+| 1 | Immediate fixes | ✅ Released (1.3.19) |
+| 2 | SQLite foundation + card rework | 🚧 **In progress (1.4.0-dev)** — incomplete, see below |
+| — | **Update channels (Stable/Unstable)** | 🚧 In progress (1.4.0-dev) — *not originally in the roadmap* |
+| 3 | Advanced library management | ⏳ Not started |
+| 4 | Smart search + sidebar redesign | ⏳ Not started — **priority raised (see below)** |
+| 5 | Favorites / ratings / license filter | ⏳ Not started |
+| 6 | Pocket system + action modal | ⏳ Not started |
+| 7 | Hub integration + cleanup view | ⏳ Not started |
+| 8–10 | i18n, themes, modular/split/graph | ⏳ Not started |
 
-### Phase 3: Taming the Frontend Monolith (Issue #5) - **DONE**
-- [x] **Step 3.1: Install State Management**: Context API architecture implemented (`PackageContext`, `LibraryContext`, etc.).
-- [x] **Step 3.2: Extract Major Views**: Feature-based folder structure (`features/library`, `features/settings`).
-- [x] **Step 3.3: Component Cleanup**: `PackageCard` and `Sidebar` refactored.
+### Landed on `main` this session (unreleased, part of 1.4.0-dev)
+- SQLite core: `pkg/database` with schema + append-only migrations; libraries
+  mirrored from `config.json`; packages indexed on scan. **(incomplete — see P0)**
+- **Update channels** — Stable/Unstable selector, channel-aware updater with full
+  SemVer (incl. pre-release) comparison. See [RELEASING.md](RELEASING.md).
+- Project docs: [BRANCHING.md](BRANCHING.md), [RELEASING.md](RELEASING.md),
+  [WORKFLOWS.md](WORKFLOWS.md), [CLAUDE.md](../CLAUDE.md),
+  [.github/CONTRIBUTING.md](../.github/CONTRIBUTING.md); Conventional Branch adopted.
 
-### Phase 4: Authentication & Advanced Features - **DONE**
-- [x] **Step 4.1: Session Management**: Challenge-Response implemented.
-- [x] **Step 4.2: Login Screen**: Tabbed Settings & Auth Dialogs created.
-- [x] **Step 4.3: Secure Endpoints**: Middleware enforcement active.
+## 🔴 P0 — Finish Phase 2 before anything else (regression)
 
----
+The SQLite migration is **not complete**, and it currently regresses core behavior.
+This blocks everything above it in the value chain (search, cleanup, pocket all
+depend on reliable package + dependency data). Diagnosis from this session:
 
-## 🚧 Phase 5: Refinement, Robustness & Logic (v1.3.10 - v1.4.0)
-**Goal:** Perfect the logic (Dependency Graph, Orphans, Duplicates) and improve UX.
+1. **The `dependencies` table is never written.** `LinkPass`
+   ([pkg/services/library/analysis.go](../pkg/services/library/analysis.go))
+   computes dependency/orphan/duplicate analysis **in memory** and emits it via the
+   `package:analyzed` event — but there is **no `INSERT INTO dependencies`** anywhere.
+   The empty table is "not implemented yet," not corruption.
+2. **Frontend looks empty/missing** because the analysis isn't persisted or served
+   consistently from the DB — the read path is half-migrated.
+3. **Library path casing is inconsistent** (some lowercase, some not). SQLite text
+   matching on `libraries.path` / `packages.rel_path` is **case-sensitive**, so
+   inconsistent casing breaks the library↔package association and makes rows appear
+   to vanish. Dependency *key* matching already lowercases both sides (fine); the
+   **path** normalization is the culprit.
 
-- [x] **Step 5.0: Logic Hardening (v1.3.10)**
-    -   **Action:** Detect "Unreferenced" packages (Orphans). (Fixed: Indigo Status)
-    -   **Action:** Fix "Used By" / Reverse Dependency graph logic. (Fixed: Robust Dependency Parsing)
-    -   **Action:** Improve "Duplicate" detection to handle exact vs loose matches. (Fixed: Global Map & Status Priority)
-- [x] **Step 5.1: Corrupt Package Detection**
-    -   **Action:** Enhance `pkg/scanner` to detect invalid header/EOF in zip files.
-    -   **UI:** Display "Corrupt" badge. (Implemented in v1.3.2)
-- [x] **Step 5.2: Privacy & UX (v1.3.10)**
-    -   **Action:** Granular Privacy (Details Panel Censor).
-    -   **Action:** "Neon Flash" Highlight for better visibility.
-    -   **Action:** (v1.3.10) Fixed "Locate" animation spam/interruption issues.
-    -   **Action:** (v1.3.10) Fixed "False Missing" dependencies via Status Masking.
-    -   **Action:** (v1.3.10) **Critical**: Fixed Recursive Dependency display in Sidebar (Details Panel).
-    -   **Action:** (v1.3.10) **UX**: Fixed Selection Logic (`CTRL+A`) for corrupt packages.
-    -   **Action:** (v1.3.10) **UX**: Friendly "Access Denied" Banner for library scanning errors.
-    -   **Action:** (v1.3.10) **UX**: "View Library" post-install navigation fix.
-- [ ] **Step 5.3: Graph Logic Migration (v1.4.0)**
-    -   **Action:** Move Dependency Graph calculation (`packageDependencyAnalysis.ts`) to Go Backend for performance/caching.
-- [ ] **Step 5.4: Advanced Library Management**
-    -   **Action:** Enhanced Configs & Settings per library.
-    -   **Action:** Trigger Auth Modal when switching libraries (Security).
+**The Phase 2 completion work (its own branch + conversation):**
+- Canonicalize paths once (single normalization helper) on write *and* lookup.
+- Persist the dependency graph to `dependencies` (dependent_id, dependency_id,
+  is_resolved) during `LinkPass` — the reverse-dependency map already exists in
+  memory, so both directions ("needs" and "used by") become fast, indexed queries.
+- Serve package + analysis state from the DB reliably; reconcile the scan → DB →
+  frontend flow.
 
----
+## My perspective (what you asked)
 
-## 🔮 Phase 6: Advanced Viz & Bulk Ops (v1.5.0)
-**Goal:** Deep insights (Visualization) and Mass Actions (Bulk Downloads).
+**Versioning is artificial.** Mapping phases 1→10 onto `1.4.0, 1.4.5, 1.5.0 … 2.0.0`
+pre-commits version numbers to work that hasn't happened. Recommendation: **decouple
+versions from phases.** A version is just what ships — minor bump for a feature set,
+patch for fixes. Keep phases as a *priority-ordered backlog*, and let `2.0.0` mean
+"the vision is substantially delivered," not "phase 10."
 
-### 1. Bulk Downloads (From README.md)
-**Goal:** Grab tons of files as one big ZIP.
--   **Architecture:** Backend zip-streaming service.
--   **UI:** "Download All" context menu action for selections or filters.
+**Priority order is off — here's the reorder I'd make:**
+1. **Finish Phase 2 (P0 above).** Non-negotiable; the foundation is currently broken.
+2. **Phase 4 — Smart search (raised, per your call).** Once package + dependency data
+   is reliable, search is the highest user-value feature and it sits directly on that
+   foundation. Bring it *ahead* of Phase 3 (library management) and Phase 5
+   (ratings/favorites). Suggest splitting it: **4a smart searchbar** (tokens, filters)
+   first — high value, self-contained — then **4b sidebar redesign / creator view**.
+3. Phase 5 (ratings/favorites/license) — small, rides on the same DB, good quick wins.
+4. Phase 3 (library management) — valuable but heavier and security-sensitive.
+5. Phases 6–10 as before.
 
-### 2. Dependency Tree Visualization
-**Concept:** A hierarchical "Tree View" for the "Roots" (formerly Unreferenced) filter.
--   **Goal:** Visualize how packages link together, starting from entry points (Scenes/Looks) down to their deepest dependencies.
--   **Structure:**
-    > Scene A
-    >   ├── Look B
-    >   │     ├── Clothing C
-    >   │     └── Hair D
-    >   └── Asset Pack E
--   **Technical Challenge:** Handling cyclic dependencies and large graph performance.
--   **User Value:** Deep understanding of library composition + Bulk Download of entire trees.
-
----
-
-## Technical Debt to Repay
-| Debt | Interest Rate | Plan |
-| :--- | :--- | :--- |
-| `App.tsx` Monolith | **Paid Off** | Done (v1.3.3) |
-| No Tests | **In Progress** | Ongoing |
-| Frontend Performance | **Medium** (Graph calculation on main thread) | Step 5.3 |
+Rationale: search and ratings are *thin* layers on a solid data model and deliver
+visible value fast; library-management and pocket are *thick* and can wait until the
+foundation is proven. Do the boring foundational fix first, then the fun search work
+lands on something trustworthy — "more accurate, faster, reliable than before," which
+is exactly the goal.

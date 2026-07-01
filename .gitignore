@@ -35,3 +35,7 @@ user_preferences.json
 # Security Keys
 update.key
 update.pub
+
+# AI agent memory (project-local, never committed)
+.claude/memory/
+MEMORY.md
