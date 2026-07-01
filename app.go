@@ -359,6 +359,34 @@ func (a *App) GetThumbnailCacheSize() (int64, error) {
 }
 
 // ScanPackages triggers the scan process
+// GetCachedPackages returns the library's packages from the DB index for an
+// instant grid paint; the frontend calls this before ScanPackages reconciles
+// with disk. Returns an empty slice (never a UI error) when nothing is cached.
+func (a *App) GetCachedPackages(vamPath string) []models.VarPackage {
+	if vamPath == "" || vamPath == "." {
+		return []models.VarPackage{}
+	}
+	pkgs, err := a.manager.GetCachedPackages(vamPath)
+	if err != nil {
+		runtime.LogWarningf(a.ctx, "GetCachedPackages(%q): %v", vamPath, err)
+		return []models.VarPackage{}
+	}
+	if pkgs == nil {
+		return []models.VarPackage{}
+	}
+	return pkgs
+}
+
+// LocateDependencies resolves dependency/dependent ids (from the details panel)
+// to the library that holds each, so the UI can label cross-library entries and
+// jump to them. Ids may be declared dependency strings or "creator.name" families.
+func (a *App) LocateDependencies(ids []string) map[string]models.DependencyLocation {
+	if len(ids) == 0 {
+		return map[string]models.DependencyLocation{}
+	}
+	return a.manager.LocateDependencies(ids)
+}
+
 func (a *App) ScanPackages(vamPath string) error {
 	if vamPath == "" || vamPath == "." {
 		return nil

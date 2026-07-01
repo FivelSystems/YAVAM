@@ -78,6 +78,10 @@ export function GetAppVersion() {
   return window['go']['main']['App']['GetAppVersion']();
 }
 
+export function GetCachedPackages(arg1) {
+  return window['go']['main']['App']['GetCachedPackages'](arg1);
+}
+
 export function GetChangelog() {
   return window['go']['main']['App']['GetChangelog']();
 }
@@ -152,6 +156,10 @@ export function IsServerRunning() {
 
 export function ListSessions() {
   return window['go']['main']['App']['ListSessions']();
+}
+
+export function LocateDependencies(arg1) {
+  return window['go']['main']['App']['LocateDependencies'](arg1);
 }
 
 export function Log(arg1, arg2) {

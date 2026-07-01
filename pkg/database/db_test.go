@@ -282,6 +282,153 @@ func TestBatchUpsert(t *testing.T) {
 	}
 }
 
+// TestCanonicalLibraryPathCollapsesCasing is the regression test for the
+// "packages vanish" bug: registering a library under one casing and referencing
+// it under another must resolve to the SAME row, not create a duplicate.
+func TestCanonicalLibraryPathCollapsesCasing(t *testing.T) {
+	db := tempDB(t)
+
+	id1, err := db.EnsureLibrary(`D:\VaM\Custom`)
+	if err != nil {
+		t.Fatalf("EnsureLibrary 1: %v", err)
+	}
+	id2, err := db.EnsureLibrary(`d:\vam\custom`) // same folder, different casing
+	if err != nil {
+		t.Fatalf("EnsureLibrary 2: %v", err)
+	}
+	if id1 != id2 {
+		t.Fatalf("casing variants must map to one library row: got id1=%d id2=%d", id1, id2)
+	}
+
+	var count int
+	db.conn.QueryRow(`SELECT COUNT(*) FROM libraries`).Scan(&count)
+	if count != 1 {
+		t.Fatalf("expected 1 library row, got %d", count)
+	}
+
+	// The ORIGINAL casing (first seen) is preserved for display.
+	paths, _ := db.GetLibraryPaths()
+	if len(paths) != 1 || paths[0] != `D:\VaM\Custom` {
+		t.Fatalf("display path should keep original casing, got %v", paths)
+	}
+}
+
+// TestGetPackagesByLibraryPath verifies the read side of the index, including
+// lookup by a casing-variant of the library path.
+func TestGetPackagesByLibraryPath(t *testing.T) {
+	db := tempDB(t)
+	libID, err := db.EnsureLibrary(`D:\Lib`)
+	if err != nil {
+		t.Fatalf("EnsureLibrary: %v", err)
+	}
+
+	rows := []PackageRow{
+		{LibraryID: libID, RelPath: "a.var", FileName: "a.var", SizeBytes: 1, IsEnabled: true,
+			PackageKey: "C.A.1", Family: "C.A", CategoriesJSON: "[]", TagsJSON: "[]", ScannedAt: Now()},
+		{LibraryID: libID, RelPath: "b.var", FileName: "b.var", SizeBytes: 2, IsEnabled: true,
+			PackageKey: "C.B.1", Family: "C.B", CategoriesJSON: "[]", TagsJSON: "[]", ScannedAt: Now()},
+	}
+	if err := db.UpsertPackages(rows); err != nil {
+		t.Fatalf("UpsertPackages: %v", err)
+	}
+
+	got, err := db.GetPackagesByLibraryPath(`d:\lib`) // different casing
+	if err != nil {
+		t.Fatalf("GetPackagesByLibraryPath: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(got))
+	}
+	if got[0].RelPath != "a.var" || got[1].RelPath != "b.var" {
+		t.Fatalf("rows not ordered by rel_path: %v", got)
+	}
+}
+
+// TestReplaceDependencies verifies edges are persisted, scoped by dependent_key
+// on replace, and that reverse lookups are keyed on family.
+func TestReplaceDependencies(t *testing.T) {
+	db := tempDB(t)
+
+	// "a.pkg" needs two deps, "b.pkg" needs one; all versioned per real ids.
+	edges := []DependencyRow{
+		{DependentKey: "a.pkg.1", DependentFamily: "a.pkg", DependencyDeclared: "x.dep.latest", DependencyFamily: "x.dep"},
+		{DependentKey: "a.pkg.1", DependentFamily: "a.pkg", DependencyDeclared: "y.dep.3", DependencyFamily: "y.dep"},
+		{DependentKey: "b.pkg.1", DependentFamily: "b.pkg", DependencyDeclared: "x.dep.7", DependencyFamily: "x.dep"},
+	}
+	if err := db.ReplaceDependencies([]string{"a.pkg.1", "b.pkg.1"}, edges); err != nil {
+		t.Fatalf("ReplaceDependencies: %v", err)
+	}
+
+	// Reverse lookup by FAMILY: who depends on x.dep? → a.pkg and b.pkg, even
+	// though they declared different versions (.latest and .7). This is #45.
+	reverse, err := db.GetReverseDependencyFamilies()
+	if err != nil {
+		t.Fatalf("GetReverseDependencyFamilies: %v", err)
+	}
+	if got := len(reverse["x.dep"]); got != 2 {
+		t.Fatalf("expected 2 dependent families of x.dep, got %d (%v)", got, reverse["x.dep"])
+	}
+
+	// Re-scanning "a.pkg.1" with fewer deps replaces only its edges.
+	if err := db.ReplaceDependencies([]string{"a.pkg.1"}, []DependencyRow{
+		{DependentKey: "a.pkg.1", DependentFamily: "a.pkg", DependencyDeclared: "z.dep.1", DependencyFamily: "z.dep"},
+	}); err != nil {
+		t.Fatalf("ReplaceDependencies (rescan): %v", err)
+	}
+	reverse, _ = db.GetReverseDependencyFamilies()
+	if got := len(reverse["x.dep"]); got != 1 {
+		t.Fatalf("after a.pkg rescan, x.dep should be needed only by b.pkg, got %d", got)
+	}
+
+	declared, err := db.GetDeclaredDependencies()
+	if err != nil {
+		t.Fatalf("GetDeclaredDependencies: %v", err)
+	}
+	if got := declared["a.pkg.1"]; len(got) != 1 || got[0] != "z.dep.1" {
+		t.Fatalf("a.pkg.1 declared deps should be [z.dep.1], got %v", got)
+	}
+}
+
+// TestGetLibrariesWithNullPassword guards a NULL-scan bug: libraries are inserted
+// without a password_hash (NULL), and GetLibraries must still read them.
+func TestGetLibrariesWithNullPassword(t *testing.T) {
+	db := tempDB(t)
+	if _, err := db.EnsureLibrary(`D:\Lib`); err != nil {
+		t.Fatalf("EnsureLibrary: %v", err)
+	}
+	libs, err := db.GetLibraries()
+	if err != nil {
+		t.Fatalf("GetLibraries with NULL password_hash: %v", err)
+	}
+	if len(libs) != 1 || libs[0].PasswordHash != "" {
+		t.Fatalf("expected 1 library with empty password, got %+v", libs)
+	}
+}
+
+// TestPresentFamilies verifies the cross-library resolution set is derived from
+// packages regardless of casing.
+func TestPresentFamilies(t *testing.T) {
+	db := tempDB(t)
+	libID, err := db.EnsureLibrary(`D:\Lib`)
+	if err != nil {
+		t.Fatalf("EnsureLibrary: %v", err)
+	}
+	if err := db.UpsertPackages([]PackageRow{
+		{LibraryID: libID, RelPath: "a.var", FileName: "a.var", SizeBytes: 1, IsEnabled: true,
+			PackageKey: "Creator.Alpha.1", Family: "Creator.Alpha", ScannedAt: Now()},
+	}); err != nil {
+		t.Fatalf("UpsertPackages: %v", err)
+	}
+
+	present, err := db.GetPresentFamilies()
+	if err != nil {
+		t.Fatalf("GetPresentFamilies: %v", err)
+	}
+	if !present["creator.alpha"] {
+		t.Fatalf("expected creator.alpha present (lower-cased), got %v", present)
+	}
+}
+
 // TestUserConfigDir is a sanity check that the OS user config dir is accessible.
 func TestUserConfigDir(t *testing.T) {
 	dir, err := os.UserConfigDir()

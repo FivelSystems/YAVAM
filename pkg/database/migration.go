@@ -113,4 +113,38 @@ CREATE TABLE IF NOT EXISTS ui_layout (
   value TEXT NOT NULL
 );
 `,
+	// Version 2 — path canonicalization + dependency reverse index.
+	//
+	// path_norm is a library's case-insensitive matching key (utils.CanonPath);
+	// libraries.path keeps original casing for display/filesystem access. The index
+	// is for lookup speed only — uniqueness is enforced in Go, and rows are
+	// backfilled by DB.reconcilePathNorm with the same CanonPath, so no constraint
+	// can trip on pre-existing casing duplicates. idx_dependencies_dependency serves
+	// reverse "what depends on X" lookups (the PK only serves forward lookups).
+	`
+ALTER TABLE libraries ADD COLUMN path_norm TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_libraries_path_norm    ON libraries(path_norm);
+CREATE INDEX IF NOT EXISTS idx_dependencies_dependency ON dependencies(dependency_key);
+`,
+	// Version 3 — family-anchored dependency graph.
+	//
+	// The v1/v2 shape linked on the versioned key (dependency_key), so reverse
+	// "used by" lookups failed whenever a dependency was declared as `.latest` or
+	// a version other than the installed copy (GitHub #45). The graph now links on
+	// FAMILY ("Creator.Name"): dependency_family is the matching key for reverse
+	// lookups, dependency_declared is kept only for display, and resolution is
+	// derived globally at read time (no stored is_resolved). The table is a pure
+	// derived cache, so it is dropped and rebuilt on the next scan of each library.
+	`
+DROP TABLE IF EXISTS dependencies;
+CREATE TABLE dependencies (
+  dependent_key       TEXT NOT NULL,
+  dependent_family    TEXT NOT NULL,
+  dependency_declared TEXT NOT NULL,
+  dependency_family   TEXT NOT NULL,
+  PRIMARY KEY (dependent_key, dependency_declared)
+);
+CREATE INDEX idx_dependencies_dep_family ON dependencies(dependency_family);
+CREATE INDEX idx_dependencies_dependent  ON dependencies(dependent_key);
+`,
 }

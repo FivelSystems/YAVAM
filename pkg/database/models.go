@@ -61,11 +61,31 @@ type UserMetadataRow struct {
 	UpdatedAt  int64
 }
 
-// DependencyRow mirrors the `dependencies` table.
+// DependencyRow mirrors the `dependencies` table — one edge per declared
+// dependency. Everything is lower-cased. The graph links on FAMILY
+// ("Creator.Name"), not the versioned key: VaM dependencies use `.latest` or a
+// pinned version that rarely matches the copy actually installed, so reverse
+// ("used by") and resolution must be version-agnostic. Whether a dependency is
+// satisfied is derived globally at read time (any package of that family
+// present), never stored — it would go stale as libraries are added/removed.
 type DependencyRow struct {
-	DependentKey  string // "Creator.Name.Version"
-	DependencyKey string // "Creator.Name.Version"
-	IsResolved    bool
+	DependentKey       string // "creator.name.version" of the declaring package
+	DependentFamily    string // "creator.name" of the declaring package
+	DependencyDeclared string // raw declared dependency id, e.g. "creator.name.latest"
+	DependencyFamily   string // "creator.name" of the dependency (the matching key)
+}
+
+// PackageLocation is one physical package resolved to the library that holds it.
+// Used to answer "which library has this dependency?" for cross-library navigation.
+type PackageLocation struct {
+	Family      string
+	LibraryPath string
+	RelPath     string
+	FileName    string
+	Creator     string
+	PackageName string
+	Version     string
+	IsEnabled   bool
 }
 
 // PocketItemRow mirrors the `pocket_items` table.

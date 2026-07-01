@@ -45,6 +45,14 @@ type LibraryService interface {
 	GetPackageContents(pkgPath string) ([]models.PackageContent, error)
 	GetThumbnail(pkgPath string) ([]byte, error)
 
+	// GetCachedPackages returns a library's packages reconstructed from the DB
+	// index for instant (cache-first) grid paint, before a fresh scan reconciles.
+	GetCachedPackages(libraryPath string) ([]models.VarPackage, error)
+
+	// LocateDependencies resolves dependency/dependent ids to the library holding
+	// each, so the details panel can label and jump to cross-library packages.
+	LocateDependencies(ids []string) map[string]models.DependencyLocation
+
 	// ── Write Operations ──────────────────────────────────────────────────────
 
 	Install(files []string, targetLib string, overwrite bool, onProgress func(int, int, string)) ([]string, error)
