@@ -1,0 +1,179 @@
+# Weekly Unstable Build ("nightly" channel, industry term)
+#
+# Builds whatever is currently on `main` and publishes it as a PRERELEASE.
+# Because it is a prerelease, GitHub hides it from the /releases/latest endpoint,
+# so STABLE users never see it. Only clients that opt into the unstable channel
+# (which read the full /releases list) will pick these up.
+#
+# Cadence: weekly, Saturday 06:00 UTC — chosen from this repo's commit history:
+# activity peaks Wed/Thu, tapers Fri, then craters on Saturday (you step away),
+# so Saturday morning is the most settled "left main in a usable state" moment.
+# Also runnable on demand via the "Run workflow" button.
+# Scheduled runs are skipped if `main` had no new commits in the last 7 days.
+#
+# IMPORTANT: keep wails.json's productVersion set to the NEXT target version
+# during development (e.g. bump to 1.4.0 right after shipping 1.3.19). Otherwise
+# builds are tagged 1.3.19-unstable.* which semver reads as *before* 1.3.19.
+
+name: Weekly Unstable Build
+
+on:
+  schedule:
+    - cron: '0 6 * * 6'   # Saturday at 06:00 UTC
+  workflow_dispatch:       # manual "Run workflow" button
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    name: Decide & resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.guard.outputs.should_build }}
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Skip scheduled runs with no new commits this week
+        id: guard
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual run — building."
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          else
+            LAST=$(git log -1 --format=%ct)
+            NOW=$(date +%s)
+            if [ $(( NOW - LAST )) -lt 604800 ]; then   # 7 days
+              echo "New commits in the last 7 days — building."
+              echo "should_build=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "::notice::No new commits on main in the last 7 days — skipping."
+              echo "should_build=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Resolve unstable version
+        id: version
+        if: steps.guard.outputs.should_build == 'true'
+        shell: bash
+        run: |
+          BASE=$(jq -r '.info.productVersion' wails.json)
+          DATE=$(date -u +%Y%m%d)
+          SHA=$(git rev-parse --short HEAD)
+          # Semver prerelease: 1.4.0-unstable.20260704.abc1234
+          #   < 1.4.0 stable, and later dates sort after earlier ones.
+          VERSION="${BASE}-unstable.${DATE}.${SHA}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Unstable version: $VERSION"
+
+  build:
+    name: Build & publish unstable
+    needs: check
+    if: needs.check.outputs.should_build == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - name: Build Windows App
+        run: |
+          wails build -platform windows/amd64 -clean
+        env:
+          CGO_ENABLED: 1
+
+      - name: Sign Binary
+        shell: bash
+        env:
+          UPDATER_PRIVATE_KEY: ${{ secrets.UPDATER_PRIVATE_KEY }}
+        run: |
+          go run cmd/sign-update/main.go build/bin/yavam.exe
+
+      - name: Build Release Notes
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          # Prefer the "## [Unreleased]" changelog section if you keep one;
+          # otherwise fall back to the commit log since the last stable tag.
+          $changelog = Get-Content CHANGELOG.md
+          $start = 0; $end = 0
+          for ($i=0; $i -lt $changelog.Count; $i++) {
+            if ($changelog[$i] -match "^## \[Unreleased\]") { $start = $i + 1; continue }
+            if ($start -gt 0 -and $changelog[$i] -match "^## \[") { $end = $i; break }
+          }
+
+          "> WARNING: Unstable weekly build - $($env:VERSION). Expect bugs; opt back to Stable anytime." | Out-File -Encoding UTF8 RELEASE_NOTES.md
+          "" | Out-File -Encoding UTF8 -Append RELEASE_NOTES.md
+
+          if ($start -gt 0) {
+            if ($end -eq 0) { $end = $changelog.Count }
+            $changelog[$start..($end-1)] | Where-Object { $_ -notmatch "^\[.*\]: http" } | Out-File -Encoding UTF8 -Append RELEASE_NOTES.md
+          } else {
+            $lastTag = (git describe --tags --abbrev=0 --match "v*" 2>$null)
+            "### Changes" | Out-File -Encoding UTF8 -Append RELEASE_NOTES.md
+            if ($lastTag) {
+              git log "$lastTag..HEAD" --no-merges --pretty="- %s" | Out-File -Encoding UTF8 -Append RELEASE_NOTES.md
+            } else {
+              git log -20 --no-merges --pretty="- %s" | Out-File -Encoding UTF8 -Append RELEASE_NOTES.md
+            }
+          }
+
+      - name: Create Prerelease
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            build/bin/yavam.exe
+            build/bin/yavam.exe.sig
+          draft: false
+          prerelease: true
+          tag_name: ${{ needs.check.outputs.tag }}
+          target_commitish: main
+          name: ${{ format('YAVAM {0}', needs.check.outputs.tag) }}
+          body_path: RELEASE_NOTES.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Keep the releases list tidy: retain the 10 most recent unstable builds.
+  prune:
+    name: Prune old unstable builds
+    needs: build
+    if: needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Delete unstable builds beyond the latest 10
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          # List unstable prerelease tags, newest first, skip the first 10, delete the rest.
+          gh release list --limit 200 --json tagName,isPrerelease,createdAt \
+            --jq 'sort_by(.createdAt) | reverse | .[] | select(.isPrerelease and (.tagName | test("-unstable."))) | .tagName' \
+            | tail -n +11 \
+            | while read -r tag; do
+                echo "Deleting old unstable build $tag"
+                gh release delete "$tag" --cleanup-tag --yes || true
+              done
