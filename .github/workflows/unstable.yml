@@ -96,6 +96,23 @@ jobs:
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
+      # Stamp the computed unstable version into wails.json so the built binary
+      # reports its true identity (e.g. 1.4.0-unstable.<date>.<sha>) via
+      # GetAppVersion. Without this, an unstable build reports the plain base
+      # version (1.4.0), which (a) suppresses the "What's New" changelog when
+      # moving between channels and (b) breaks unstable self-updates, since a
+      # final release outranks its own pre-releases in SemVer.
+      # NOTE: this only edits productVersion (a display string). If Wails is
+      # configured to emit a Windows version-info resource requiring a numeric
+      # X.Y.Z, keep that separate from this pre-release string.
+      - name: Stamp version into wails.json
+        shell: pwsh
+        run: |
+          $j = Get-Content wails.json -Raw | ConvertFrom-Json
+          $j.info.productVersion = "${{ needs.check.outputs.version }}"
+          $j | ConvertTo-Json -Depth 10 | Set-Content wails.json -Encoding UTF8
+          Write-Host "Stamped productVersion = ${{ needs.check.outputs.version }}"
+
       - name: Build Windows App
         run: |
           wails build -platform windows/amd64 -clean
