@@ -41,6 +41,7 @@ export namespace config {
 	    serverPort: string;
 	    authPollInterval: number;
 	    lastSeenVersion: string;
+	    updateChannel: string;
 	    privacyMode: boolean;
 	    keybinds?: Record<string, Array<string>>;
 	    gridSize: number;
@@ -70,6 +71,7 @@ export namespace config {
 	        this.serverPort = source["serverPort"];
 	        this.authPollInterval = source["authPollInterval"];
 	        this.lastSeenVersion = source["lastSeenVersion"];
+	        this.updateChannel = source["updateChannel"];
 	        this.privacyMode = source["privacyMode"];
 	        this.keybinds = source["keybinds"];
 	        this.gridSize = source["gridSize"];

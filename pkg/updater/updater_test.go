@@ -26,12 +26,12 @@ func TestGetLatestVersion_Integration(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	// 2. Set Env Var to point to Mock Server
+	// 2. Set Env Var to point to Mock Server (treated as the API base)
 	os.Setenv("YAVAM_UPDATE_URL", ts.URL)
 	defer os.Unsetenv("YAVAM_UPDATE_URL")
 
 	// 3. Test
-	info, err := GetLatestVersion("v1.0.0")
+	info, err := GetLatestVersion("v1.0.0", ChannelStable)
 	if err != nil {
 		t.Fatalf("Failed to check update: %v", err)
 	}
@@ -42,6 +42,95 @@ func TestGetLatestVersion_Integration(t *testing.T) {
 
 	if info.Version != "v2.0.0" {
 		t.Errorf("Expected v2.0.0, got %s", info.Version)
+	}
+}
+
+// TestGetLatestVersion_UnstableChannel verifies that the unstable channel reads
+// the full /releases list and picks the newest build by semver, including
+// prereleases.
+func TestGetLatestVersion_UnstableChannel(t *testing.T) {
+	mux := http.NewServeMux()
+	// Stable "latest" is an older release.
+	mux.HandleFunc("/releases/latest", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(Release{
+			TagName: "v1.3.19",
+			Assets:  exeAsset(),
+		})
+	})
+	// Full list has stable + two unstable prereleases; newest date should win.
+	mux.HandleFunc("/releases", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode([]Release{
+			{TagName: "v1.3.19", Assets: exeAsset()},
+			{TagName: "v1.4.0-unstable.20260627.aaaaaaa", Prerelease: true, Assets: exeAsset()},
+			{TagName: "v1.4.0-unstable.20260704.bbbbbbb", Prerelease: true, Assets: exeAsset()},
+		})
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	os.Setenv("YAVAM_UPDATE_URL", ts.URL)
+	defer os.Unsetenv("YAVAM_UPDATE_URL")
+
+	info, err := GetLatestVersion("v1.3.19", ChannelUnstable)
+	if err != nil {
+		t.Fatalf("unstable check failed: %v", err)
+	}
+	if info == nil {
+		t.Fatal("expected an unstable update, got nil")
+	}
+	if info.Version != "v1.4.0-unstable.20260704.bbbbbbb" {
+		t.Errorf("expected newest unstable build, got %s", info.Version)
+	}
+}
+
+// TestGetChannelHead_Downgrade verifies that switching to stable resolves to the
+// stable head even when it is a LOWER version than what is installed.
+func TestGetChannelHead_Downgrade(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/releases/latest", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(Release{TagName: "v1.3.19", Assets: exeAsset()})
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	os.Setenv("YAVAM_UPDATE_URL", ts.URL)
+	defer os.Unsetenv("YAVAM_UPDATE_URL")
+
+	// Running an unstable build; stable head is older but must still be returned.
+	head, err := GetChannelHead(ChannelStable)
+	if err != nil {
+		t.Fatalf("channel head failed: %v", err)
+	}
+	if head == nil || head.Version != "v1.3.19" {
+		t.Fatalf("expected stable head v1.3.19, got %+v", head)
+	}
+}
+
+func TestCompareVersions(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want int
+	}{
+		{"1.4.0", "1.3.19", 1},
+		{"1.3.19", "1.4.0", -1},
+		{"1.4.0", "1.4.0", 0},
+		// Pre-release ranks below its final release.
+		{"1.4.0", "1.4.0-unstable.5", 1},
+		{"1.4.0-unstable.5", "1.4.0", -1},
+		// Two unstable builds ordered by their identifiers (the old bug: these
+		// used to compare equal).
+		{"1.4.0-unstable.20260704.aaa", "1.4.0-unstable.20260627.bbb", 1},
+		{"1.4.0-unstable.20260627.bbb", "1.4.0-unstable.20260704.aaa", -1},
+		{"1.4.0-unstable.20260704.aaa", "1.4.0-unstable.20260704.aaa", 0},
+		// Numeric identifiers compare numerically, not lexically.
+		{"1.4.0-unstable.10", "1.4.0-unstable.9", 1},
+		// Build metadata is ignored.
+		{"1.4.0+build.7", "1.4.0", 0},
+	}
+	for _, c := range cases {
+		if got := compareVersions(c.a, c.b); got != c.want {
+			t.Errorf("compareVersions(%q, %q) = %d, want %d", c.a, c.b, got, c.want)
+		}
 	}
 }
 
@@ -92,5 +181,18 @@ func TestApplyUpdate_Integration(t *testing.T) {
 	// .new file should be gone
 	if _, err := os.Stat(exePath + ".new"); !os.IsNotExist(err) {
 		t.Error(".new file was not cleaned up (renamed)")
+	}
+}
+
+// exeAsset builds the single-.exe asset slice used by mock releases.
+func exeAsset() []struct {
+	Name               string `json:"name"`
+	BrowserDownloadUrl string `json:"browser_download_url"`
+} {
+	return []struct {
+		Name               string `json:"name"`
+		BrowserDownloadUrl string `json:"browser_download_url"`
+	}{
+		{Name: "yavam.exe", BrowserDownloadUrl: "http://example.com/yavam.exe"},
 	}
 }

@@ -201,6 +201,7 @@ const SettingsDialog = ({
                         isWeb={isWeb}
                         maxToasts={maxToasts}
                         setMaxToasts={setMaxToasts}
+                        addToast={addToast}
                     />
                 );
             case 'privacy':

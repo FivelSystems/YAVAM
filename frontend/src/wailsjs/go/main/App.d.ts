@@ -16,6 +16,8 @@ export function BulkDeleteFilesToRecycleBinAsync(arg1:Array<string>):Promise<voi
 
 export function CancelScan():Promise<void>;
 
+export function CheckChannel(arg1:string):Promise<updater.UpdateInfo>;
+
 export function CheckCollisions(arg1:Array<string>,arg2:string):Promise<Array<string>>;
 
 export function CheckForUpdates():Promise<updater.UpdateInfo>;
@@ -63,6 +65,8 @@ export function GetPackageContents(arg1:string):Promise<Array<models.PackageCont
 export function GetPackageThumbnail(arg1:string):Promise<string>;
 
 export function GetThumbnailCacheSize():Promise<number>;
+
+export function GetUpdateChannel():Promise<string>;
 
 export function GetUserDownloadsDir():Promise<string>;
 
@@ -131,6 +135,8 @@ export function SetServerEnabled(arg1:boolean):Promise<void>;
 export function SetServerPort(arg1:string):Promise<void>;
 
 export function SetSortMode(arg1:string):Promise<void>;
+
+export function SetUpdateChannel(arg1:string):Promise<void>;
 
 export function Shutdown():Promise<void>;
 

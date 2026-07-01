@@ -585,7 +585,7 @@ func (s *Server) Start(port string, libraries []string) error {
 
 	// Version Check Endpoint
 	mux.HandleFunc("/api/version/check", func(w http.ResponseWriter, r *http.Request) {
-		info, err := updater.GetLatestVersion(s.version)
+		info, err := updater.GetLatestVersion(s.version, s.manager.GetConfig().UpdateChannel)
 		if err != nil {
 			s.writeError(w, err.Error(), 500)
 			return

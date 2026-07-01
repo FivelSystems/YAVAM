@@ -13,10 +13,27 @@ import (
 // Config
 const (
 	Port           = "8090"
-	MockVersion    = "v9.9.9"
+	StableVersion  = "v9.9.9"                          // served on /releases/latest
+	NightlyVersion = "v9.9.10-unstable.20260704.abc123" // newest on /releases
 	MockChangelog  = "## Test Update\n\nThis is a mock update served from localhost."
 	ExecutableName = "yavam.exe"
 )
+
+// release builds a GitHub-style release object pointing at the local download.
+func release(tag string, prerelease bool) map[string]interface{} {
+	return map[string]interface{}{
+		"tag_name":   tag,
+		"body":       MockChangelog,
+		"prerelease": prerelease,
+		"draft":      false,
+		"assets": []map[string]interface{}{
+			{
+				"name":                 ExecutableName,
+				"browser_download_url": fmt.Sprintf("http://localhost:%s/download/%s", Port, ExecutableName),
+			},
+		},
+	}
+}
 
 func main() {
 	// 1. Locate the .exe to serve (assume we are run from project root, look in build/bin or current dir)
@@ -30,22 +47,23 @@ func main() {
 	}
 	fmt.Printf("[Server] Serving update binary from: %s\n", exePath)
 
-	// 2. Setup Handlers
-	http.HandleFunc("/latest", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("[Request] /latest - Sending update info...")
-		w.Header().Set("Content-Type", "application/json")
+	// 2. Setup Handlers — mirror the two GitHub endpoints the updater uses.
 
-		resp := map[string]interface{}{
-			"tag_name": MockVersion,
-			"body":     MockChangelog,
-			"assets": []map[string]interface{}{
-				{
-					"name":                 ExecutableName,
-					"browser_download_url": fmt.Sprintf("http://localhost:%s/download/%s", Port, ExecutableName),
-				},
-			},
-		}
-		json.NewEncoder(w).Encode(resp)
+	// STABLE channel → newest non-prerelease.
+	http.HandleFunc("/releases/latest", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("[Request] /releases/latest (stable) - Sending stable release...")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(release(StableVersion, false))
+	})
+
+	// UNSTABLE channel → full list incl. prereleases; updater picks newest by semver.
+	http.HandleFunc("/releases", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("[Request] /releases (unstable) - Sending release list...")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode([]map[string]interface{}{
+			release(NightlyVersion, true),
+			release(StableVersion, false),
+		})
 	})
 
 	http.HandleFunc("/download/", func(w http.ResponseWriter, r *http.Request) {
@@ -68,9 +86,12 @@ func main() {
 	// 3. Start
 	fmt.Printf("\n=== Update Mock Server Running ===\n")
 	fmt.Printf("1. Open a new terminal.\n")
-	fmt.Printf("2. Set environment variable: $env:YAVAM_UPDATE_URL = 'http://localhost:%s/latest'\n", Port)
-	fmt.Printf("   (cmd: set YAVAM_UPDATE_URL=http://localhost:%s/latest)\n", Port)
+	fmt.Printf("2. Set environment variable (the API BASE, no trailing path):\n")
+	fmt.Printf("   pwsh: $env:YAVAM_UPDATE_URL = 'http://localhost:%s'\n", Port)
+	fmt.Printf("   cmd:  set YAVAM_UPDATE_URL=http://localhost:%s\n", Port)
 	fmt.Printf("3. Run the built application: .\\build\\bin\\yavam.exe\n")
+	fmt.Printf("   - Stable channel  -> resolves %s\n", StableVersion)
+	fmt.Printf("   - Unstable channel -> resolves %s\n", NightlyVersion)
 	fmt.Printf("==================================\n\n")
 
 	log.Fatal(http.ListenAndServe(":"+Port, nil))
