@@ -23,6 +23,7 @@ type Config struct {
 	ServerPort       string              `json:"serverPort"`
 	AuthPollInterval int                 `json:"authPollInterval"`
 	LastSeenVersion  string              `json:"lastSeenVersion"`
+	UpdateChannel    string              `json:"updateChannel"` // "stable" (default) | "unstable"
 	PrivacyMode      bool                `json:"privacyMode"`
 	Keybinds         map[string][]string `json:"keybinds,omitempty"` // ID -> ["CTRL", "F"]
 
@@ -63,6 +64,8 @@ func NewFileConfigService(configDir string) (ConfigService, error) {
 			PublicAccess:     false, // Default Private
 			ServerPort:       "18888",
 			AuthPollInterval: 15,
+			UpdateChannel:    "stable", // Default to the safe channel
+
 			Keybinds:         make(map[string][]string),
 			// UI Defaults
 			GridSize:     160,

@@ -22,6 +22,10 @@ export function CancelScan() {
   return window['go']['main']['App']['CancelScan']();
 }
 
+export function CheckChannel(arg1) {
+  return window['go']['main']['App']['CheckChannel'](arg1);
+}
+
 export function CheckCollisions(arg1, arg2) {
   return window['go']['main']['App']['CheckCollisions'](arg1, arg2);
 }
@@ -116,6 +120,10 @@ export function GetPackageThumbnail(arg1) {
 
 export function GetThumbnailCacheSize() {
   return window['go']['main']['App']['GetThumbnailCacheSize']();
+}
+
+export function GetUpdateChannel() {
+  return window['go']['main']['App']['GetUpdateChannel']();
 }
 
 export function GetUserDownloadsDir() {
@@ -252,6 +260,10 @@ export function SetServerPort(arg1) {
 
 export function SetSortMode(arg1) {
   return window['go']['main']['App']['SetSortMode'](arg1);
+}
+
+export function SetUpdateChannel(arg1) {
+  return window['go']['main']['App']['SetUpdateChannel'](arg1);
 }
 
 export function Shutdown() {

@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { SettingGroup } from '../components/SettingGroup';
 import { SettingItem } from '../components/SettingItem';
+import { UpdatesSection } from '../components/UpdatesSection';
 import { Toggle } from '../../../components/ui/Toggle';
 import { Input } from '../../../components/ui/Input';
 import { Slider } from '../../../components/ui/Slider';
@@ -33,6 +34,7 @@ interface ApplicationTabProps {
     isWeb: boolean;
     maxToasts: number;
     setMaxToasts: (val: number) => void;
+    addToast: (msg: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
 }
 
 const ApplicationTab = ({
@@ -44,7 +46,8 @@ const ApplicationTab = ({
     setMinimizeOnClose,
     isWeb,
     maxToasts,
-    setMaxToasts
+    setMaxToasts,
+    addToast
 }: ApplicationTabProps) => {
     // ── Thumbnail cache ───────────────────────────────────────────────────────
     const [cacheSize, setCacheSize] = useState<number | null>(null);
@@ -137,6 +140,9 @@ const ApplicationTab = ({
                             />
                         </SettingItem>
                     </SettingGroup>
+
+                    {/* Updates (desktop only — installs a binary) */}
+                    {!isWeb && <UpdatesSection addToast={addToast} variants={item} />}
 
                     {/* Desktop Settings */}
                     {!isWeb && (

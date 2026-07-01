@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 	"yavam/pkg/manager"
@@ -704,14 +705,54 @@ func (a *App) GetConfig() *config.Config {
 	return &cfgCopy
 }
 
-// CheckForUpdates checks if a new version is available
+// CheckForUpdates checks the user's selected channel for a newer build.
 func (a *App) CheckForUpdates() (*updater.UpdateInfo, error) {
-	return updater.GetLatestVersion(a.GetAppVersion())
+	return updater.GetLatestVersion(a.GetAppVersion(), a.GetUpdateChannel())
 }
 
 // ApplyUpdate performs the update process
 func (a *App) ApplyUpdate(url string) error {
 	return updater.ApplyUpdate(url)
+}
+
+// GetUpdateChannel returns the persisted update channel, defaulting to stable
+// for empty/legacy configs.
+func (a *App) GetUpdateChannel() string {
+	ch := a.manager.GetConfig().UpdateChannel
+	if ch == updater.ChannelUnstable {
+		return updater.ChannelUnstable
+	}
+	return updater.ChannelStable
+}
+
+// SetUpdateChannel persists the user's channel preference. The choice is a
+// standing preference — it survives declining an offered install.
+func (a *App) SetUpdateChannel(channel string) error {
+	if channel != updater.ChannelStable && channel != updater.ChannelUnstable {
+		return fmt.Errorf("invalid update channel: %q", channel)
+	}
+	return a.manager.UpdateConfig(func(cfg *config.Config) {
+		cfg.UpdateChannel = channel
+	})
+}
+
+// CheckChannel returns the head build of the given channel when it DIFFERS from
+// the currently running build — covering both an upgrade (stable → unstable) and
+// a downgrade to a lower version (unstable → stable). Returns nil when the head
+// matches the running build. Does not change the saved preference; the frontend
+// persists that separately so it sticks even if the user defers the install.
+func (a *App) CheckChannel(channel string) (*updater.UpdateInfo, error) {
+	head, err := updater.GetChannelHead(channel)
+	if err != nil {
+		return nil, err
+	}
+	if head == nil {
+		return nil, nil
+	}
+	if strings.TrimPrefix(head.Version, "v") == strings.TrimPrefix(a.GetAppVersion(), "v") {
+		return nil, nil
+	}
+	return head, nil
 }
 
 // SetPublicAccess toggles the Public Access mode
