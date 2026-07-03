@@ -6,9 +6,6 @@
 
 # Changelog
 
-## [Unreleased]
-_No changes yet — in active development on `main`._
-
 ## [1.3.20] - 2026-07-01
 
 ### Added
