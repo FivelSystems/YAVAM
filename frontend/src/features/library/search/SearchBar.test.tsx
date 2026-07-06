@@ -24,29 +24,66 @@ vi.mock('../../../context/PackageContext', () => ({
     }),
 }));
 
-const getInput = () => screen.getByPlaceholderText(/Search…/i);
+const getInput = () => screen.getByPlaceholderText(/Search/i) as HTMLInputElement;
+const removeButtons = () =>
+    screen.queryAllByRole('button', { name: /remove/i }).map(b => b.getAttribute('aria-label'));
 
 describe('SearchBar', () => {
-    it('commits a free-text term as a chip on Enter', () => {
+    it('keeps a plain word as editable text, not a chip', () => {
         render(<SearchBar />);
         const input = getInput();
-        fireEvent.change(input, { target: { value: 'hello' } });
+        fireEvent.change(input, { target: { value: 'red dress' } });
         fireEvent.keyDown(input, { key: 'Enter' });
-        expect(screen.getByText('hello')).toBeInTheDocument();
-        expect((input as HTMLInputElement).value).toBe('');
+        expect(input.value).toBe('red dress');
+        expect(removeButtons()).toEqual([]);
     });
 
-    it('picks the highlighted suggestion on Enter', () => {
+    it('does not chip a plain word even when it matches a known tag', () => {
         render(<SearchBar />);
         const input = getInput();
-        fireEvent.change(input, { target: { value: 'creator:sh' } });
+        fireEvent.change(input, { target: { value: 'dress' } });
         fireEvent.keyDown(input, { key: 'Enter' });
+        expect(input.value).toBe('dress');
+        expect(screen.queryByText('tag:dress')).not.toBeInTheDocument();
+        expect(removeButtons()).toEqual([]);
+    });
+
+    it('chips a completed field token on Space', () => {
+        render(<SearchBar />);
+        const input = getInput();
+        fireEvent.change(input, { target: { value: 'creator:shaper' } });
+        fireEvent.keyDown(input, { key: ' ' });
+        expect(screen.getByText('creator:shaper')).toBeInTheDocument();
+        expect(input.value).toBe('');
+    });
+
+    it('leaves free text in the box when a field token is chipped', () => {
+        render(<SearchBar />);
+        const input = getInput();
+        fireEvent.change(input, { target: { value: 'red creator:shaper' } });
+        fireEvent.keyDown(input, { key: ' ' });
+        expect(screen.getByText('creator:shaper')).toBeInTheDocument();
+        expect(input.value).toBe('red');
+    });
+
+    it('applies a value suggestion only when chosen', () => {
+        render(<SearchBar />);
+        const input = getInput();
+        // Typing a bare word that matches a creator does not auto-apply on Enter…
+        fireEvent.change(input, { target: { value: 'shap' } });
+        fireEvent.keyDown(input, { key: 'Enter' });
+        expect(screen.queryByText('creator:shaper')).not.toBeInTheDocument();
+        expect(input.value).toBe('shap');
+        // …but clicking the suggestion promotes it to a chip.
+        fireEvent.change(input, { target: { value: 'shap' } });
+        fireEvent.click(screen.getByText('shaper'));
         expect(screen.getByText('creator:shaper')).toBeInTheDocument();
     });
 
-    it('applies a suggestion on click', () => {
+    it('completes a field prefix then its value from suggestions', () => {
         render(<SearchBar />);
-        fireEvent.change(getInput(), { target: { value: 'creator:dna' } });
+        const input = getInput();
+        fireEvent.change(input, { target: { value: 'creator:dna' } });
         fireEvent.click(screen.getByText('dnaddr'));
         expect(screen.getByText('creator:dnaddr')).toBeInTheDocument();
     });
@@ -54,46 +91,18 @@ describe('SearchBar', () => {
     it('removes a chip via its remove button', () => {
         render(<SearchBar />);
         const input = getInput();
-        fireEvent.change(input, { target: { value: 'hello' } });
-        fireEvent.keyDown(input, { key: 'Enter' });
-        fireEvent.click(screen.getByRole('button', { name: /remove hello/i }));
-        expect(screen.queryByText('hello')).not.toBeInTheDocument();
-    });
-
-    it('removes the last chip on Backspace when the draft is empty', () => {
-        render(<SearchBar />);
-        const input = getInput();
-        fireEvent.change(input, { target: { value: 'hello' } });
-        fireEvent.keyDown(input, { key: 'Enter' });
-        fireEvent.keyDown(input, { key: 'Backspace' });
-        expect(screen.queryByText('hello')).not.toBeInTheDocument();
-    });
-
-    it('commits on space for a complete token', () => {
-        render(<SearchBar />);
-        const input = getInput();
-        fireEvent.change(input, { target: { value: 'red' } });
+        fireEvent.change(input, { target: { value: 'creator:shaper' } });
         fireEvent.keyDown(input, { key: ' ' });
-        expect(screen.getByText('red')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: /remove creator:shaper/i }));
+        expect(screen.queryByText('creator:shaper')).not.toBeInTheDocument();
     });
 
-    it('suggests a value implicitly from a bare word (no field typed)', () => {
-        render(<SearchBar />);
-        fireEvent.change(getInput(), { target: { value: 'shap' } });
-        fireEvent.click(screen.getByText('shaper'));
-        expect(screen.getByText('creator:shaper')).toBeInTheDocument();
-    });
-
-    it('floats free text after field tokens regardless of typing order', () => {
+    it('removes the last chip on Backspace when the box is empty', () => {
         render(<SearchBar />);
         const input = getInput();
-        // Type a free-text word first, then a field token.
-        fireEvent.change(input, { target: { value: 'red' } });
-        fireEvent.keyDown(input, { key: 'Enter' });
-        fireEvent.change(input, { target: { value: 'creator:dna' } });
-        fireEvent.keyDown(input, { key: 'Enter' });
-        // Chips should read: creator:dnaddr then red.
-        const chips = screen.getAllByRole('button', { name: /remove/i }).map(b => b.getAttribute('aria-label'));
-        expect(chips).toEqual(['Remove creator:dnaddr', 'Remove red']);
+        fireEvent.change(input, { target: { value: 'creator:shaper' } });
+        fireEvent.keyDown(input, { key: ' ' });
+        fireEvent.keyDown(input, { key: 'Backspace' });
+        expect(screen.queryByText('creator:shaper')).not.toBeInTheDocument();
     });
 });

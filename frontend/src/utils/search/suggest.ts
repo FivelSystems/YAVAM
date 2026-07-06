@@ -93,8 +93,10 @@ export const getSuggestions = (
             insertText: `${prefix}${f.field}:`,
         }));
 
-    // Direct value matches so typing a bare word surfaces `creator:Name`,
-    // `type:scene`, or `tag:name` without having to type the field first.
+    // Direct value matches so typing a bare word can still reach `creator:Name`,
+    // `type:scene`, or `tag:name` without typing the field first. Tags come last
+    // as the least-important pool. These never auto-apply — the searchbar leaves
+    // nothing highlighted, so a bare word stays plain text unless one is chosen.
     const values: Suggestion[] = [];
     if (term) {
         const direct: { field: TokenField; pool: string[] }[] = [

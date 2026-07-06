@@ -56,13 +56,32 @@ and are grouped together regardless of typing order:
 type:scene red creator:shaper dress → type:scene creator:shaper red dress
 ```
 
+## Structured tokens vs. plain text (chips)
+
+The searchbar is a hybrid, not an all-chips box:
+
+- **`field:value` tokens become chips.** Completing a structured token — by
+  Space after `creator:shaper`, Enter, or picking it from autocomplete — lifts it
+  out of the input into a removable chip.
+- **Plain text stays in the input.** Barewords are never chipped; they remain
+  editable text at the end of the bar and filter live as typed, like a normal
+  search field. (They still sort after the field tokens in the serialised query.)
+
+Backspace on an empty input removes the last chip.
+
 ## Autocomplete
 
-The searchbar suggests as you type. A bareword offers both field completions
+The searchbar suggests as you type. A bareword offers field completions
 (`cr` → `creator:`) and **implicit value matches across every value field** —
 typing `shap` surfaces `creator:shaper`, `scen` surfaces `type:scene`, `dress`
 surfaces `tag:dress` — so a field prefix is never required to reach a value.
 After a `field:` prefix, only that field's values are suggested.
+
+**Nothing is preselected.** No suggestion is highlighted by default, so pressing
+Enter or Space keeps the word as plain text; a `creator:`/`type:`/`tag:` filter is
+applied only when the user deliberately arrows to a suggestion or clicks it. A
+normal text search is therefore never hijacked into a tag filter by accident.
+Tags are the lowest-priority value pool.
 
 ## Not-yet-backed tokens
 
