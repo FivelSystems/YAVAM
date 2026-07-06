@@ -28,6 +28,7 @@
 - **Missing / Vanishing Packages**: Fixed a regression where referencing a library under a different drive-letter or folder casing (e.g. `D:\VaM` vs `d:\vam`) could create duplicate index entries and make packages appear to disappear. Library paths are now matched case-insensitively while their original display casing is preserved.
 - **Smoother Scanning**: The grid no longer flickers or feels sluggish while a scan runs. Cards only update when their data actually changes, so you can browse uninterrupted as content fills in the background.
 - **Test Isolation**: Automated tests no longer write fixture libraries (e.g. `C:\Allowed`) into the real application database.
+- **No More Console Flash on Copy**: Copying a package (`CTRL+C` or the context menu) no longer briefly pops up a console window. File copying now uses the native Windows clipboard directly instead of launching PowerShell in the background.
 
 ## [1.3.19] - 2026-05-14
 
