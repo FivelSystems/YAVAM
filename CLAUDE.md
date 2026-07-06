@@ -100,11 +100,61 @@ fatal.
 - **Human-readable names.** No cryptic abbreviations, single-letter names with no
   meaning, or magic numbers — name the constant or the concept.
 
+## Documentation architecture
+
+Documentation is organised by **the one question each location answers**, so there
+is never a choice about where something goes. Use exactly these — do not invent new
+top-level doc buckets or reintroduce synonyms (no `docs/plans`, no `docs/features`;
+"plans" is a synonym for "roadmap" and caused confusion).
+
+| Location | Answers | Altitude | Published? |
+| --- | --- | --- | --- |
+| `TODO.md` (repo root) | "What can be done *today*?" | Task | ❌ Private (git-ignored) |
+| `docs/ROADMAP.md` | "*What* are we building, in *what order*, what *blocks* what?" | Strategy (index) | ✅ Public |
+| `docs/roadmap/<capability>.md` | "What does *one capability* deliver, and *why*?" (non-technical) | Strategy (detail) | ✅ Public |
+| `docs/design/<feature>.md` | "*How* is *one feature* built?" (schema, grammar, specs) | Implementation | ✅ Public |
+
+Rules that keep this unambiguous:
+- **`TODO.md` is the only private, ephemeral file** — actionable near-term work. It
+  churns and is git-ignored. Nothing public links into it.
+- **`docs/ROADMAP.md` is the single index** and the home for future ideas, plans,
+  and brainstorming. It links *down* to capability docs and to design docs; the
+  direction is always ROADMAP → `roadmap/` → `design/`. Never a second roadmap file.
+- **Capabilities, not numbered phases.** Roadmap docs are named for *what the
+  capability is* (`search.md`, `pockets.md`) — **never** a sequence number
+  (`phase-4-*.md` is forbidden). A filename is a stable identity; baking order into
+  it couples identity to sequence and breaks every link when priorities change.
+- **Ordering lives only in `ROADMAP.md`, as horizons.** The index sorts capabilities
+  into **Now / Next / Later / Ideas**, and **Shipped** once released. Reprioritising
+  means moving a line between horizons — no file is renamed. A capability doc states
+  its own horizon/`Targets:` milestone in its header, but its *position* is set
+  by the index, not by a number.
+- **Every capability carries a status** — the horizon says *when*, the status says
+  *how far along*. Use exactly this set (legend lives at the top of `ROADMAP.md`):
+  ✅ Done · 🔨 Building · 📋 Todo · 🗄️ Backlog · 💡 Idea · 🗑️ Discarded. It appears in
+  the item's header line and in its row in the index tables; keep the two in sync.
+- **Milestones (e.g. `2.0`) are tags, not the spine.** `Targets: 2.0` says which
+  release a capability aims at. A milestone is "the vision is substantially
+  delivered," not a fixed checklist; post-milestone and off-roadmap work (bug waves,
+  one-offs) get a capability doc and a horizon slot like anything else. The roadmap
+  never dead-ends at a version.
+- **`docs/roadmap/<capability>.md` carry the vision** (what/why/UX) with **no
+  technical detail** — schema, grammar, and component/security specifics belong in a
+  design doc, which the capability doc links to.
+- **`docs/design/<feature>.md` carry the technical spec**, one file per feature. Mark
+  a doc `> **Status:** Draft` while decisions are open; it stays public regardless.
+- `docs/domain/*.md` remains reference material for how VaM and the existing system
+  work — distinct from `design/`, which is how *new* features will be built.
+
+When adding documentation, place it by the table above; if a `.md` doesn't fit one
+row, it probably belongs inside an existing file rather than a new location.
+
 ## Documentation voice
 
-Every `.md` file (README, CHANGELOG, `docs/`, ROADMAP, TODO) is **public
+Every published `.md` file (README, CHANGELOG, `docs/`, ROADMAP) is **public
 documentation for everyone who reads the repository** — not a private notebook or
-a message to the maintainer. Write accordingly:
+a message to the maintainer. (`TODO.md` is the sole exception: local and
+git-ignored.) Write accordingly:
 
 - **Never address the maintainer or narrate a conversation.** No "per your call",
   "here's what I'd do", "as you asked", "my perspective". State decisions and facts

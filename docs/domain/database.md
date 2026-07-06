@@ -13,10 +13,10 @@ libraries       -- one row per configured library; surrogate id, path is unique
 packages        -- one row per physical .var file (scanner-owned)
 user_metadata   -- user ratings, favorites, notes (per Creator.Name family)
 dependencies    -- explicit dep graph (populated in future phases)
-hub_index       -- VaM Hub API cache (Phase 7)
-pockets         -- one row per authenticated session (Phase 6)
-pocket_items    -- packages added to a pocket (Phase 6)
-ui_layout       -- JSON blobs for icon order, panel layout (Phase 4+)
+hub_index       -- VaM Hub API cache (Hub integration)
+pockets         -- one row per authenticated session (pocket system)
+pocket_items    -- packages added to a pocket (pocket system)
+ui_layout       -- JSON blobs for icon order, panel layout (smart search+)
 ```
 
 Full DDL is in [`migration.go`](../../pkg/database/migration.go).
@@ -171,7 +171,7 @@ FROM user_metadata
 WHERE family = ?;
 ```
 
-### Get enabled packages missing from hub_index (Phase 7)
+### Get enabled packages missing from hub_index (Hub integration)
 ```sql
 SELECT p.id FROM packages p
 LEFT JOIN hub_index h ON h.file_name = p.file_name
@@ -199,7 +199,7 @@ Stored as JSON arrays (`TEXT`):
 ["dress", "animation"]
 ```
 
-Use `json_each()` for SQLite-side filtering (Phase 4 smart search):
+Use `json_each()` for SQLite-side filtering (smart search):
 
 ```sql
 SELECT DISTINCT p.id
@@ -213,14 +213,14 @@ WHERE t.value = 'dress';
 
 | Field | Location | Reason |
 |---|---|---|
-| `libraries` | DB `libraries` table | Migrated in Phase 2 |
+| `libraries` | DB `libraries` table | Migrated in the SQLite foundation |
 | `serverPort` | `config.json` | System-level, affects server startup |
 | `serverEnabled` | `config.json` | System-level |
 | `authPollInterval` | `config.json` | System-level |
 | `setupDone` | `config.json` | Needed before DB is open |
 | `lastSeenVersion` | `config.json` | Needed before DB is open |
-| `gridSize`, `sortMode` | `localStorage` (Phase 3+) | Per-client view preference |
-| `keybinds` | `config.json` → DB (Phase 4) | Deferred; entangled with sidebar redesign |
+| `gridSize`, `sortMode` | `localStorage` | Per-client view preference |
+| `keybinds` | `config.json` → DB (smart search) | Deferred; entangled with sidebar redesign |
 
 ---
 

@@ -39,3 +39,6 @@ update.pub
 # AI agent memory (project-local, never committed)
 .claude/memory/
 MEMORY.md
+
+# Local dev to-do notebook (not published)
+/TODO.md

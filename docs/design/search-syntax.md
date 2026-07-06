@@ -1,0 +1,59 @@
+# Design: Booru-style search syntax
+
+> **Status:** Design — not yet implemented.
+> **Roadmap:** [Smart search](../roadmap/search.md).
+
+The smart searchbar parses a space-separated list of tokens. Combining rule:
+**different token types are AND-ed; multiple tokens of the same type are OR-ed.**
+
+## Operators
+
+```
+token              → AND (must match)
++token             → OR  (at least one of the +group must match)
+-token             → NOT (exclude)
+```
+
+## Token types
+
+```
+status:enabled     status:disabled  status:missing  status:corrupt  status:standalone
+status:hidden      status:visible
+creator:acidbubbles
+type:scene
+tag:dress
+license:cc-by      license:pc       license:pc-ea
+rating:>=4
+favorite:true
+size:>500mb        size:10mb..100mb
+```
+
+- `tag:` is available through search only; there is no dedicated tag sidebar
+  section.
+- `size:` supports a single bound (`size:>100mb`) or a range (`size:10mb..500mb`).
+- `status:standalone` narrows to standalone packages even when the dependency
+  visibility mode is `all`.
+
+## Examples
+
+```
+creator:callimohu type:scene                      → both must match (AND)
+creator:callimohu +creator:picovam -status:corrupt → either creator, not corrupt
+tag:dress +tag:clothing license:cc-by             → dress OR clothing, AND cc-by
+favorite:true rating:>=3                          → favourite AND rated 3+
+```
+
+## Related: dependency-visibility mode
+
+Which packages the grid shows is governed by a separate top-toolbar dropdown
+(stored in `localStorage`, a per-client preference — not a search token):
+
+| Mode | Label | Behaviour |
+|---|---|---|
+| `auto` | `Packages (auto)` | **Default.** Standalone only; auto-expands to all packages while the searchbar has input or any filter is active, then reverts. |
+| `packages` | `Packages` | Always standalone only; never auto-expands. |
+| `all` | `All packages` | Always everything, including dependencies. |
+
+When `auto` has auto-expanded, the label reads `Packages (auto) — expanded` so the
+user knows why more rows appeared. A deliberate switch to `packages` or `all` is
+never overridden silently.

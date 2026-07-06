@@ -1,106 +1,108 @@
 # YAVAM Roadmap
 
-> **Living overview.** The detailed per-phase vision (specs, schema, UI) lives in
-> [roadmap/YAVAM-2.0-vision.md](roadmap/YAVAM-2.0-vision.md). This file is the
-> current, reprioritized plan and status — update it as things ship.
+> The living index for YAVAM's future. Items are sorted into three horizons —
+> **Now / Next / Later** — plus **Ideas**, and each links to a per-capability file.
+> Forward-looking ideas and plans live here; `TODO.md` is only for tasks doable today.
 >
-> Last updated: 2026-07-01
+> Baseline v1.3.19 → milestone `2.0`. Last updated: 2026-07-03.
 
-## Status snapshot
+## Status legend
 
-**Last released version: 1.3.19.** 1.4.0 is **in development** (Unstable channel
-only) — nothing below is shipped to Stable users yet.
+Every capability carries a status, shown in its header and the tables below:
 
-| Phase (vision) | Theme | Status |
-| --- | --- | --- |
-| 1 | Immediate fixes | ✅ Released (1.3.19) |
-| 2 | SQLite foundation + card rework | 🚧 **In progress (1.4.0-dev)** — incomplete, see below |
-| — | **Update channels (Stable/Unstable)** | 🚧 In progress (1.4.0-dev) — *not originally in the roadmap* |
-| 3 | Advanced library management | ⏳ Not started |
-| 4 | Smart search + sidebar redesign | ⏳ Not started — **priority raised (see below)** |
-| 5 | Favorites / ratings / license filter | ⏳ Not started |
-| 6 | Pocket system + action modal | ⏳ Not started |
-| 7 | Hub integration + cleanup view | ⏳ Not started |
-| 8–10 | i18n, themes, modular/split/graph | ⏳ Not started |
+| | Status | Meaning |
+|---|---|---|
+| ✅ | **Done** | Released; see the CHANGELOG. |
+| 🔨 | **Building** | Actively in progress. |
+| 📋 | **Todo** | Committed, not started. |
+| 🗄️ | **Backlog** | Planned, unscheduled. |
+| 💡 | **Idea** | Unshaped; not yet a commitment. |
+| 🗑️ | **Discarded** | Considered and dropped. |
 
-### Landed on `main` this session (unreleased, part of 1.4.0-dev)
-- SQLite core: `pkg/database` with schema + append-only migrations; libraries
-  mirrored from `config.json`; packages indexed on scan. **(incomplete — see P0)**
-- **Update channels** — Stable/Unstable selector, channel-aware updater with full
-  SemVer (incl. pre-release) comparison. See [RELEASING.md](RELEASING.md).
-- Project docs: [BRANCHING.md](BRANCHING.md), [RELEASING.md](RELEASING.md),
-  [WORKFLOWS.md](WORKFLOWS.md), [CLAUDE.md](../CLAUDE.md),
-  [.github/CONTRIBUTING.md](../.github/CONTRIBUTING.md); Conventional Branch adopted.
+## How this roadmap works
 
-## 🟡 P0 — Finish Phase 2 (regression) — **substantially done, on `feat/sqlite-read-path`**
+- **Capabilities, not numbered phases.** Each item has a stable, descriptive
+  filename (`search.md`, `pockets.md`) — never a sequence number — so priority can
+  change without renaming files or breaking links.
+- **Horizons carry ordering; status carries progress.** The horizon (Now/Next/Later)
+  is *when* we intend to work on it; the status is *how far along* it is. Items flow
+  **Later → Next → Now**, and land in **Shipped** as ✅ Done.
+- **Milestones are tags.** `Targets: 2.0` says which release an item aims at. `2.0`
+  means "the vision is substantially delivered," not "a fixed list is done." Post-2.0
+  work gets a new file and a horizon slot — the roadmap never dead-ends.
+- **Off-roadmap work is first-class.** Anything never in the 2.0 vision (update
+  channels, bug waves, one-offs) lives in these same horizons.
 
-The SQLite migration regressed core behavior. This blocked everything above it in
-the value chain (search, cleanup, pocket all depend on reliable package +
-dependency data). Original diagnosis and the fixes applied this session:
+## Now — actively building
 
-1. ~~**The `dependencies` table is never written.**~~ ✅ **Fixed, then redesigned
-   for [#45](https://github.com/FivelSystems/YAVAM/issues/45).** The scan persists
-   the dependency graph (`persistDependencies` in
-   [scan_orchestrator.go](../pkg/services/library/scan_orchestrator.go)), scoped by
-   dependent key so re-scanning one library refreshes only its edges. Crucially the
-   graph is now **family-anchored** (migration v3): edges store `dependency_family`
-   (`creator.name`) as the matching key, not the versioned string — because VaM
-   deps use `.latest`/pinned versions that rarely match the installed copy, which
-   is exactly why reverse "used by" was empty. Resolution is **cross-library and
-   derived globally** (`DependencyGraph`/`AnalyzePackages` in
-   [dependency_graph.go](../pkg/services/library/dependency_graph.go)): a dep is
-   satisfied iff any package of that family exists in any library, and "used by"
-   spans libraries. `LinkPass` keeps duplicate/obsolete detection.
-2. ~~**Frontend looks empty/missing** (read path half-migrated).~~ ✅ **Fixed.**
-   The read path is wired: `GetCachedPackages`
-   ([read.go](../pkg/services/library/read.go)) reconstructs the package list from
-   the index, rebuilds each package's dependency map from the persisted graph, and
-   runs the **same `LinkPass`** a live scan uses — so the cached view's analysis is
-   identical to a fresh scan. The grid is painted **cache-first**, then a launch
-   scan **revalidates** against disk (chosen model: cache-first + rescan-on-launch);
-   files deleted since the last scan are pruned on `scan:complete`.
-3. ~~**Library path casing is inconsistent**, breaking the library↔package
-   association.~~ ✅ **Fixed.** A single canonical-path helper
-   ([utils.CanonPath](../pkg/utils/path.go)) is now the one definition of "same
-   path"; `Manager.ValidatePath` and the DB layer both call it. `libraries.path`
-   keeps its original display casing; a new `path_norm` column (migration v2) is the
-   case-insensitive matching key, backfilled/deduped in Go on open
-   (`reconcilePathNorm`) so it can never drift from lookups.
+| Status | Capability | Targets | Notes |
+|---|---|---|---|
+| 🔨 | [SQLite foundation + card rework](roadmap/sqlite-foundation.md) | 2.0 | Foundational. Finishing the P0 regression below. |
+| 🔨 | Update channels (Stable/Unstable) | — | Off-roadmap; landed on `main`, verifying. See [RELEASING.md](RELEASING.md). |
 
-**Remaining before calling Phase 2 fully closed:**
-- Manual verification in the running app (cache-first paint, deletion pruning,
-  casing-variant libraries). ✅ Dependency "used by" fix (#45) **verified live in the
-  app by the user** — works well.
-- ✅ `referencedBy`/`obsoletedBy` now carried by `models.VarPackage`, so the cached
-  view has them too.
-- Optional: extend cache-first to **web mode** (`/api/packages`); today it's
-  desktop-only (guarded by `window.go`).
+## Next
 
-## Versioning & prioritization
+| Status | Capability | Targets | Notes |
+|---|---|---|---|
+| 📋 | [Smart search + sidebar redesign](roadmap/search.md) | 2.0 | Highest-value layer on the DB; searchbar first, then creator view. |
+| 📋 | [Favourites, ratings, license filter](roadmap/ratings-favorites.md) | 2.0 | Thin layer on the same DB. |
 
-**Versioning is decoupled from phases.** Mapping phases 1→10 onto fixed numbers
-(`1.4.0, 1.4.5, 1.5.0 … 2.0.0`) pre-commits versions to work that hasn't happened.
-Instead, a version is just what ships — a minor bump for a feature set, a patch for
-fixes. The phases remain a *priority-ordered backlog*, and `2.0.0` means "the vision
-is substantially delivered," not "phase 10 is done."
+## Later
 
-**Priority order (reprioritized from the original 1→10 sequence):**
-1. **Finish Phase 2 (P0 above).** Non-negotiable; the foundation is currently broken.
-2. **Phase 4 — Smart search (priority raised).** Once package + dependency data is
-   reliable, search is the highest user-value feature and it sits directly on that
-   foundation, so it moves *ahead* of Phase 3 (library management) and Phase 5
-   (ratings/favorites). It splits into **4a smart searchbar** (tokens, filters) —
-   high value, self-contained — then **4b sidebar redesign / creator view**.
-   - **Related idea (captured, not scheduled):** now that #45 is fixed, the details
-     panel's **"Needs" and "Used By" lists can get large** — a package can have
-     dozens of dependents. Each list would benefit from its own **filter/search
-     field** (plus count + collapse). Good fit for 4b (sidebar redesign); the data
-     is already indexed by family, so filtering is cheap.
-3. Phase 5 (ratings/favorites/license) — small, rides on the same DB, good quick wins.
-4. Phase 3 (library management) — valuable but heavier and security-sensitive.
-5. Phases 6–10 as before.
+| Status | Capability | Targets | Notes |
+|---|---|---|---|
+| 🗄️ | [Advanced library management](roadmap/library-management.md) | 2.0 | Security-sensitive; needs a review. |
+| 🗄️ | [Pocket system + action modal](roadmap/pockets.md) | 2.0 | Centralises every bulk action; high risk. |
+| 🗄️ | [Hub integration + Discover + Cleanup](roadmap/hub-cleanup.md) | 2.0 | Builds on pockets. |
+| 🗄️ | [Localization (i18n)](roadmap/localization.md) | 2.0 | Embedded community translations. |
+| 🗄️ | [Appearance & themes](roadmap/theming.md) | 2.0 | Bounded `--yavam-*` whitelist. |
+| 🗄️ | [Modular layout + split view + graph](roadmap/workspace.md) | 2.0 | Capstone; desktop-only. |
 
-Rationale: search and ratings are *thin* layers on a solid data model and deliver
-visible value fast; library-management and pocket work are *thick* and can wait until
-the foundation is proven. The foundational fix comes first so the search work lands
-on something trustworthy — more accurate, faster, and more reliable than before.
+## Ideas
+
+| Status | Idea | Notes |
+|---|---|---|
+| 💡 | [Zip bundling](design/zip-bundling.md) | On-ramp to pockets (shares the closure-and-stream core). Promote to **Next** once the sub-dependency fix lands. |
+
+## Shipped
+
+| Status | What | Where |
+|---|---|---|
+| ✅ | Immediate fixes (1.3.19) — bulk-op per-item results, reliable `RestartApp()`, dependency-row context menu (#29), image carousel (#27), `CTRL+C` file copy (#35), model completeness | [CHANGELOG.md](../CHANGELOG.md) |
+| ✅ | Project docs & branching — Conventional Branch adopted | [BRANCHING.md](BRANCHING.md), [RELEASING.md](RELEASING.md), [WORKFLOWS.md](WORKFLOWS.md) |
+
+## 🟡 P0 — Finish the SQLite foundation (regression)
+
+**Status:** 🔨 substantially done, on `feat/sqlite-read-path`.
+
+The SQLite migration regressed core behaviour, blocking everything built on it.
+Data-model detail is in [design/database-schema.md](design/database-schema.md).
+
+1. **Dependencies never written** → ✅ Fixed, then redesigned for
+   [#45](https://github.com/FivelSystems/YAVAM/issues/45). The scan persists the
+   graph (`persistDependencies` in
+   [scan_orchestrator.go](../pkg/services/library/scan_orchestrator.go)),
+   **family-anchored** (migration v3): edges store `dependency_family`
+   (`creator.name`), not the versioned string — VaM deps use `.latest`/pinned
+   versions that rarely match the installed copy, which is why reverse "used by" was
+   empty. Resolution is cross-library
+   ([dependency_graph.go](../pkg/services/library/dependency_graph.go)).
+2. **Frontend looked empty** (read path half-migrated) → ✅ Fixed.
+   `GetCachedPackages` ([read.go](../pkg/services/library/read.go)) rebuilds packages
+   and dependency maps from the index via the same `LinkPass` a live scan uses. The
+   grid paints cache-first, then a launch scan revalidates against disk; deleted
+   files prune on `scan:complete`.
+3. **Library path casing inconsistent** → ✅ Fixed via one canonical-path helper
+   ([utils.CanonPath](../pkg/utils/path.go)) and a `path_norm` column (migration v2),
+   so the matching key can never drift from display casing.
+
+**Remaining:** manual in-app verification (cache-first paint, deletion pruning,
+casing-variant libraries — the #45 "used by" fix is verified live); optionally extend
+cache-first to web mode (`/api/packages`), today desktop-only.
+
+## Milestone: 2.0
+
+`2.0` is delivered when the capabilities tagged `Targets: 2.0` are substantially in
+users' hands. Versioning stays decoupled from horizons: a minor bump ships a
+capability set, a patch ships fixes. Nothing here pre-commits a capability to a fixed
+version number.
