@@ -74,9 +74,21 @@ export const parseSearchQuery = (input: string): ParsedQuery => {
  * Serialise tokens back to a query string, keeping field tokens in their
  * relative order and floating all free-text words to the end as one group
  * (e.g. `type:x red creator:y dress` → `type:x creator:y red dress`).
+ *
+ * A field value containing whitespace is re-quoted so the result round-trips
+ * back through `parseSearchQuery`; `raw` alone drops the quotes that
+ * `splitChunks` consumed and would otherwise re-split into separate tokens.
  */
 export const buildQueryString = (tokens: SearchToken[]): string => {
+    const serialise = (token: SearchToken): string => {
+        if (token.field === 'text') return token.raw;
+        const colon = token.raw.indexOf(':');
+        if (colon < 0) return token.raw;
+        const head = token.raw.slice(0, colon); // operator + field, original casing
+        const value = token.raw.slice(colon + 1);
+        return `${head}:${/\s/.test(value) ? `"${value}"` : value}`;
+    };
     const fields = tokens.filter(t => t.field !== 'text');
     const texts = tokens.filter(t => t.field === 'text');
-    return [...fields, ...texts].map(t => t.raw).join(' ');
+    return [...fields, ...texts].map(serialise).join(' ');
 };

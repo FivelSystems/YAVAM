@@ -11,6 +11,7 @@ import { useSelectionContext } from '../../context/SelectionContext';
 import { useLibraryContext } from '../../context/LibraryContext';
 import { useActionContext } from '../../context/ActionContext';
 import { useToasts } from '../../context/ToastContext';
+import { hasToken, toggleToken } from '../../utils/search';
 
 interface PackageLayoutProps {
     // View State (Dashboard controlled)
@@ -38,7 +39,7 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
     const { packages, scanError } = usePackageContext();
     const {
         filteredPkgs, currentPage, itemsPerPage, setCurrentPage,
-        selectedCreator, setSelectedCreator
+        searchQuery, setSearchQuery
     } = useFilterContext();
     const {
         selectedIds, selectedPackage, setSelectedPackage,
@@ -282,11 +283,14 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
                         onResolve={(pkg) => handleSingleResolve(pkg)}
                         activeTab={activeTab}
                         onTabChange={setActiveTab}
-                        onFilterByCreator={(c) => setSelectedCreator(c)}
+                        onFilterByCreator={(c) => {
+                            const name = c ?? selectedPackage?.meta.creator;
+                            if (name) setSearchQuery(toggleToken(searchQuery, 'creator', name));
+                        }}
                         onDependencyClick={handleDependencyClick}
                         onTitleClick={handleLocate}
                         getDependencyStatus={handleGetDependencyStatus}
-                        selectedCreator={selectedCreator}
+                        selectedCreator={selectedPackage && hasToken(searchQuery, 'creator', selectedPackage.meta.creator) ? selectedPackage.meta.creator : null}
                         censorThumbnails={censorThumbnails}
                         blurAmount={blurAmount}
                         isOffScreen={isOffScreen}

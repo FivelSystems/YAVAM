@@ -69,6 +69,16 @@ The searchbar is a hybrid, not an all-chips box:
 
 Backspace on an empty input removes the last chip.
 
+## The sidebar composes the same query
+
+The left sidebar is not a parallel filter system: clicking a status facet, a
+creator, or a category toggles the corresponding `status:` / `creator:` / `type:`
+token in the one query the searchbar owns. A facet reads as active when its token
+is present, and facets stack (two creators OR together, matching the same-field
+rule). "All Packages" clears the `status:` tokens. This keeps a single source of
+truth — whatever the sidebar highlights is visible as chips in the bar and vice
+versa.
+
 ## Autocomplete
 
 The searchbar suggests as you type. A bareword offers field completions
@@ -82,6 +92,21 @@ Enter or Space keeps the word as plain text; a `creator:`/`type:`/`tag:` filter 
 applied only when the user deliberately arrows to a suggestion or clicks it. A
 normal text search is therefore never hijacked into a tag filter by accident.
 Tags are the lowest-priority value pool.
+
+## Future operators (not yet implemented)
+
+`^` (intersect) — a binary set operator that keeps only packages present on **both**
+sides, matched by package identity (`creator.name.version`) rather than by row:
+
+```
+library:first_library ^ library:second_library   → packages in both libraries
+```
+
+Unlike `+`/`-`, which test one row, `^` groups matches by identity across its two
+operands and returns the overlap — the natural way to surface the same package
+installed in more than one library. It generalises to any field but only pays off
+where an identity can appear on both sides. It depends on the `library:` token,
+which itself waits on the scan/validation rework that switching libraries needs.
 
 ## Not-yet-backed tokens
 
