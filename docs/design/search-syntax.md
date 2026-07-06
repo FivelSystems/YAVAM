@@ -1,4 +1,4 @@
-# Design: Booru-style search syntax
+# Design: Tokenised search syntax
 
 > **Status:** Design — not yet implemented.
 > **Roadmap:** [Smart search](../roadmap/search.md).
@@ -42,6 +42,34 @@ creator:callimohu +creator:picovam -status:corrupt → either creator, not corru
 tag:dress +tag:clothing license:cc-by             → dress OR clothing, AND cc-by
 favorite:true rating:>=3                          → favourite AND rated 3+
 ```
+
+## Free-text words
+
+A bareword with no `field:` prefix is free text, matched as a substring against
+the package name, package title, and creator. Multiple free-text words are AND-ed
+(a search box is expected to treat `red dress` as "both", not "either").
+
+Free-text words always sort to the **end** of the query, after the field tokens,
+and are grouped together regardless of typing order:
+
+```
+type:scene red creator:shaper dress → type:scene creator:shaper red dress
+```
+
+## Autocomplete
+
+The searchbar suggests as you type. A bareword offers both field completions
+(`cr` → `creator:`) and **implicit value matches across every value field** —
+typing `shap` surfaces `creator:shaper`, `scen` surfaces `type:scene`, `dress`
+surfaces `tag:dress` — so a field prefix is never required to reach a value.
+After a `field:` prefix, only that field's values are suggested.
+
+## Not-yet-backed tokens
+
+`rating:`, `favorite:`, and `license:` are parsed and shown as chips but do not
+filter until the ratings/favourites data layer exists; they are inert no-ops
+until then. `status:standalone`, `status:hidden`, and `status:visible` likewise
+wait on the dependency-visibility mode.
 
 ## Related: dependency-visibility mode
 

@@ -8,7 +8,7 @@ then the **sidebar / creator view**.
 
 ## Delivers
 
-- Booru-style tokenised searchbar with autocomplete (grammar in the
+- Tokenised searchbar with autocomplete (grammar in the
   [spec](../design/search-syntax.md)).
 - Icon-only left sidebar with drag-to-reorder icons (order persisted in the DB).
 - Tags moved into search (`tag:dress`); no separate tag section.

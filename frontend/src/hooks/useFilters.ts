@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { VarPackage } from '../types';
+import { parseSearchQuery, buildMatcher } from '../utils/search';
 
 export const useFilters = (packages: VarPackage[]) => {
     // Search State
@@ -63,15 +64,11 @@ export const useFilters = (packages: VarPackage[]) => {
             });
         }
 
-        // 5. Search Query
+        // 5. Search Query — tokenised search (creator:, type:, tag:, status:,
+        // size:, +/- operators). A bare word falls back to a name/creator substring.
         if (searchQuery.trim()) {
-            const q = searchQuery.toLowerCase();
-            res = res.filter(p => {
-                const name = p.fileName?.toLowerCase() || "";
-                const pkgName = p.meta?.packageName?.toLowerCase() || "";
-                const creator = p.meta?.creator?.toLowerCase() || "";
-                return name.includes(q) || creator.includes(q) || pkgName.includes(q);
-            });
+            const matches = buildMatcher(parseSearchQuery(searchQuery));
+            res = res.filter(matches);
         }
 
         // 6. Sorting

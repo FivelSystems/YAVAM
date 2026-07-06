@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { clsx } from 'clsx';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -8,6 +8,7 @@ import {
 import { ScanProgressBar } from '../../components/common/ScanProgressBar';
 import { useFilterContext } from '../../context/FilterContext';
 import { usePackageContext } from '../../context/PackageContext';
+import { SearchBar } from '../library/search/SearchBar';
 
 interface FilterToolbarProps {
     isSidebarOpen: boolean;
@@ -25,7 +26,6 @@ export const FilterToolbar: React.FC<FilterToolbarProps> = ({
 }) => {
     // Consume Logic Contexts
     const {
-        searchQuery, setSearchQuery, inputRef,
         sortMode, isSortDropdownOpen, setIsSortDropdownOpen, handleSortChange,
         selectedTags, setSelectedTags,
         tagSearchQuery, setTagSearchQuery, isTagSearchOpen, setIsTagSearchOpen,
@@ -34,13 +34,6 @@ export const FilterToolbar: React.FC<FilterToolbarProps> = ({
 
     // PackageContext provides scanStages (three-phase) and loading state
     const { loading, scanStages, scanPackages, cancelScan, availableTags } = usePackageContext();
-
-    // Pending search — committed only on Enter or button press (prevents live re-filter mid-scan)
-    const [pendingSearch, setPendingSearch] = useState(searchQuery);
-
-    const handleSearchSubmit = () => {
-        setSearchQuery(pendingSearch);
-    };
 
     const sortOptions = [
         { id: 'name-asc', label: 'Name (A-Z)', icon: <ArrowUpAZ size={14} /> },
@@ -74,91 +67,59 @@ export const FilterToolbar: React.FC<FilterToolbarProps> = ({
                         <PanelLeft size={20} />
                     </button>
 
-                    {/* Search form — submit-only to prevent live filter thrashing mid-scan */}
-                    <form
-                        onSubmit={(e) => { e.preventDefault(); handleSearchSubmit(); }}
-                        className="flex items-center gap-1 bg-gray-700 px-3 py-2 rounded-lg w-full md:max-w-md"
-                    >
-                        <Search size={18} className="text-gray-400 shrink-0" />
-                        <input
-                            id="search-input"
-                            ref={inputRef}
-                            className="bg-transparent outline-none w-full text-sm placeholder-gray-500 text-gray-200"
-                            placeholder="Search packages… (Enter to apply)"
-                            value={pendingSearch}
-                            onChange={(e) => setPendingSearch(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Escape') { setPendingSearch(''); setSearchQuery(''); } }}
-                        />
-                        {/* Submit button (visible on mobile, hidden on desktop — desktop uses Enter) */}
-                        <button
-                            type="submit"
-                            className="md:hidden p-1 rounded text-gray-400 hover:text-white hover:bg-gray-600 transition-colors shrink-0"
-                            title="Search"
-                        >
-                            <Search size={15} />
-                        </button>
-
-                        {pendingSearch && (
-                            <button
-                                type="button"
-                                onClick={() => { setPendingSearch(''); setSearchQuery(''); }}
-                                className="p-1 rounded text-gray-500 hover:text-white transition-colors shrink-0"
-                                title="Clear search"
-                            >
-                                <X size={14} />
-                            </button>
-                        )}
-
-                        {/* Desktop sort dropdown inside search bar */}
-                        <div className="hidden md:block relative shrink-0">
-                            <button
-                                onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
-                                className={clsx(
-                                    "p-1 rounded hover:bg-gray-600 text-gray-400 hover:text-white transition-colors",
-                                    isSortDropdownOpen && "bg-gray-600 text-white"
-                                )}
-                                title="Sort Options"
-                            >
-                                <ArrowUpDown size={16} />
-                            </button>
-                            <AnimatePresence>
+                    {/* Tokenised search: chips + autocomplete. Each token commits deliberately
+                        (Enter/space/pick), so free typing never thrashes the grid mid-scan. */}
+                    <SearchBar
+                        trailing={
+                            <div className="hidden md:block relative">
+                                <button
+                                    onClick={() => setIsSortDropdownOpen(!isSortDropdownOpen)}
+                                    className={clsx(
+                                        "p-1 rounded hover:bg-gray-600 text-gray-400 hover:text-white transition-colors",
+                                        isSortDropdownOpen && "bg-gray-600 text-white"
+                                    )}
+                                    title="Sort Options"
+                                >
+                                    <ArrowUpDown size={16} />
+                                </button>
+                                <AnimatePresence>
+                                    {isSortDropdownOpen && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                            className="absolute right-0 top-full mt-2 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden"
+                                        >
+                                            <div className="flex flex-col py-1">
+                                                {sortOptions.map(opt => (
+                                                    <button
+                                                        key={opt.id}
+                                                        onClick={() => {
+                                                            handleSortChange(opt.id);
+                                                            setIsSortDropdownOpen(false);
+                                                        }}
+                                                        className={clsx(
+                                                            "flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-700 transition-colors",
+                                                            sortMode === opt.id ? "text-blue-400 bg-blue-400/10" : "text-gray-300"
+                                                        )}
+                                                    >
+                                                        {opt.icon}
+                                                        <span>{opt.label}</span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
                                 {isSortDropdownOpen && (
-                                    <motion.div
-                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                        className="absolute right-0 top-full mt-2 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden"
-                                    >
-                                        <div className="flex flex-col py-1">
-                                            {sortOptions.map(opt => (
-                                                <button
-                                                    key={opt.id}
-                                                    onClick={() => {
-                                                        handleSortChange(opt.id);
-                                                        setIsSortDropdownOpen(false);
-                                                    }}
-                                                    className={clsx(
-                                                        "flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-700 transition-colors",
-                                                        sortMode === opt.id ? "text-blue-400 bg-blue-400/10" : "text-gray-300"
-                                                    )}
-                                                >
-                                                    {opt.icon}
-                                                    <span>{opt.label}</span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </motion.div>
+                                    <div
+                                        className="fixed inset-0 z-40 bg-transparent"
+                                        onClick={() => setIsSortDropdownOpen(false)}
+                                    />
                                 )}
-                            </AnimatePresence>
-                            {/* Backdrop */}
-                            {isSortDropdownOpen && (
-                                <div
-                                    className="fixed inset-0 z-40 bg-transparent"
-                                    onClick={() => setIsSortDropdownOpen(false)}
-                                />
-                            )}
-                        </div>
-                    </form>
+                            </div>
+                        }
+                    />
                 </div>
 
                 {/* Right Group: Actions */}
