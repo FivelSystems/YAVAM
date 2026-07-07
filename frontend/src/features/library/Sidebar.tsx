@@ -8,6 +8,7 @@ import { useFilterContext } from '../../context/FilterContext';
 import { useLibraryContext } from '../../context/LibraryContext';
 import { useActionContext } from '../../context/ActionContext';
 import { STATUS_FILTERS } from '../../constants';
+import { hasToken, hasField, toggleToken, clearField } from '../../utils/search';
 
 
 
@@ -63,11 +64,14 @@ type SidebarProps = {
 const Sidebar = ({ onOpenSettings }: SidebarProps) => {
     // Context Consumption
     const { packages, creatorStatus, typeStatus } = usePackageContext();
-    const {
-        currentFilter, setCurrentFilter,
-        selectedCreator, setSelectedCreator,
-        selectedType, setSelectedType
-    } = useFilterContext();
+    const { searchQuery, setSearchQuery } = useFilterContext();
+
+    // The sidebar composes the same tokenised query as the searchbar: a facet is
+    // "active" when its token is present, and clicking it toggles that token.
+    const statusActive = (value: string) => hasToken(searchQuery, 'status', value);
+    const noStatus = !hasField(searchQuery, 'status');
+    const toggleStatus = (value: string) => setSearchQuery(toggleToken(searchQuery, 'status', value));
+    const showAll = () => setSearchQuery(clearField(searchQuery, 'status'));
     const {
         libraries, activeLibIndex, selectLibrary,
         removeLibrary, reorderLibraries, browseAndAdd
@@ -277,55 +281,55 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
                     {!collapsed.status && (
                         <div className="space-y-1 animation-fade-in">
                             {/* All */}
-                            <button onClick={() => setCurrentFilter(STATUS_FILTERS.ALL)} onContextMenu={(e) => handleContextMenu(e, 'status', STATUS_FILTERS.ALL)} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", currentFilter === STATUS_FILTERS.ALL ? "bg-blue-600/10 text-blue-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
+                            <button onClick={showAll} onContextMenu={(e) => handleContextMenu(e, 'status', STATUS_FILTERS.ALL)} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", noStatus ? "bg-blue-600/10 text-blue-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
                                 <div className="flex items-center gap-3"><Layers size={18} /> All Packages</div>
-                                <span className={clsx("text-xs px-2 py-0.5 rounded-full font-medium transition-colors", currentFilter === STATUS_FILTERS.ALL ? "bg-blue-500/20 text-blue-300" : "bg-gray-800 text-gray-400 group-hover:bg-gray-700 group-hover:text-gray-300")}>{statusCounts.all}</span>
+                                <span className={clsx("text-xs px-2 py-0.5 rounded-full font-medium transition-colors", noStatus ? "bg-blue-500/20 text-blue-300" : "bg-gray-800 text-gray-400 group-hover:bg-gray-700 group-hover:text-gray-300")}>{statusCounts.all}</span>
                             </button>
                             {/* Enabled */}
                             {statusCounts.enabled > 0 && (
-                                <button onClick={() => setCurrentFilter(currentFilter === 'enabled' ? 'all' : 'enabled')} onContextMenu={(e) => handleContextMenu(e, 'status', 'enabled')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", currentFilter === 'enabled' ? "bg-green-500/10 text-green-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
+                                <button onClick={() => toggleStatus('enabled')} onContextMenu={(e) => handleContextMenu(e, 'status', 'enabled')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", statusActive('enabled') ? "bg-green-500/10 text-green-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
                                     <div className="flex items-center gap-3"><CheckCircle2 size={18} /> Enabled</div>
                                     <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-green-500/20 text-green-400 border border-green-500/10 group-hover:bg-green-500/30 transition-colors">{statusCounts.enabled}</span>
                                 </button>
                             )}
                             {/* Disabled */}
                             {statusCounts.disabled > 0 && (
-                                <button onClick={() => setCurrentFilter(currentFilter === 'disabled' ? 'all' : 'disabled')} onContextMenu={(e) => handleContextMenu(e, 'status', 'disabled')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", currentFilter === 'disabled' ? "bg-gray-600/20 text-gray-200" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
+                                <button onClick={() => toggleStatus('disabled')} onContextMenu={(e) => handleContextMenu(e, 'status', 'disabled')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", statusActive('disabled') ? "bg-gray-600/20 text-gray-200" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
                                     <div className="flex items-center gap-3"><CircleOff size={18} /> Disabled</div>
                                     <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-700 text-gray-300 border border-gray-600 group-hover:bg-gray-600 transition-colors">{statusCounts.disabled}</span>
                                 </button>
                             )}
                             {/* Missing Dependencies */}
                             {statusCounts.missingDeps > 0 && (
-                                <button onClick={() => setCurrentFilter(currentFilter === 'missing-deps' ? 'all' : 'missing-deps')} onContextMenu={(e) => handleContextMenu(e, 'status', 'missing-deps')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", currentFilter === 'missing-deps' ? "bg-red-500/10 text-red-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
+                                <button onClick={() => toggleStatus('missing-deps')} onContextMenu={(e) => handleContextMenu(e, 'status', 'missing-deps')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", statusActive('missing-deps') ? "bg-red-500/10 text-red-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
                                     <div className="flex items-center gap-3"><AlertCircle size={18} /> Missing Deps</div>
                                     <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-500/20 text-red-400 border border-red-500/10 group-hover:bg-red-500/30 transition-colors">{statusCounts.missingDeps}</span>
                                 </button>
                             )}
                             {/* Version Conflicts (Obsolete) */}
                             {statusCounts.versionConflicts > 0 && (
-                                <button onClick={() => setCurrentFilter(currentFilter === 'version-conflicts' ? 'all' : 'version-conflicts')} onContextMenu={(e) => handleContextMenu(e, 'status', 'version-conflicts')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", currentFilter === 'version-conflicts' ? "bg-yellow-500/10 text-yellow-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
+                                <button onClick={() => toggleStatus('version-conflicts')} onContextMenu={(e) => handleContextMenu(e, 'status', 'version-conflicts')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", statusActive('version-conflicts') ? "bg-yellow-500/10 text-yellow-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
                                     <div className="flex items-center gap-3"><AlertTriangle size={18} /> Conflicts</div>
                                     <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-yellow-500/20 text-yellow-400 border border-yellow-500/10 group-hover:bg-yellow-500/30 transition-colors">{statusCounts.versionConflicts}</span>
                                 </button>
                             )}
                             {/* Exact Duplicates */}
                             {statusCounts.exactDuplicates > 0 && (
-                                <button onClick={() => setCurrentFilter(currentFilter === 'exact-duplicates' ? 'all' : 'exact-duplicates')} onContextMenu={(e) => handleContextMenu(e, 'status', 'exact-duplicates')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", currentFilter === 'exact-duplicates' ? "bg-purple-500/10 text-purple-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
+                                <button onClick={() => toggleStatus('exact-duplicates')} onContextMenu={(e) => handleContextMenu(e, 'status', 'exact-duplicates')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", statusActive('exact-duplicates') ? "bg-purple-500/10 text-purple-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
                                     <div className="flex items-center gap-3"><Copy size={18} /> Duplicates</div>
                                     <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-purple-500/20 text-purple-400 border border-purple-500/10 group-hover:bg-purple-500/30 transition-colors">{statusCounts.exactDuplicates}</span>
                                 </button>
                             )}
                             {/* Corrupt */}
                             {statusCounts.corrupt > 0 && (
-                                <button onClick={() => setCurrentFilter(currentFilter === 'corrupt' ? 'all' : 'corrupt')} onContextMenu={(e) => handleContextMenu(e, 'status', 'corrupt')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", currentFilter === 'corrupt' ? "bg-red-600/20 text-red-500" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
+                                <button onClick={() => toggleStatus('corrupt')} onContextMenu={(e) => handleContextMenu(e, 'status', 'corrupt')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", statusActive('corrupt') ? "bg-red-600/20 text-red-500" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
                                     <div className="flex items-center gap-3"><AlertTriangle size={18} /> Corrupt</div>
                                     <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-600/20 text-red-500 border border-red-600/10 group-hover:bg-red-600/30 transition-colors">{statusCounts.corrupt}</span>
                                 </button>
                             )}
                             {/* Unreferenced (Orphans) */}
                             {statusCounts.orphans > 0 && (
-                                <button onClick={() => setCurrentFilter(currentFilter === 'unreferenced' ? 'all' : 'unreferenced')} onContextMenu={(e) => handleContextMenu(e, 'status', 'unreferenced')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", currentFilter === 'unreferenced' ? "bg-violet-600/20 text-violet-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
+                                <button onClick={() => toggleStatus('unreferenced')} onContextMenu={(e) => handleContextMenu(e, 'status', 'unreferenced')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", statusActive('unreferenced') ? "bg-violet-600/20 text-violet-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
                                     <div className="flex items-center gap-3"><Unlink size={18} /> Unreferenced</div>
                                     <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-violet-600/20 text-violet-400 border border-violet-600/10 group-hover:bg-violet-600/30 transition-colors">{statusCounts.orphans}</span>
                                 </button>
@@ -384,12 +388,12 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
                                 .map(([name, count]) => (
                                     <button
                                         key={name}
-                                        onClick={() => setSelectedCreator(selectedCreator === name ? null : name)}
+                                        onClick={() => setSearchQuery(toggleToken(searchQuery, 'creator', name))}
                                         onContextMenu={(e) => handleContextMenu(e, 'creator', name)}
-                                        className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", selectedCreator === name ? "bg-blue-600/10 text-blue-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
+                                        className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", hasToken(searchQuery, 'creator', name) ? "bg-blue-600/10 text-blue-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
                                     >
                                         <span className="truncate text-left flex-1">{name}</span>
-                                        <span className={clsx("text-xs px-1.5 py-0.5 rounded-full transition-colors border border-transparent", getStatusClasses(creatorStatus[name], selectedCreator === name))}>{count}</span>
+                                        <span className={clsx("text-xs px-1.5 py-0.5 rounded-full transition-colors border border-transparent", getStatusClasses(creatorStatus[name], hasToken(searchQuery, 'creator', name)))}>{count}</span>
                                     </button>
                                 ))}
                         </div>
@@ -407,12 +411,12 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
                             {types.map(([name, count]) => (
                                 <button
                                     key={name}
-                                    onClick={() => setSelectedType(selectedType === name ? null : name)}
+                                    onClick={() => setSearchQuery(toggleToken(searchQuery, 'type', name))}
                                     onContextMenu={(e) => handleContextMenu(e, 'type', name)}
-                                    className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", selectedType === name ? "bg-blue-600/10 text-blue-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
+                                    className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", hasToken(searchQuery, 'type', name) ? "bg-blue-600/10 text-blue-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
                                 >
                                     <span className="truncate text-left flex-1">{name}</span>
-                                    <span className={clsx("text-xs px-1.5 py-0.5 rounded-full transition-colors border border-transparent", getStatusClasses(typeStatus[name], selectedType === name))}>{count}</span>
+                                    <span className={clsx("text-xs px-1.5 py-0.5 rounded-full transition-colors border border-transparent", getStatusClasses(typeStatus[name], hasToken(searchQuery, 'type', name)))}>{count}</span>
                                 </button>
                             ))}
                         </div>

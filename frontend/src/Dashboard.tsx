@@ -35,7 +35,6 @@ const DashboardContent = () => {
         viewMode, setViewMode,
         gridSize, setGridSize,
         isSidebarOpen, setIsSidebarOpen,
-        isTagsVisible, setIsTagsVisible,
         minimizeOnClose, setMinimizeOnClose
     } = useLayoutSettings();
 
@@ -123,7 +122,7 @@ const DashboardContent = () => {
     } = useLibraryContext();
     const {
         itemsPerPage, setItemsPerPage, sortMode,
-        filteredPkgs, setSearchQuery, setTagSearchQuery, setSelectedTags, setSelectedType, setSelectedCreator, setCurrentPage, currentPage, setCurrentFilter
+        filteredPkgs, setSearchQuery, setCurrentPage, currentPage
     } = useFilterContext();
     const {
         clearSelection, contextMenu, setContextMenu, selectedIds, selectedPackage, setSelectedPackage, setIsDetailsPanelOpen
@@ -176,14 +175,9 @@ const DashboardContent = () => {
         }
 
         if (!isVisible) {
-            // 2. if not visible, CLEAR ALL FILTERS (Reset to "All Packages" view)
-            setIsTagsVisible(false);
+            // 2. if not visible, CLEAR ALL FILTERS (Reset to "All Packages" view).
+            // The tokenised query is the single filter source, so one reset suffices.
             setSearchQuery("");
-            setTagSearchQuery("");
-            setSelectedTags([]);
-            setSelectedType(null);
-            setSelectedCreator(null);
-            setCurrentFilter('all');
 
             // 3. Find where the package WOULD be in the full list (sorted)
             // We replicate the sort logic here to find the index immediately
@@ -288,8 +282,6 @@ const DashboardContent = () => {
                         setIsSidebarOpen={setIsSidebarOpen}
                         viewMode={viewMode}
                         setViewMode={setViewMode}
-                        isTagsVisible={isTagsVisible}
-                        setIsTagsVisible={setIsTagsVisible}
                     />
 
                     <PackageLayout

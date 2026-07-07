@@ -8,16 +8,6 @@ interface FilterContextType {
     searchQuery: string;
     setSearchQuery: (s: string) => void;
     inputRef: React.RefObject<HTMLInputElement>;
-    tagSearchQuery: string;
-    setTagSearchQuery: (s: string) => void;
-    currentFilter: string;
-    setCurrentFilter: (s: string) => void;
-    selectedCreator: string | null;
-    setSelectedCreator: (s: string | null) => void;
-    selectedType: string | null;
-    setSelectedType: (s: string | null) => void;
-    selectedTags: string[];
-    setSelectedTags: React.Dispatch<React.SetStateAction<string[]>>;
     sortMode: string;
     setSortMode: (s: string) => void;
     filteredPkgs: VarPackage[]; // The RESULT of filtering
@@ -25,8 +15,6 @@ interface FilterContextType {
     handleSortChange: (m: string) => void;
     isSortDropdownOpen: boolean;
     setIsSortDropdownOpen: (v: boolean) => void;
-    isTagSearchOpen: boolean;
-    setIsTagSearchOpen: (v: boolean) => void;
     currentPage: number;
     setCurrentPage: (p: number) => void;
     itemsPerPage: number;
@@ -52,7 +40,7 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Reset page when filters change
     React.useEffect(() => {
         setCurrentPage(1);
-    }, [filterLogic.currentFilter, filterLogic.searchQuery, filterLogic.selectedTags, filterLogic.selectedCreator, filterLogic.selectedType]);
+    }, [filterLogic.searchQuery]);
 
     // Notify the backend Hard Pass about the current page so it gets priority.
     const { prioritizePackages } = usePackageContext();
