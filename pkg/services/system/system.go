@@ -1,9 +1,7 @@
 package system
 
 import (
-	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"yavam/pkg/fs"
 	"yavam/pkg/models"
@@ -60,20 +58,7 @@ func (s *defaultSystemService) DeleteToTrash(path string) error {
 }
 
 func (s *defaultSystemService) CopyFilesToClipboard(paths []string) error {
-	cmd := exec.Command("powershell", "-NoProfile", "-Command", "$paths = @($input); Set-Clipboard -LiteralPath $paths")
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return err
-	}
-	
-	go func() {
-		defer stdin.Close()
-		for _, p := range paths {
-			fmt.Fprintln(stdin, p)
-		}
-	}()
-
-	return cmd.Run()
+	return setClipboardFiles(paths)
 }
 
 func (s *defaultSystemService) CutFileToClipboard(path string) error {
