@@ -25,10 +25,14 @@ export const SEARCHABLE_FIELDS: { field: TokenField; hint: string }[] = [
     { field: 'type', hint: 'scene, look, clothing…' },
     { field: 'tag', hint: 'filter by tag' },
     { field: 'status', hint: 'enabled, disabled, missing, corrupt…' },
+    { field: 'rating', hint: '1–5 stars, or >=4' },
+    { field: 'favorite', hint: 'true / false' },
     { field: 'size', hint: '>100mb, 10mb..1gb' },
 ];
 
-const STATUS_VALUES = ['enabled', 'disabled', 'missing', 'corrupt', 'duplicate', 'orphan'];
+const STATUS_VALUES = ['enabled', 'disabled', 'missing', 'corrupt', 'duplicate', 'removable', 'standalone'];
+const RATING_VALUES = ['1', '2', '3', '4', '5', '>=4', '>=3', '<=2'];
+const FAVORITE_VALUES = ['true', 'false'];
 const SIZE_TEMPLATES = ['>100mb', '<50mb', '10mb..100mb', '>1gb'];
 
 const quoteIfNeeded = (value: string): string => (/\s/.test(value) ? `"${value}"` : value);
@@ -46,6 +50,8 @@ const valuePool = (field: TokenField, vocab: SearchVocabulary): string[] | null 
         case 'type': return vocab.types;
         case 'tag': return vocab.tags;
         case 'status': return STATUS_VALUES;
+        case 'rating': return RATING_VALUES;
+        case 'favorite': return FAVORITE_VALUES;
         case 'size': return SIZE_TEMPLATES;
         default: return null;
     }

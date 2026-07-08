@@ -130,7 +130,8 @@ const DashboardContent = () => {
 
     const {
         handleBulkToggle, handleOpenFolder, setInstallModal, handleCopyPath,
-        handleCopyFiles, handleCutFile, handleDeleteClick, handleInstantMerge, handleSingleResolve
+        handleCopyFiles, handleCutFile, handleDeleteClick, handleInstantMerge, handleSingleResolve,
+        setPackageRating, setPackageFavorite
     } = useActionContext();
 
     // Drag & Drop (Upload)
@@ -333,6 +334,8 @@ const DashboardContent = () => {
                     onMerge={(p) => handleInstantMerge(p, false)}
                     onMergeInPlace={(p) => handleInstantMerge(p, true)}
                     onResolve={handleSingleResolve}
+                    onSetRating={setPackageRating}
+                    onSetFavorite={setPackageFavorite}
                 />
             )}
 

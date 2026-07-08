@@ -389,6 +389,50 @@ func TestReplaceDependencies(t *testing.T) {
 	}
 }
 
+// TestUserMetadata covers rating/favourite upserts and the family-keyed,
+// case-insensitive read used to hydrate packages.
+func TestUserMetadata(t *testing.T) {
+	db := tempDB(t)
+
+	if err := db.SetRating("Creator.Pkg", 4); err != nil {
+		t.Fatalf("SetRating: %v", err)
+	}
+	if err := db.SetFavorite("Creator.Pkg", true); err != nil {
+		t.Fatalf("SetFavorite: %v", err)
+	}
+
+	meta, err := db.GetAllUserMetadata()
+	if err != nil {
+		t.Fatalf("GetAllUserMetadata: %v", err)
+	}
+	// Keyed lower-cased so the read joins regardless of family casing.
+	m, ok := meta["creator.pkg"]
+	if !ok {
+		t.Fatalf("expected metadata for creator.pkg, got %v", meta)
+	}
+	if m.Rating != 4 || !m.IsFavorite {
+		t.Fatalf("expected rating 4 + favourite, got rating=%d fav=%v", m.Rating, m.IsFavorite)
+	}
+
+	// Updating one axis leaves the other intact (upsert, not replace).
+	if err := db.SetRating("creator.pkg", 2); err != nil {
+		t.Fatalf("SetRating update: %v", err)
+	}
+	meta, _ = db.GetAllUserMetadata()
+	if m := meta["creator.pkg"]; m.Rating != 2 || !m.IsFavorite {
+		t.Fatalf("expected rating 2 + favourite preserved, got rating=%d fav=%v", m.Rating, m.IsFavorite)
+	}
+
+	// Out-of-range ratings are clamped to the 0–5 CHECK constraint.
+	if err := db.SetRating("creator.pkg", 99); err != nil {
+		t.Fatalf("SetRating clamp: %v", err)
+	}
+	meta, _ = db.GetAllUserMetadata()
+	if got := meta["creator.pkg"].Rating; got != 5 {
+		t.Fatalf("expected clamped rating 5, got %d", got)
+	}
+}
+
 // TestGetLibrariesWithNullPassword guards a NULL-scan bug: libraries are inserted
 // without a password_hash (NULL), and GetLibraries must still read them.
 func TestGetLibrariesWithNullPassword(t *testing.T) {

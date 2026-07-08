@@ -195,6 +195,13 @@ func (s *defaultLibraryService) GetCachedPackages(libraryPath string) ([]models.
 		return nil, err
 	}
 
+	// User ratings/favourites are version-agnostic (keyed by family), so they are
+	// joined onto every physical copy of a family. Loaded once, matched lower-cased.
+	userMeta, err := s.db.GetAllUserMetadata()
+	if err != nil {
+		return nil, err
+	}
+
 	pkgs := make([]models.VarPackage, 0, len(rows))
 	for _, r := range rows {
 		p := rowToPackage(r, libraryPath)
@@ -204,6 +211,10 @@ func (s *defaultLibraryService) GetCachedPackages(libraryPath string) ([]models.
 				m[d] = nil
 			}
 			p.Meta.Dependencies = m
+		}
+		if um, ok := userMeta[strings.ToLower(r.Family)]; ok {
+			p.Rating = um.Rating
+			p.IsFavorite = um.IsFavorite
 		}
 		pkgs = append(pkgs, p)
 	}
@@ -218,7 +229,7 @@ func (s *defaultLibraryService) GetCachedPackages(libraryPath string) ([]models.
 			pkgs[i].MissingDeps = a.MissingDeps
 			pkgs[i].IsDuplicate = a.IsDuplicate
 			pkgs[i].IsExactDuplicate = a.IsExactDuplicate
-			pkgs[i].IsOrphan = a.IsOrphan
+			pkgs[i].IsRemovable = a.IsRemovable
 			pkgs[i].ReferencedBy = a.ReferencedBy
 			pkgs[i].ObsoletedBy = a.ObsoletedBy
 		}

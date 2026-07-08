@@ -219,8 +219,9 @@ export namespace models {
 	    missingDeps: string[];
 	    isDuplicate: boolean;
 	    isFavorite: boolean;
+	    rating: number;
 	    isHidden: boolean;
-	    isOrphan: boolean;
+	    isRemovable: boolean;
 	    isExactDuplicate: boolean;
 	    referencedBy?: string[];
 	    obsoletedBy?: string;
@@ -248,8 +249,9 @@ export namespace models {
 	        this.missingDeps = source["missingDeps"];
 	        this.isDuplicate = source["isDuplicate"];
 	        this.isFavorite = source["isFavorite"];
+	        this.rating = source["rating"];
 	        this.isHidden = source["isHidden"];
-	        this.isOrphan = source["isOrphan"];
+	        this.isRemovable = source["isRemovable"];
 	        this.isExactDuplicate = source["isExactDuplicate"];
 	        this.referencedBy = source["referencedBy"];
 	        this.obsoletedBy = source["obsoletedBy"];
