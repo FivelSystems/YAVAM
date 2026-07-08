@@ -98,6 +98,34 @@ describe('combining semantics', () => {
     });
 });
 
+describe('rating and favourite matching', () => {
+    const unrated = pkg({ meta: { creator: 'a', packageName: 'U', version: '1' } });
+    const threeStar = pkg({ meta: { creator: 'a', packageName: 'T', version: '1' }, rating: 3 });
+    const fiveStar = pkg({ meta: { creator: 'a', packageName: 'F', version: '1' }, rating: 5 });
+    const fav = pkg({ meta: { creator: 'a', packageName: 'V', version: '1' }, isFavorite: true });
+    const all = [unrated, threeStar, fiveStar, fav];
+
+    it('matches an exact rating', () => {
+        expect(run('rating:3', all)).toEqual([threeStar]);
+    });
+
+    it('matches a rating lower bound', () => {
+        expect(run('rating:>=3', all)).toEqual([threeStar, fiveStar]);
+    });
+
+    it('treats an unrated package as rating 0', () => {
+        expect(run('rating:0', all)).toEqual([unrated, fav]);
+    });
+
+    it('keeps only favourites with favorite:true', () => {
+        expect(run('favorite:true', all)).toEqual([fav]);
+    });
+
+    it('excludes favourites with favorite:false', () => {
+        expect(run('favorite:false', all)).toEqual([unrated, threeStar, fiveStar]);
+    });
+});
+
 describe('status token', () => {
     const enabled = pkg({ isEnabled: true });
     const disabled = pkg({ isEnabled: false });
@@ -112,6 +140,20 @@ describe('status token', () => {
     it('filters missing deps and corrupt', () => {
         expect(run('status:missing', [enabled, missing])).toEqual([missing]);
         expect(run('status:corrupt', [enabled, corrupt])).toEqual([corrupt]);
+    });
+
+    it('filters removable regardless of enabled state (enable-agnostic)', () => {
+        const removableEnabled = pkg({ isEnabled: true, isRemovable: true });
+        const removableDisabled = pkg({ isEnabled: false, isRemovable: true });
+        const referenced = pkg({ isRemovable: false });
+        expect(run('status:removable', [removableEnabled, removableDisabled, referenced]))
+            .toEqual([removableEnabled, removableDisabled]);
+    });
+
+    it('filters standalone by absence of declared dependencies', () => {
+        const standalone = pkg({ meta: { creator: 'C', packageName: 'P', version: '1' } });
+        const withDeps = pkg({ meta: { creator: 'C', packageName: 'Q', version: '1', dependencies: { 'A.B.1': {} } } });
+        expect(run('status:standalone', [standalone, withDeps])).toEqual([standalone]);
     });
 });
 

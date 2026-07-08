@@ -53,6 +53,13 @@ type LibraryService interface {
 	// each, so the details panel can label and jump to cross-library packages.
 	LocateDependencies(ids []string) map[string]models.DependencyLocation
 
+	// SetRating stores a 0–5 star rating (0 = unrated) for a package family
+	// ("Creator.Name"), version-agnostic. Persisted in user_metadata.
+	SetRating(family string, rating int) error
+
+	// SetFavorite marks/unmarks a package family ("Creator.Name") as a favourite.
+	SetFavorite(family string, favorite bool) error
+
 	// ── Write Operations ──────────────────────────────────────────────────────
 
 	Install(files []string, targetLib string, overwrite bool, onProgress func(int, int, string)) ([]string, error)

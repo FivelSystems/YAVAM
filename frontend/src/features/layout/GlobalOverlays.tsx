@@ -36,6 +36,8 @@ interface GlobalOverlaysProps {
     onMerge: (pkg: VarPackage) => void;
     onMergeInPlace: (pkg: VarPackage) => void;
     onResolve: (pkg: VarPackage) => void;
+    onSetRating: (pkg: VarPackage, rating: number) => void;
+    onSetFavorite: (pkg: VarPackage, favorite: boolean) => void;
 }
 
 export const GlobalOverlays: React.FC<GlobalOverlaysProps> = ({
@@ -44,7 +46,8 @@ export const GlobalOverlays: React.FC<GlobalOverlaysProps> = ({
     contextMenu, setContextMenu, selectedIds,
     onToggle, onOpenFolder, onInstall,
     onCopyPath, onCopyFiles, onCutFile, onDelete,
-    onMerge, onMergeInPlace, onResolve
+    onMerge, onMergeInPlace, onResolve,
+    onSetRating, onSetFavorite
 }) => {
     return (
         <>
@@ -68,6 +71,8 @@ export const GlobalOverlays: React.FC<GlobalOverlaysProps> = ({
                     onMerge={onMerge}
                     onMergeInPlace={onMergeInPlace}
                     onResolve={onResolve}
+                    onSetRating={onSetRating}
+                    onSetFavorite={onSetFavorite}
                 />
             )}
 

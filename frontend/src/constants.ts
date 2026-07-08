@@ -36,5 +36,6 @@ export const STATUS_FILTERS = {
     VERSION_CONFLICTS: 'version-conflicts',
     EXACT_DUPLICATES: 'exact-duplicates',
     CORRUPT: 'corrupt',
-    UNREFERENCED: 'unreferenced'
+    REMOVABLE: 'removable',
+    STANDALONE: 'standalone'
 } as const;

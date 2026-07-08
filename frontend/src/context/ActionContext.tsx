@@ -23,6 +23,8 @@ interface ActionContextType {
     handleCopyPath: (pkg: any) => Promise<void>;
     handleCopyFiles: (pkgs: any[]) => Promise<void>;
     handleCutFile: (pkg: any) => Promise<void>;
+    setPackageRating: (pkg: any, rating: number) => Promise<void>;
+    setPackageFavorite: (pkg: any, favorite: boolean) => Promise<void>;
 
     // Modal State
     installModal: { open: boolean; pkgs: any[] };

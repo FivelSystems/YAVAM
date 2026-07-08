@@ -14,9 +14,9 @@ export type TokenOp = 'require' | 'exclude';
  * Every field a token can address. `text` is a bareword (no `field:` prefix)
  * matched as a substring against name/creator/package name.
  *
- * `rating`, `favorite`, and `license` are recognised by the grammar but have no
- * backing data until the Ratings/Favourites capability lands; the matcher treats
- * them as inert (see design/search-syntax.md).
+ * `rating` and `favorite` are backed by the user_metadata store (joined onto each
+ * package by family). `license` is recognised by the grammar but has no backing
+ * data yet; the matcher treats it as inert (see design/search-syntax.md).
  */
 export type TokenField =
     | 'text'
@@ -30,7 +30,7 @@ export type TokenField =
     | 'license';
 
 /** Fields whose tokens cannot be evaluated yet (no data on VarPackage). */
-export const INERT_FIELDS: readonly TokenField[] = ['rating', 'favorite', 'license'];
+export const INERT_FIELDS: readonly TokenField[] = ['license'];
 
 export interface SearchToken {
     field: TokenField;

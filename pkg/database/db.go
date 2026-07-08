@@ -415,6 +415,62 @@ func (db *DB) GetPackagesByLibraryPath(path string) ([]PackageRow, error) {
 	return out, rows.Err()
 }
 
+// ── User metadata repository ────────────────────────────────────────────────────
+
+// GetAllUserMetadata returns every user_metadata row keyed by lower-cased family
+// ("creator.name"), so ratings/favourites can be joined onto packages by family
+// in a single pass on the read path. Family is stored and matched lower-cased so
+// the join never misses on casing differences.
+func (db *DB) GetAllUserMetadata() (map[string]UserMetadataRow, error) {
+	rows, err := db.conn.Query(`
+		SELECT family, rating, is_favorite, COALESCE(notes, ''), COALESCE(custom_tags, ''), updated_at
+		FROM user_metadata
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make(map[string]UserMetadataRow)
+	for rows.Next() {
+		var m UserMetadataRow
+		if err := rows.Scan(&m.Family, &m.Rating, &m.IsFavorite, &m.Notes, &m.CustomTags, &m.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out[strings.ToLower(m.Family)] = m
+	}
+	return out, rows.Err()
+}
+
+// SetRating stores a 0–5 star rating for a package family (Creator.Name),
+// version-agnostic. Values outside 0–5 are clamped; 0 means "unrated". The row
+// is created on first write and updated in place thereafter.
+func (db *DB) SetRating(family string, rating int) error {
+	if rating < 0 {
+		rating = 0
+	}
+	if rating > 5 {
+		rating = 5
+	}
+	_, err := db.conn.Exec(`
+		INSERT INTO user_metadata (family, rating, is_favorite, updated_at)
+		VALUES (?, ?, 0, ?)
+		ON CONFLICT(family) DO UPDATE SET rating = excluded.rating, updated_at = excluded.updated_at
+	`, strings.ToLower(family), rating, Now())
+	return err
+}
+
+// SetFavorite marks/unmarks a package family (Creator.Name) as a favourite,
+// version-agnostic. The row is created on first write and updated in place after.
+func (db *DB) SetFavorite(family string, favorite bool) error {
+	_, err := db.conn.Exec(`
+		INSERT INTO user_metadata (family, rating, is_favorite, updated_at)
+		VALUES (?, 0, ?, ?)
+		ON CONFLICT(family) DO UPDATE SET is_favorite = excluded.is_favorite, updated_at = excluded.updated_at
+	`, strings.ToLower(family), favorite, Now())
+	return err
+}
+
 // ── Dependency repository ───────────────────────────────────────────────────────
 
 // ReplaceDependencies refreshes the dependency graph for one scan: it clears

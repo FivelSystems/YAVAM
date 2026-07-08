@@ -17,13 +17,13 @@ token              → AND (must match)
 ## Token types
 
 ```
-status:enabled     status:disabled  status:missing  status:corrupt  status:standalone
-status:hidden      status:visible
+status:enabled     status:disabled  status:missing  status:corrupt
+status:standalone  status:removable status:hidden    status:visible
 creator:acidbubbles
 type:scene
 tag:dress
 license:cc-by      license:pc       license:pc-ea
-rating:>=4
+rating:>=4         rating:<=2       rating:3
 favorite:true
 size:>500mb        size:10mb..100mb
 ```
@@ -31,8 +31,15 @@ size:>500mb        size:10mb..100mb
 - `tag:` is available through search only; there is no dedicated tag sidebar
   section.
 - `size:` supports a single bound (`size:>100mb`) or a range (`size:10mb..500mb`).
-- `status:standalone` narrows to standalone packages even when the dependency
-  visibility mode is `all`.
+- `rating:` supports a single bound (`rating:>=4`, `rating:<3`) or an exact
+  value (`rating:5`). The sidebar's star control emits the exact form
+  (`rating:N`) — with no way to also set an upper bound, a minimum could not
+  express "only the 3-star ones". Ratings are version-agnostic (keyed by family)
+  and stored in `user_metadata`; an unrated package counts as `rating:0`.
+- The two dependency-relationship axes are orthogonal and both backed today:
+  `status:standalone` = the package declares **no dependencies**;
+  `status:removable` = **no package depends on it**, so removing it breaks
+  nothing (enable-agnostic — a disabled package still counts as existing).
 
 ## Examples
 
@@ -110,10 +117,13 @@ which itself waits on the scan/validation rework that switching libraries needs.
 
 ## Not-yet-backed tokens
 
-`rating:`, `favorite:`, and `license:` are parsed and shown as chips but do not
-filter until the ratings/favourites data layer exists; they are inert no-ops
-until then. `status:standalone`, `status:hidden`, and `status:visible` likewise
-wait on the dependency-visibility mode.
+`license:` is parsed and shown as a chip but does not filter until license data
+is surfaced; it is an inert no-op until then. `status:hidden` and
+`status:visible` likewise wait on the dependency-visibility mode.
+`status:standalone`, `status:removable`, `rating:`, and `favorite:` are backed
+and filter live. Ratings/favourites are joined onto each package from the
+`user_metadata` store (keyed by family) on the cache-first read path; they are
+written on desktop through the package right-click menu and the sidebar controls.
 
 ## Related: dependency-visibility mode
 

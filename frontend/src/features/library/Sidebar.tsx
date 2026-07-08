@@ -1,15 +1,16 @@
-import { ChevronDown, ChevronRight, Layers, Package, Settings, CheckCircle2, CircleOff, Power, Sparkles, Trash2, GripVertical, Download, AlertCircle, AlertTriangle, Copy, Unlink, Search } from 'lucide-react';
+import { ChevronDown, ChevronRight, Layers, Package, Settings, CheckCircle2, Trash2, GripVertical, Download, Sparkles, Power, Star, Heart, Boxes, Users, Tags, X } from 'lucide-react';
 import { VarPackage } from '../../types';
 import clsx from 'clsx';
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Reorder, useDragControls } from "framer-motion";
 import { usePackageContext } from '../../context/PackageContext';
 import { useFilterContext } from '../../context/FilterContext';
 import { useLibraryContext } from '../../context/LibraryContext';
 import { useActionContext } from '../../context/ActionContext';
 import { STATUS_FILTERS } from '../../constants';
-import { hasToken, hasField, toggleToken, clearField } from '../../utils/search';
-
+import { hasToken, toggleToken, getRating, setRating } from '../../utils/search';
+import { FilterDropdown, FilterOption } from '../../components/ui/FilterDropdown';
+import { Toggle } from '../../components/ui/Toggle';
 
 
 // Simple Library Item Component
@@ -47,13 +48,32 @@ const SidebarLibraryItem = ({ lib, isActive, count, onSelect, onRemove }: { lib:
     );
 };
 
-
-const getStatusClasses = (status: 'normal' | 'warning' | 'error' | undefined, isSelected: boolean) => {
-    if (status === 'warning') return "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30";
-    if (status === 'error') return "bg-red-500/20 text-red-400 border border-red-500/30";
-    return isSelected
-        ? "bg-blue-600/20 text-blue-300" // Normal Selected
-        : "bg-gray-700 text-gray-400 group-hover:bg-gray-600"; // Normal Unselected
+/**
+ * An exact-rating control: clicking star N filters to packages rated exactly N;
+ * clicking the active star again clears it. Emits `rating:N` into the shared
+ * query, matched against each package's stored rating (user_metadata).
+ */
+const RatingStars = ({ value, onChange }: { value: number, onChange: (n: number) => void }) => {
+    const [hover, setHover] = useState(0);
+    const shown = hover || value;
+    return (
+        <div className="flex items-center gap-1" onMouseLeave={() => setHover(0)}>
+            {[1, 2, 3, 4, 5].map(n => (
+                <button
+                    key={n}
+                    onClick={() => onChange(n)}
+                    onMouseEnter={() => setHover(n)}
+                    className="p-0.5 text-gray-500 hover:text-yellow-400 transition-colors"
+                    title={`Rated ${n} star${n > 1 ? 's' : ''}`}
+                >
+                    <Star size={18} className={clsx(n <= shown ? "fill-yellow-400 text-yellow-400" : "fill-transparent")} />
+                </button>
+            ))}
+            {value > 0 && (
+                <button onClick={() => onChange(0)} className="ml-1 text-[10px] text-gray-500 hover:text-white">clear</button>
+            )}
+        </div>
+    );
 };
 
 type SidebarProps = {
@@ -69,9 +89,15 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
     // The sidebar composes the same tokenised query as the searchbar: a facet is
     // "active" when its token is present, and clicking it toggles that token.
     const statusActive = (value: string) => hasToken(searchQuery, 'status', value);
-    const noStatus = !hasField(searchQuery, 'status');
     const toggleStatus = (value: string) => setSearchQuery(toggleToken(searchQuery, 'status', value));
-    const showAll = () => setSearchQuery(clearField(searchQuery, 'status'));
+    const anyFilterActive = searchQuery.trim().length > 0;
+    const clearAllFilters = () => setSearchQuery('');
+
+    const rating = getRating(searchQuery);
+    const changeRating = (n: number) => setSearchQuery(setRating(searchQuery, n === rating ? 0 : n));
+    const favoriteActive = hasToken(searchQuery, 'favorite', 'true');
+    const toggleFavorite = () => setSearchQuery(toggleToken(searchQuery, 'favorite', 'true'));
+
     const {
         libraries, activeLibIndex, selectLibrary,
         removeLibrary, reorderLibraries, browseAndAdd
@@ -79,22 +105,9 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
     const { handleSidebarAction, handleDeleteClick } = useActionContext();
 
     // Local State
-    const [collapsed, setCollapsed] = useState({ status: false, creators: true, types: false });
     const [isLibDropdownOpen, setIsLibDropdownOpen] = useState(false);
     const [contextMenu, setContextMenu] = useState<{ open: boolean, x: number, y: number, groupType: 'creator' | 'type' | 'status', key: string } | null>(null);
     const [libraryCounts, setLibraryCounts] = useState<Record<string, number>>({});
-
-    // Creator Search State
-    const [creatorSearch, setCreatorSearch] = useState("");
-    const [isCreatorSearchOpen, setIsCreatorSearchOpen] = useState(false);
-    const searchInputRef = useRef<HTMLInputElement>(null);
-
-    // Auto-focus search input
-    useEffect(() => {
-        if (isCreatorSearchOpen && searchInputRef.current) {
-            searchInputRef.current.focus();
-        }
-    }, [isCreatorSearchOpen]);
 
     // Fetch Library Counts (Unified)
     useEffect(() => {
@@ -128,19 +141,11 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
             }
         };
 
-        // Fetch on mount, and whenever library list changes
         fetchCounts();
-
-        // Also fetch whenever package list updates (implies scan/action finished)
-        // This ensures counts stay largely in sync with operations
-    }, [libraries, packages]); // Added packages dependency to trigger refresh on scan completion
+    }, [libraries, packages]);
 
     const currentLibPath = libraries && libraries[activeLibIndex] ? libraries[activeLibIndex] : "No Library Selected";
     const currentLibName = currentLibPath.split(/[/\\]/).pop() || "Library";
-
-    const toggleSection = (section: 'status' | 'creators' | 'types') => {
-        setCollapsed(prev => ({ ...prev, [section]: !prev[section] }));
-    };
 
     const handleContextMenu = (e: React.MouseEvent, groupType: 'creator' | 'type' | 'status', key: string) => {
         e.preventDefault();
@@ -154,8 +159,8 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
         return () => window.removeEventListener('click', close);
     }, []);
 
-    // Memoized Lists (Moved from Props to Context-Derived)
-    const types = useMemo(() => {
+    // Category (type) options for the Categories dropdown.
+    const typeOptions = useMemo<FilterOption[]>(() => {
         const counts: Record<string, number> = {};
         packages.forEach(p => {
             // Corrupt packages have their own Status filter; exclude them here
@@ -164,21 +169,26 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
             const t = p.type || 'Other';
             counts[t] = (counts[t] || 0) + 1;
         });
-        return Object.entries(counts).sort((a, b) => b[1] - a[1]);
-    }, [packages]);
+        return Object.entries(counts)
+            .sort((a, b) => b[1] - a[1])
+            .map(([value, count]) => ({ value, label: value, count, tone: typeStatus[value] }));
+    }, [packages, typeStatus]);
 
-    const creators = useMemo(() => {
+    const creatorOptions = useMemo<FilterOption[]>(() => {
         const counts: Record<string, number> = {};
         packages.forEach(p => {
             const c = p.meta.creator || "Unknown";
             counts[c] = (counts[c] || 0) + 1;
         });
-        return Object.entries(counts).sort((a, b) => a[0].localeCompare(b[0]));
-    }, [packages]);
+        return Object.entries(counts)
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([value, count]) => ({ value, label: value, count, tone: creatorStatus[value] }));
+    }, [packages, creatorStatus]);
 
     const statusCounts = useMemo(() => {
         const validPkgs = packages.filter(p => !p.isCorrupt);
         const corruptPkgs = packages.filter(p => p.isCorrupt);
+        const isStandalone = (p: VarPackage) => !p.meta?.dependencies || Object.keys(p.meta.dependencies).length === 0;
 
         return {
             all: packages.length,
@@ -187,10 +197,24 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
             missingDeps: validPkgs.filter(p => p.missingDeps && p.missingDeps.length > 0).length,
             versionConflicts: validPkgs.filter(p => p.isDuplicate).length,
             exactDuplicates: validPkgs.filter(p => p.isExactDuplicate).length,
-            orphans: validPkgs.filter(p => p.isOrphan).length,
+            removable: validPkgs.filter(p => p.isRemovable).length,
+            standalone: validPkgs.filter(isStandalone).length,
             corrupt: corruptPkgs.length
         };
     }, [packages]);
+
+    // Status options, hidden when a bucket is empty (mirrors the old list).
+    const statusOptions = useMemo<FilterOption[]>(() => {
+        const defs: { value: string, label: string, count: number, tone?: FilterOption['tone'] }[] = [
+            { value: 'enabled', label: 'Enabled', count: statusCounts.enabled },
+            { value: 'disabled', label: 'Disabled', count: statusCounts.disabled },
+            { value: 'missing-deps', label: 'Missing Deps', count: statusCounts.missingDeps, tone: 'error' },
+            { value: 'version-conflicts', label: 'Conflicts', count: statusCounts.versionConflicts, tone: 'warning' },
+            { value: 'exact-duplicates', label: 'Duplicates', count: statusCounts.exactDuplicates, tone: 'warning' },
+            { value: 'corrupt', label: 'Corrupt', count: statusCounts.corrupt, tone: 'error' },
+        ];
+        return defs.filter(d => d.count > 0);
+    }, [statusCounts]);
 
     return (
         <aside className="w-64 h-full bg-gray-800 border-r border-gray-700 flex flex-col shadow-xl z-20">
@@ -215,9 +239,14 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
                             onClick={() => setIsLibDropdownOpen(!isLibDropdownOpen)}
                         >
                             <span className="text-[10px] text-gray-500 uppercase tracking-wider block leading-none mb-0.5">Library</span>
-                            <div className="font-bold text-gray-200 text-sm truncate leading-tight select-none" title={currentLibPath}>
+                            <div className="font-bold text-gray-200 text-sm leading-tight select-none truncate" title={currentLibPath}>
                                 {currentLibName}
                             </div>
+                            {statusCounts.all > 0 && (
+                                <span className="block text-[10px] text-gray-500 leading-none mt-0.5" title="Total packages in this library">
+                                    {statusCounts.all.toLocaleString()} packages
+                                </span>
+                            )}
                         </div>
 
                         <button
@@ -270,157 +299,102 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
                 </div>
             </div>
 
-            {/* Status Sections */}
-            <div className="flex-1 overflow-hidden flex flex-col custom-scrollbar overflow-y-auto">
-                {/* STATUS SECTION */}
-                <div className="p-4 border-b border-gray-700/50">
-                    <button onClick={() => toggleSection('status')} className="w-full flex items-center justify-between text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2 hover:text-gray-300">
-                        <span>Status</span>
-                        {!collapsed.status ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    </button>
-                    {!collapsed.status && (
-                        <div className="space-y-1 animation-fade-in">
-                            {/* All */}
-                            <button onClick={showAll} onContextMenu={(e) => handleContextMenu(e, 'status', STATUS_FILTERS.ALL)} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", noStatus ? "bg-blue-600/10 text-blue-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
-                                <div className="flex items-center gap-3"><Layers size={18} /> All Packages</div>
-                                <span className={clsx("text-xs px-2 py-0.5 rounded-full font-medium transition-colors", noStatus ? "bg-blue-500/20 text-blue-300" : "bg-gray-800 text-gray-400 group-hover:bg-gray-700 group-hover:text-gray-300")}>{statusCounts.all}</span>
-                            </button>
-                            {/* Enabled */}
-                            {statusCounts.enabled > 0 && (
-                                <button onClick={() => toggleStatus('enabled')} onContextMenu={(e) => handleContextMenu(e, 'status', 'enabled')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", statusActive('enabled') ? "bg-green-500/10 text-green-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
-                                    <div className="flex items-center gap-3"><CheckCircle2 size={18} /> Enabled</div>
-                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-green-500/20 text-green-400 border border-green-500/10 group-hover:bg-green-500/30 transition-colors">{statusCounts.enabled}</span>
-                                </button>
-                            )}
-                            {/* Disabled */}
-                            {statusCounts.disabled > 0 && (
-                                <button onClick={() => toggleStatus('disabled')} onContextMenu={(e) => handleContextMenu(e, 'status', 'disabled')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", statusActive('disabled') ? "bg-gray-600/20 text-gray-200" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
-                                    <div className="flex items-center gap-3"><CircleOff size={18} /> Disabled</div>
-                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-700 text-gray-300 border border-gray-600 group-hover:bg-gray-600 transition-colors">{statusCounts.disabled}</span>
-                                </button>
-                            )}
-                            {/* Missing Dependencies */}
-                            {statusCounts.missingDeps > 0 && (
-                                <button onClick={() => toggleStatus('missing-deps')} onContextMenu={(e) => handleContextMenu(e, 'status', 'missing-deps')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", statusActive('missing-deps') ? "bg-red-500/10 text-red-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
-                                    <div className="flex items-center gap-3"><AlertCircle size={18} /> Missing Deps</div>
-                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-500/20 text-red-400 border border-red-500/10 group-hover:bg-red-500/30 transition-colors">{statusCounts.missingDeps}</span>
-                                </button>
-                            )}
-                            {/* Version Conflicts (Obsolete) */}
-                            {statusCounts.versionConflicts > 0 && (
-                                <button onClick={() => toggleStatus('version-conflicts')} onContextMenu={(e) => handleContextMenu(e, 'status', 'version-conflicts')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", statusActive('version-conflicts') ? "bg-yellow-500/10 text-yellow-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
-                                    <div className="flex items-center gap-3"><AlertTriangle size={18} /> Conflicts</div>
-                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-yellow-500/20 text-yellow-400 border border-yellow-500/10 group-hover:bg-yellow-500/30 transition-colors">{statusCounts.versionConflicts}</span>
-                                </button>
-                            )}
-                            {/* Exact Duplicates */}
-                            {statusCounts.exactDuplicates > 0 && (
-                                <button onClick={() => toggleStatus('exact-duplicates')} onContextMenu={(e) => handleContextMenu(e, 'status', 'exact-duplicates')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", statusActive('exact-duplicates') ? "bg-purple-500/10 text-purple-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
-                                    <div className="flex items-center gap-3"><Copy size={18} /> Duplicates</div>
-                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-purple-500/20 text-purple-400 border border-purple-500/10 group-hover:bg-purple-500/30 transition-colors">{statusCounts.exactDuplicates}</span>
-                                </button>
-                            )}
-                            {/* Corrupt */}
-                            {statusCounts.corrupt > 0 && (
-                                <button onClick={() => toggleStatus('corrupt')} onContextMenu={(e) => handleContextMenu(e, 'status', 'corrupt')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", statusActive('corrupt') ? "bg-red-600/20 text-red-500" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
-                                    <div className="flex items-center gap-3"><AlertTriangle size={18} /> Corrupt</div>
-                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-600/20 text-red-500 border border-red-600/10 group-hover:bg-red-600/30 transition-colors">{statusCounts.corrupt}</span>
-                                </button>
-                            )}
-                            {/* Unreferenced (Orphans) */}
-                            {statusCounts.orphans > 0 && (
-                                <button onClick={() => toggleStatus('unreferenced')} onContextMenu={(e) => handleContextMenu(e, 'status', 'unreferenced')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", statusActive('unreferenced') ? "bg-violet-600/20 text-violet-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
-                                    <div className="flex items-center gap-3"><Unlink size={18} /> Unreferenced</div>
-                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-violet-600/20 text-violet-400 border border-violet-600/10 group-hover:bg-violet-600/30 transition-colors">{statusCounts.orphans}</span>
-                                </button>
-                            )}
-                        </div>
+            {/* Filters */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-4">
+                {/* Filter panel header. Right-click exposes the library-wide bulk
+                    actions that used to hang off the old "All Packages" button. */}
+                <div
+                    className="flex items-center justify-between px-1 h-5"
+                    onContextMenu={(e) => handleContextMenu(e, 'status', STATUS_FILTERS.ALL)}
+                >
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Filters</span>
+                    {anyFilterActive && (
+                        <button
+                            onClick={clearAllFilters}
+                            className="text-[11px] text-gray-400 hover:text-white flex items-center gap-1 transition-colors"
+                            title="Clear every active filter"
+                        >
+                            <X size={12} /> Clear all
+                        </button>
                     )}
                 </div>
 
-                {/* CREATORS */}
-                <div className="p-4 border-b border-gray-700/50">
-                    {!isCreatorSearchOpen ? (
-                        <div className="flex items-center justify-between mb-2 px-2 group/header">
-                            <button onClick={() => toggleSection('creators')} className="flex-1 flex items-center justify-between text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-300">
-                                <span>Creators</span>
-                                {!collapsed.creators ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                            </button>
-                            {!collapsed.creators && (
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); setIsCreatorSearchOpen(true); }}
-                                    className="ml-2 text-gray-500 hover:text-white opacity-0 group-hover/header:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-700"
-                                    title="Search Creators"
-                                >
-                                    <Search size={12} />
-                                </button>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="mb-2 px-1 relative">
-                            <input
-                                ref={searchInputRef}
-                                type="text"
-                                className="w-full bg-gray-900 border border-blue-500/50 rounded px-2 py-0.5 text-xs text-white focus:outline-none placeholder-gray-600 transition-all"
-                                placeholder="Filter creators..."
-                                value={creatorSearch}
-                                onChange={e => setCreatorSearch(e.target.value)}
-                                onBlur={() => {
-                                    // Delay to allow click events on items to fire before closing/clearing
-                                    setTimeout(() => {
-                                        setIsCreatorSearchOpen(false);
-                                        setCreatorSearch(""); // Clear filter on close
-                                    }, 200);
-                                }}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Escape' || e.key === 'Enter') {
-                                        setIsCreatorSearchOpen(false);
-                                        setCreatorSearch("");
-                                    }
-                                }}
-                            />
-                        </div>
-                    )}
-                    {!collapsed.creators && (
-                        <div className="space-y-1">
-                            {creators
-                                .filter(([name]) => !creatorSearch || name.toLowerCase().includes(creatorSearch.toLowerCase()))
-                                .map(([name, count]) => (
-                                    <button
-                                        key={name}
-                                        onClick={() => setSearchQuery(toggleToken(searchQuery, 'creator', name))}
-                                        onContextMenu={(e) => handleContextMenu(e, 'creator', name)}
-                                        className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", hasToken(searchQuery, 'creator', name) ? "bg-blue-600/10 text-blue-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
-                                    >
-                                        <span className="truncate text-left flex-1">{name}</span>
-                                        <span className={clsx("text-xs px-1.5 py-0.5 rounded-full transition-colors border border-transparent", getStatusClasses(creatorStatus[name], hasToken(searchQuery, 'creator', name)))}>{count}</span>
-                                    </button>
-                                ))}
-                        </div>
-                    )}
+                {/* Dropdown filters (one shared FilterDropdown, three configurations) */}
+                <div className="space-y-2">
+                    <FilterDropdown
+                        label="Status"
+                        icon={<Boxes size={16} />}
+                        options={statusOptions}
+                        isSelected={statusActive}
+                        onToggle={toggleStatus}
+                        onOptionContextMenu={(value, e) => handleContextMenu(e, 'status', value)}
+                        emptyHint="No status buckets"
+                    />
+                    <FilterDropdown
+                        label="Creators"
+                        icon={<Users size={16} />}
+                        options={creatorOptions}
+                        isSelected={(v) => hasToken(searchQuery, 'creator', v)}
+                        onToggle={(v) => setSearchQuery(toggleToken(searchQuery, 'creator', v))}
+                        searchable
+                        searchPlaceholder="Filter creators…"
+                        onOptionContextMenu={(value, e) => handleContextMenu(e, 'creator', value)}
+                    />
+                    <FilterDropdown
+                        label="Categories"
+                        icon={<Tags size={16} />}
+                        options={typeOptions}
+                        isSelected={(v) => hasToken(searchQuery, 'type', v)}
+                        onToggle={(v) => setSearchQuery(toggleToken(searchQuery, 'type', v))}
+                        searchable
+                        searchPlaceholder="Filter categories…"
+                        onOptionContextMenu={(value, e) => handleContextMenu(e, 'type', value)}
+                    />
                 </div>
 
-                {/* TYPES */}
-                <div className="p-4 border-b border-gray-700/50">
-                    <button onClick={() => toggleSection('types')} className="w-full flex items-center justify-between text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2 hover:text-gray-300">
-                        <span>Categories</span>
-                        {!collapsed.types ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                {/* Rating */}
+                <div className="px-1">
+                    <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Rating</span>
+                        {rating > 0 && <span className="text-[10px] text-gray-500">{rating} star{rating > 1 ? 's' : ''}</span>}
+                    </div>
+                    <RatingStars value={rating} onChange={changeRating} />
+                </div>
+
+                {/* Favourites + dependency-relationship toggles */}
+                <div className="space-y-3 border-t border-gray-700/50 pt-4 px-1">
+                    <button
+                        onClick={toggleFavorite}
+                        className={clsx(
+                            "w-full flex items-center gap-2 text-sm transition-colors",
+                            favoriteActive ? "text-pink-400" : "text-gray-400 hover:text-white"
+                        )}
+                    >
+                        <Heart size={16} className={clsx(favoriteActive && "fill-pink-400")} />
+                        <span className="font-medium">Only favourites</span>
                     </button>
-                    {!collapsed.types && (
-                        <div className="space-y-1">
-                            {types.map(([name, count]) => (
-                                <button
-                                    key={name}
-                                    onClick={() => setSearchQuery(toggleToken(searchQuery, 'type', name))}
-                                    onContextMenu={(e) => handleContextMenu(e, 'type', name)}
-                                    className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", hasToken(searchQuery, 'type', name) ? "bg-blue-600/10 text-blue-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
-                                >
-                                    <span className="truncate text-left flex-1">{name}</span>
-                                    <span className={clsx("text-xs px-1.5 py-0.5 rounded-full transition-colors border border-transparent", getStatusClasses(typeStatus[name], hasToken(searchQuery, 'type', name)))}>{count}</span>
-                                </button>
-                            ))}
+
+                    <div>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Dependency relationship</p>
+                        <div className="space-y-2.5">
+                            <div title="Self-contained: declares no dependencies of its own.">
+                                <Toggle
+                                    size="sm"
+                                    checked={statusActive('standalone')}
+                                    onChange={() => toggleStatus('standalone')}
+                                    label={`Standalone (${statusCounts.standalone})`}
+                                />
+                            </div>
+                            <div title="No other package depends on these, so removing them won't break anything.">
+                                <Toggle
+                                    size="sm"
+                                    checked={statusActive('removable')}
+                                    onChange={() => toggleStatus('removable')}
+                                    label={`Removable (${statusCounts.removable})`}
+                                />
+                            </div>
                         </div>
-                    )}
+                    </div>
                 </div>
             </div>
 
@@ -437,7 +411,6 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
                         if (contextMenu.key === STATUS_FILTERS.VERSION_CONFLICTS) return p.isDuplicate && !p.isCorrupt;
                         if (contextMenu.key === STATUS_FILTERS.EXACT_DUPLICATES) return p.isExactDuplicate && !p.isCorrupt;
                         if (contextMenu.key === STATUS_FILTERS.CORRUPT) return p.isCorrupt;
-                        if (contextMenu.key === STATUS_FILTERS.UNREFERENCED) return p.isOrphan && !p.isCorrupt;
                     }
                     return false;
                 };
@@ -483,9 +456,6 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
                                     <button
                                         onClick={() => {
                                             setContextMenu(null);
-                                            // Feed the first corrupt package to handleDeleteClick
-                                            // (it will detect the full set via selectedIds or use the pkgs list directly)
-                                            // We pass the package list directly via the multi-select path.
                                             handleDeleteClick(corruptPkgs[0], corruptPkgs);
                                         }}
                                         className="w-full text-left px-3 py-2 hover:bg-red-900/40 flex items-center gap-2 text-sm text-red-400"
