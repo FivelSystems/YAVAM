@@ -90,9 +90,16 @@ fatal.
 
 ## Code quality & style
 
-- **Self-documenting code.** Prefer readable code over comments. Comments explain
-  *how a system/architecture works and why* — not what each line does. Delete
-  comments that merely restate the code.
+- **Self-documenting code — comments are the exception, not the default.** Make the
+  code readable enough that it needs no narration: clear names, small functions,
+  early returns. Do **not** comment each step, restate what a line does, or label
+  sections (`// optimistic`, `// rollback`, `// Fetch on mount`, `// Local State`).
+  A comment must earn its place by explaining *why* — a non-obvious constraint,
+  trade-off, or gotcha the code cannot express. When you reach for a comment, first
+  try to make it unnecessary by renaming or restructuring. Prefer a docstring on an
+  exported symbol (function/type/component) over inline prose, and keep it to the
+  contract and rationale — not a line-by-line tour. When in doubt, leave it out.
+  When editing existing code, delete comments that merely restate it.
 - **Apply design patterns deliberately.** For non-trivial work, evaluate where a
   pattern fits (and where it doesn't), and say so.
 - **DRY & SOLID.** Extract repeated rules into one definition (`pkg/utils` or a
