@@ -22,7 +22,12 @@ export interface VarPackage {
     categories: string[];
     tags?: string[];
     isCorrupt?: boolean;
-    isOrphan?: boolean;
+    /** No enabled package depends on this one, so removing it breaks nothing. */
+    isRemovable?: boolean;
+    /** User rating 0–5 (0 = unrated), version-agnostic, keyed by family in the DB. */
+    rating?: number;
+    /** User favourite flag, version-agnostic, keyed by family in the DB. */
+    isFavorite?: boolean;
     referencedBy?: string[];
     obsoletedBy?: string;
     /** ISO 8601 package creation date; used for date sorting. */
@@ -44,13 +49,13 @@ export interface DependencyLocation {
     isEnabled: boolean;
 }
 
-/** Payload of the "package:analyzed" event — dep/dup/orphan flags per package. */
+/** Payload of the "package:analyzed" event — dep/dup/removable flags per package. */
 export interface PackageAnalysis {
     filePath: string;
     missingDeps: string[];
     isDuplicate: boolean;
     isExactDuplicate: boolean;
-    isOrphan: boolean;
+    isRemovable: boolean;
     obsoletedBy?: string;
     referencedBy?: string[];
 }

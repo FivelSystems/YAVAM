@@ -242,6 +242,14 @@ export function SetMinimizeOnClose(arg1) {
   return window['go']['main']['App']['SetMinimizeOnClose'](arg1);
 }
 
+export function SetPackageFavorite(arg1, arg2) {
+  return window['go']['main']['App']['SetPackageFavorite'](arg1, arg2);
+}
+
+export function SetPackageRating(arg1, arg2) {
+  return window['go']['main']['App']['SetPackageRating'](arg1, arg2);
+}
+
 export function SetPassword(arg1) {
   return window['go']['main']['App']['SetPassword'](arg1);
 }

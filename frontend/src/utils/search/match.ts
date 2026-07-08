@@ -41,6 +41,12 @@ const matchSize = (value: string, bytes: number): boolean => {
     }
 };
 
+/** A package is standalone when it declares no dependencies of its own. */
+const isStandalone = (pkg: VarPackage): boolean => {
+    const deps = pkg.meta?.dependencies;
+    return !deps || Object.keys(deps).length === 0;
+};
+
 const matchStatus = (value: string, pkg: VarPackage): boolean => {
     const corrupt = !!pkg.isCorrupt;
     switch (value) {
@@ -54,11 +60,32 @@ const matchStatus = (value: string, pkg: VarPackage): boolean => {
         case 'version-conflicts': return !!pkg.isDuplicate && !corrupt;
         case 'exact-duplicate':
         case 'exact-duplicates': return !!pkg.isExactDuplicate && !corrupt;
-        case 'orphan':
-        case 'unreferenced': return !!pkg.isOrphan && !corrupt;
-        // standalone/hidden/visible depend on the dependency-visibility mode,
-        // which is not built yet — treat as non-constraining for now.
+        case 'removable': return !!pkg.isRemovable && !corrupt;
+        // No dependants (removable) and no dependencies (standalone) are the two
+        // orthogonal dependency-relationship axes surfaced in the sidebar.
+        case 'standalone': return isStandalone(pkg) && !corrupt;
+        // hidden/visible depend on the dependency-visibility mode, which is not
+        // built yet — treat as non-constraining for now.
         default: return true;
+    }
+};
+
+/**
+ * Evaluate a `rating:` value against the package's stored rating. Supports an
+ * exact value (`rating:3`) or a single bound (`rating:>=4`, `rating:<2`). The
+ * sidebar star emits the exact form; the bounded forms are search-only.
+ */
+const matchRating = (value: string, pkg: VarPackage): boolean => {
+    const rating = pkg.rating ?? 0;
+    const bound = value.match(/^(>=|<=|>|<)?(\d+)$/);
+    if (!bound) return false;
+    const threshold = parseInt(bound[2], 10);
+    switch (bound[1]) {
+        case '>': return rating > threshold;
+        case '<': return rating < threshold;
+        case '>=': return rating >= threshold;
+        case '<=': return rating <= threshold;
+        default: return rating === threshold;
     }
 };
 
@@ -86,6 +113,9 @@ const tokenMatches = (token: SearchToken, pkg: VarPackage): boolean => {
         case 'type': return matchType(token.value, pkg);
         case 'tag': return (pkg.tags || []).some(t => t.toLowerCase() === token.value);
         case 'size': return matchSize(token.value, pkg.size);
+        case 'rating': return matchRating(token.value, pkg);
+        // `favorite:true` keeps favourites; `favorite:false` keeps the rest.
+        case 'favorite': return !!pkg.isFavorite === (token.value !== 'false');
         default: return true;
     }
 };
@@ -96,7 +126,7 @@ const tokenMatches = (token: SearchToken, pkg: VarPackage): boolean => {
  * - each free-text word is its own AND clause (a search box expects "red dress"
  *   to mean both, not either).
  * - `exclude` tokens drop any package they match.
- * - inert fields (rating/favorite/license) do not constrain until their data lands.
+ * - inert fields (license) do not constrain until their data lands.
  */
 export const buildMatcher = (query: ParsedQuery): PackagePredicate => {
     const requireGroups = new Map<string, SearchToken[]>();

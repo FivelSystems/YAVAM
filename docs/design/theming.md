@@ -25,7 +25,7 @@ compatible.
 --yavam-card-enabled        --yavam-card-disabled
 --yavam-card-corrupt        --yavam-card-missing-deps
 --yavam-card-duplicate      --yavam-card-obsolete
---yavam-card-standalone     /* "Standalone" in UI; internal code: isOrphan */
+--yavam-card-standalone     /* root packages nothing depends on; internal code: isRemovable */
 
 /* UI chrome */
 --yavam-creator-label-bg    --yavam-sidebar-icon-active

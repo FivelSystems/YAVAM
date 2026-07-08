@@ -25,8 +25,8 @@ export const getPackageStatus = (pkg: VarPackage | undefined): PackageStatus => 
     // 3. Functional Warnings
     if (pkg.missingDeps && pkg.missingDeps.length > 0) return PACKAGE_STATUS.MISMATCH;
 
-    // 4. Roots (Unreferenced)
-    if (pkg.isOrphan) return PACKAGE_STATUS.ROOT;
+    // 4. Roots (Removable — nothing depends on them)
+    if (pkg.isRemovable) return PACKAGE_STATUS.ROOT;
 
     return PACKAGE_STATUS.VALID;
 };

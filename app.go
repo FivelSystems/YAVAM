@@ -387,6 +387,18 @@ func (a *App) LocateDependencies(ids []string) map[string]models.DependencyLocat
 	return a.manager.LocateDependencies(ids)
 }
 
+// SetPackageRating stores a 0–5 star rating (0 clears) for a package family
+// ("Creator.Name"), version-agnostic — every version of the family shares one
+// rating. Persisted in the user_metadata table.
+func (a *App) SetPackageRating(family string, rating int) error {
+	return a.manager.SetPackageRating(family, rating)
+}
+
+// SetPackageFavorite marks a package family ("Creator.Name") as a favourite.
+func (a *App) SetPackageFavorite(family string, favorite bool) error {
+	return a.manager.SetPackageFavorite(family, favorite)
+}
+
 func (a *App) ScanPackages(vamPath string) error {
 	if vamPath == "" || vamPath == "." {
 		return nil

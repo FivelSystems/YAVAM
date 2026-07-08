@@ -126,6 +126,10 @@ export function SetLastSeenVersion(arg1:string):Promise<void>;
 
 export function SetMinimizeOnClose(arg1:boolean):Promise<void>;
 
+export function SetPackageFavorite(arg1:string,arg2:boolean):Promise<void>;
+
+export function SetPackageRating(arg1:string,arg2:number):Promise<void>;
+
 export function SetPassword(arg1:string):Promise<void>;
 
 export function SetPrivacyMode(arg1:boolean):Promise<void>;

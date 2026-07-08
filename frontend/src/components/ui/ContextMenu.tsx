@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useLayoutEffect } from 'react';
 import { VarPackage } from '../../types';
-import { Power, FolderOpen, Copy, Trash2, FileCode, Scissors, Download, Layers, Sparkles } from 'lucide-react';
+import clsx from 'clsx';
+import { Power, FolderOpen, Copy, Trash2, FileCode, Scissors, Download, Layers, Sparkles, Star, Heart } from 'lucide-react';
 
 interface ContextMenuProps {
     x: number;
@@ -18,13 +19,61 @@ interface ContextMenuProps {
     onMerge: (pkg: VarPackage) => void;
     onMergeInPlace: (pkg: VarPackage) => void;
     onResolve: (pkg: VarPackage) => void;
+    onSetRating: (pkg: VarPackage, rating: number) => void;
+    onSetFavorite: (pkg: VarPackage, favorite: boolean) => void;
 }
 
-const ContextMenu = ({ x, y, pkg, selectedCount = 0, onClose, onToggle, onOpenFolder, onDownload, onCopyPath, onCopyFiles, onCutFile, onDelete, onMerge, onMergeInPlace, onResolve }: ContextMenuProps) => {
+// Controlled rating row for the right-click menu: `value` is the live rating,
+// `onRate` receives the star clicked (the parent resolves click-active-to-clear).
+const MenuRatingStars = ({ value, onRate }: { value: number, onRate: (n: number) => void }) => {
+    const [hover, setHover] = useState(0);
+    const shown = hover || value;
+    return (
+        <div className="flex items-center gap-0.5" onMouseLeave={() => setHover(0)}>
+            {[1, 2, 3, 4, 5].map(n => (
+                <button
+                    key={n}
+                    onClick={() => onRate(n)}
+                    onMouseEnter={() => setHover(n)}
+                    className="p-0.5 text-gray-500 hover:text-yellow-400 transition-colors"
+                    title={`Rate ${n} star${n > 1 ? 's' : ''}`}
+                >
+                    <Star size={15} className={clsx(n <= shown ? "fill-yellow-400 text-yellow-400" : "fill-transparent")} />
+                </button>
+            ))}
+        </div>
+    );
+};
+
+const ContextMenu = ({ x, y, pkg, selectedCount = 0, onClose, onToggle, onOpenFolder, onDownload, onCopyPath, onCopyFiles, onCutFile, onDelete, onMerge, onMergeInPlace, onResolve, onSetRating, onSetFavorite }: ContextMenuProps) => {
     const ref = useRef<HTMLDivElement>(null);
     const [position, setPosition] = useState({ top: y, left: x });
     // @ts-ignore
     const isWeb = !window.go;
+
+    // Live rating/favourite state so the row updates the instant it's clicked,
+    // independent of the (snapshot) pkg prop. Reseeded when the menu retargets a
+    // different package.
+    const [rating, setRating] = useState(pkg?.rating ?? 0);
+    const [isFavorite, setIsFavorite] = useState(!!pkg?.isFavorite);
+    useEffect(() => {
+        setRating(pkg?.rating ?? 0);
+        setIsFavorite(!!pkg?.isFavorite);
+    }, [pkg?.filePath]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const rate = (n: number) => {
+        if (!pkg) return;
+        const next = n === rating ? 0 : n; // click the active star to clear
+        setRating(next);
+        onSetRating(pkg, next);
+    };
+
+    const toggleFavorite = () => {
+        if (!pkg) return;
+        const next = !isFavorite;
+        setIsFavorite(next);
+        onSetFavorite(pkg, next);
+    };
 
     useLayoutEffect(() => {
         if (ref.current) {
@@ -74,6 +123,25 @@ const ContextMenu = ({ x, y, pkg, selectedCount = 0, onClose, onToggle, onOpenFo
             <div className="px-3 py-2 text-xs font-semibold text-gray-500 border-b border-gray-700 mb-1 truncate">
                 {selectedCount > 1 ? `${selectedCount} items selected` : pkg.fileName}
             </div>
+
+            {/* Rating + favourite (user_metadata, version-agnostic per family).
+                Desktop-only: web has no persistence endpoint yet. */}
+            {!isWeb && (
+                <>
+                    <div className="flex items-center justify-between px-3 py-1.5">
+                        <MenuRatingStars value={rating} onRate={rate} />
+                        <button
+                            onClick={toggleFavorite}
+                            className={clsx("p-0.5 transition-colors", isFavorite ? "text-pink-400" : "text-gray-500 hover:text-pink-400")}
+                            title={isFavorite ? "Remove from favourites" : "Add to favourites"}
+                        >
+                            <Heart size={16} className={clsx(isFavorite && "fill-pink-400")} />
+                        </button>
+                    </div>
+
+                    <div className="border-t border-gray-700 my-1"></div>
+                </>
+            )}
 
             <button
                 onClick={() => { onToggle(pkg); onClose(); }}

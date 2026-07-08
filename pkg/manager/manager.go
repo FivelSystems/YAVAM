@@ -145,6 +145,17 @@ func (m *Manager) LocateDependencies(ids []string) map[string]models.DependencyL
 	return m.library.LocateDependencies(ids)
 }
 
+// SetPackageRating stores a 0–5 star rating (0 = unrated) for a package family
+// ("Creator.Name"), version-agnostic. Persisted in user_metadata.
+func (m *Manager) SetPackageRating(family string, rating int) error {
+	return m.library.SetRating(family, rating)
+}
+
+// SetPackageFavorite marks/unmarks a package family ("Creator.Name") as a favourite.
+func (m *Manager) SetPackageFavorite(family string, favorite bool) error {
+	return m.library.SetFavorite(family, favorite)
+}
+
 // DisableOldVersions disables all versions of a package except the latest
 // DisableOldVersions delegates to LibraryService
 func (m *Manager) DisableOldVersions(pkgs []models.VarPackage, creator string, packageName string, vamPath string) error {

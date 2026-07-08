@@ -13,7 +13,7 @@ const EMPTY_STAGES: ScanStages = {
 // sorted view don't churn when a rescan re-confirms data the grid already shows.
 const pkgSignature = (p: VarPackage): string => [
     p.isEnabled, p.isCorrupt, p.hasThumbnail, p.thumbnailBase64 ? 1 : 0,
-    p.isDuplicate, p.isExactDuplicate, p.isOrphan, p.missingDeps?.length || 0,
+    p.isDuplicate, p.isExactDuplicate, p.isRemovable, p.missingDeps?.length || 0,
     p.obsoletedBy || '', (p.referencedBy || []).join(','),
     p.size, p.fileName, p.type || '', p.creationDate, p.scanPhase,
     p.meta?.creator, p.meta?.packageName, p.meta?.version,
@@ -56,7 +56,7 @@ const applyAnalysis = (p: VarPackage, a: PackageAnalysis): VarPackage => {
         missingDeps: a.missingDeps ?? [],
         isDuplicate: a.isDuplicate,
         isExactDuplicate: a.isExactDuplicate,
-        isOrphan: a.isOrphan,
+        isRemovable: a.isRemovable,
         obsoletedBy: a.obsoletedBy,
         referencedBy: a.referencedBy,
         scanPhase: 'analyzed',

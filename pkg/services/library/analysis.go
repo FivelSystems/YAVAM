@@ -15,7 +15,7 @@ type PackageAnalysis struct {
 	MissingDeps     []string `json:"missingDeps"`
 	IsDuplicate     bool     `json:"isDuplicate"`     // Obsoleted by a newer version
 	IsExactDuplicate bool    `json:"isExactDuplicate"` // Identical copy (same version + size)
-	IsOrphan        bool     `json:"isOrphan"`        // Not referenced by any enabled package
+	IsRemovable     bool     `json:"isRemovable"`     // Not referenced by any enabled package, so removing it breaks nothing
 	ObsoletedBy     string   `json:"obsoletedBy,omitempty"`
 	ReferencedBy    []string `json:"referencedBy,omitempty"`
 }
@@ -233,11 +233,12 @@ func LinkPass(pkgs []models.VarPackage, resolvers ...DependencyResolver) []Packa
 			}
 		}
 
-		// Orphan detection
-		if p.IsEnabled && !p.IsCorrupt && p.Meta.Creator != "" {
+		// Removable detection (no package depends on this one). Enable-agnostic:
+		// a disabled package still exists in YAVAM's view.
+		if !p.IsCorrupt && p.Meta.Creator != "" {
 			myID := strings.ToLower(fmt.Sprintf("%s.%s.%s", p.Meta.Creator, p.Meta.PackageName, p.Meta.Version))
 			if !referenced[myID] {
-				a.IsOrphan = true
+				a.IsRemovable = true
 			}
 			if deps, ok := reverseDeps[myID]; ok {
 				a.ReferencedBy = deps

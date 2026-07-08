@@ -123,7 +123,7 @@ export const Dashboard = () => {
 
 ## 6. Centralized Logic Patterns
 ### Package Status Authority
-Package status (Valid, Corrupt, Duplicate, Root) is complex and derived from multiple properties (`isCorrupt`, `missingDeps`, `isOrphan`).
+Package status (Valid, Corrupt, Duplicate, Root) is complex and derived from multiple properties (`isCorrupt`, `missingDeps`, `isRemovable`).
 **Rule:** NEVER implement ad-hoc `if/else` checks for package status in your components (e.g., `PackageCard`, `Sidebar`).
 **Solution:** Always use the centralized helper: `src/features/library/utils.ts` -> `getPackageStatus(pkg)`.
 This ensures that "Duplicate", "Obsolete", and "Root" statuses are visualized consistently across the entire application (Grid, List, Dependants).
