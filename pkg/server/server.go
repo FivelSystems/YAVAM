@@ -206,7 +206,7 @@ func (s *Server) Start(port string, libraries []string) error {
 	})))
 
 	// Scan Cancel Endpoint
-	mux.HandleFunc("/api/scan/cancel", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/scan/cancel", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.scanMu.Lock()
 		if s.scanCancel != nil {
 			s.scanCancel()
@@ -217,7 +217,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		s.scanWg.Wait()
 
 		json.NewEncoder(w).Encode(map[string]bool{"success": true})
-	})
+	})))
 
 	// Rate Limiter for Login: 5 attempts per minute
 	loginLimiter := NewRateLimiter(5, 1*time.Minute)
@@ -231,8 +231,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		var req struct {
 			Username string `json:"username"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.writeError(w, "Invalid request body", 400)
+		if !s.decodeJSONBody(w, r, &req) {
 			return
 		}
 
@@ -267,8 +266,7 @@ func (s *Server) Start(port string, libraries []string) error {
 			Password   string `json:"password"`
 			DeviceName string `json:"deviceName"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.writeError(w, "Invalid request body", 400)
+		if !s.decodeJSONBody(w, r, &req) {
 			return
 		}
 
@@ -315,8 +313,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		var req struct {
 			Libraries []string `json:"libraries"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.writeError(w, "Invalid request body", 400)
+		if !s.decodeJSONBody(w, r, &req) {
 			return
 		}
 
@@ -354,8 +351,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		var req struct {
 			ID string `json:"id"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.writeError(w, "Invalid request body", 400)
+		if !s.decodeJSONBody(w, r, &req) {
 			return
 		}
 
@@ -521,8 +517,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		var req struct {
 			FilePath string `json:"filePath"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.writeError(w, err.Error(), 400)
+		if !s.decodeJSONBody(w, r, &req) {
 			return
 		}
 
@@ -547,8 +542,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		if r.Method == "POST" {
 			// Update Config
 			var req map[string]interface{}
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				s.writeError(w, err.Error(), 400)
+			if !s.decodeJSONBody(w, r, &req) {
 				return
 			}
 
@@ -675,8 +669,7 @@ func (s *Server) Start(port string, libraries []string) error {
 			Merge       bool   `json:"merge"`
 			LibraryPath string `json:"libraryPath"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.writeError(w, err.Error(), 400)
+		if !s.decodeJSONBody(w, r, &req) {
 			return
 		}
 
@@ -712,8 +705,7 @@ func (s *Server) Start(port string, libraries []string) error {
 			FilePath    string `json:"filePath"`
 			LibraryPath string `json:"libraryPath"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.writeError(w, err.Error(), 400)
+		if !s.decodeJSONBody(w, r, &req) {
 			return
 		}
 
@@ -760,8 +752,7 @@ func (s *Server) Start(port string, libraries []string) error {
 			Others      []string `json:"others"`
 			LibraryPath string   `json:"libraryPath"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.writeError(w, err.Error(), 400)
+		if !s.decodeJSONBody(w, r, &req) {
 			return
 		}
 
@@ -798,8 +789,7 @@ func (s *Server) Start(port string, libraries []string) error {
 			DestLib   string   `json:"destLib"`
 			Overwrite bool     `json:"overwrite"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.writeError(w, err.Error(), 400)
+		if !s.decodeJSONBody(w, r, &req) {
 			return
 		}
 
@@ -856,8 +846,7 @@ func (s *Server) Start(port string, libraries []string) error {
 			Files []string `json:"files"`
 			Path  string   `json:"path"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.writeError(w, err.Error(), 400)
+		if !s.decodeJSONBody(w, r, &req) {
 			return
 		}
 
@@ -887,7 +876,7 @@ func (s *Server) Start(port string, libraries []string) error {
 	})))
 
 	// Restore Endpoint
-	mux.HandleFunc("/api/restore", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/restore", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -902,7 +891,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": true,
 		})
-	})
+	})))
 
 	// Serve Frontend (Dist)
 	// Use embedded assets
