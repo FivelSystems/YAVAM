@@ -1,8 +1,8 @@
 import { useRef, useEffect, useState, useLayoutEffect } from 'react';
 import { VarPackage } from '../../types';
-import clsx from 'clsx';
-import { Power, FolderOpen, Copy, Trash2, FileCode, Scissors, Download, Layers, Sparkles, Heart } from 'lucide-react';
-import { RatingStars } from './RatingStars';
+import { RatingFavoriteControl } from './RatingFavoriteControl';
+import { useLiveRatingFavorite } from '../../hooks/useLiveRatingFavorite';
+import { usePackageActionItems, actionIconClassName } from '../../hooks/usePackageActionItems';
 
 interface ContextMenuProps {
     x: number;
@@ -30,29 +30,18 @@ const ContextMenu = ({ x, y, pkg, selectedCount = 0, onClose, onToggle, onOpenFo
     // @ts-ignore
     const isWeb = !window.go;
 
-    // Live rating/favourite state so the row updates the instant it's clicked,
-    // independent of the (snapshot) pkg prop. Reseeded when the menu retargets a
-    // different package.
-    const [rating, setRating] = useState(pkg?.rating ?? 0);
-    const [isFavorite, setIsFavorite] = useState(!!pkg?.isFavorite);
-    useEffect(() => {
-        setRating(pkg?.rating ?? 0);
-        setIsFavorite(!!pkg?.isFavorite);
-    }, [pkg?.filePath, pkg?.rating, pkg?.isFavorite]);
+    // Live rating/favourite, independent of the (possibly stale) `pkg` prop
+    // snapshot — `contextMenu.pkg` is captured once at right-click time, so it
+    // doesn't update in place when a rating/favourite edit patches the live
+    // `packages` array.
+    const { rating, isFavorite, rate, toggleFavorite } = useLiveRatingFavorite(pkg, onSetRating, onSetFavorite);
 
-    const rate = (n: number) => {
-        if (!pkg) return;
-        const next = n === rating ? 0 : n; // click the active star to clear
-        setRating(next);
-        onSetRating(pkg, next);
-    };
-
-    const toggleFavorite = () => {
-        if (!pkg) return;
-        const next = !isFavorite;
-        setIsFavorite(next);
-        onSetFavorite(pkg, next);
-    };
+    const items = usePackageActionItems({
+        pkg, selectedCount, isWeb,
+        onToggle, onOpenFolder, onDownload, onCopyPath, onCopyFiles, onCutFile, onDelete, onMerge, onMergeInPlace, onResolve,
+    }).filter(item => !item.hidden);
+    const regularItems = items.filter(item => item.tone !== 'danger');
+    const dangerItems = items.filter(item => item.tone === 'danger');
 
     useLayoutEffect(() => {
         if (ref.current) {
@@ -103,145 +92,42 @@ const ContextMenu = ({ x, y, pkg, selectedCount = 0, onClose, onToggle, onOpenFo
                 {selectedCount > 1 ? `${selectedCount} items selected` : pkg.fileName}
             </div>
 
-            {/* Rating + favourite (user_metadata, version-agnostic per family).
-                Desktop-only: web has no persistence endpoint yet. */}
-            {!isWeb && (
-                <>
-                    <div className="flex items-center justify-between px-3 py-1.5">
-                        <RatingStars value={rating} onChange={rate} size={15} gapClassName="gap-0.5" />
-                        <button
-                            onClick={toggleFavorite}
-                            className={clsx("p-0.5 transition-colors", isFavorite ? "text-pink-400" : "text-gray-500 hover:text-pink-400")}
-                            title={isFavorite ? "Remove from favourites" : "Add to favourites"}
-                        >
-                            <Heart size={16} className={clsx(isFavorite && "fill-pink-400")} />
-                        </button>
-                    </div>
-
-                    <div className="border-t border-gray-700 my-1"></div>
-                </>
-            )}
-
-            <button
-                onClick={() => { onToggle(pkg); onClose(); }}
-                className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
-            >
-                <Power size={16} className={pkg.isEnabled ? "text-red-400" : "text-green-400"} />
-                {selectedCount > 1 ? "Toggle Selected" : (pkg.isEnabled ? "Disable" : "Enable")}
-            </button>
-
-
+            {/* Rating + favourite (user_metadata, version-agnostic per family) */}
+            <div className="flex items-center justify-between px-3 py-1.5">
+                <RatingFavoriteControl
+                    rating={rating}
+                    isFavorite={isFavorite}
+                    onRate={rate}
+                    onToggleFavorite={toggleFavorite}
+                    size={15}
+                />
+            </div>
 
             <div className="border-t border-gray-700 my-1"></div>
 
-            {/* Optimization Actions */}
-            {(pkg.isExactDuplicate) && (
-                <>
-                    <div className="h-px bg-gray-700 my-1 mx-2" />
-                    <button
-                        onClick={() => { onMerge(pkg); onClose(); }}
-                        className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
-                    >
-                        <Layers size={16} className="text-purple-400" />
-                        Merge to Root
-                    </button>
-                    <button
-                        onClick={() => { onMergeInPlace(pkg); onClose(); }}
-                        className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
-                    >
-                        <Layers size={16} className="text-purple-400" />
-                        Merge in Place
-                    </button>
-                </>
-            )}
-            {/* Obsolete Fix (Non-Duplicate) */}
-            {(!pkg.isExactDuplicate && pkg.isDuplicate) && (
+            {regularItems.map(item => (
                 <button
-                    onClick={() => { onResolve(pkg); onClose(); }}
+                    key={item.key}
+                    onClick={() => { item.onClick(); onClose(); }}
                     className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
                 >
-                    <Sparkles size={16} className="text-yellow-400" />
-                    Fix Obsolete
+                    <item.icon size={16} className={actionIconClassName(item.key, pkg)} />
+                    {item.label}
                 </button>
-            )}
+            ))}
 
-            {!isWeb && (
+            {dangerItems.length > 0 && <div className="border-t border-gray-700 my-1"></div>}
+
+            {dangerItems.map(item => (
                 <button
-                    onClick={() => { onOpenFolder(pkg); onClose(); }}
-                    className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
+                    key={item.key}
+                    onClick={() => { item.onClick(); onClose(); }}
+                    className="w-full text-left px-3 py-2 hover:bg-red-500/20 text-red-400 hover:text-red-300 flex items-center gap-2"
                 >
-                    <FolderOpen size={16} className="text-blue-400" />
-                    Open Folder
+                    <item.icon size={16} />
+                    {item.label}
                 </button>
-            )}
-
-            <button
-                onClick={() => { onCopyPath(pkg); onClose(); }}
-                className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
-            >
-                <FileCode size={16} className="text-gray-400" />
-                Copy Path
-            </button>
-
-            {!isWeb && (
-                <>
-                    <button
-                        onClick={() => { onCopyFiles([pkg]); onClose(); }}
-                        className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
-                    >
-                        <Copy size={16} className="text-gray-400" />
-                        {selectedCount > 1 ? "Copy Selected Files" : "Copy File"}
-                    </button>
-
-                    <button
-                        onClick={() => { onCutFile(pkg); onClose(); }}
-                        className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
-                    >
-                        <Scissors size={16} className="text-gray-400" />
-                        Cut File
-                    </button>
-                </>
-            )}
-
-
-            <button
-                onClick={() => { onDownload(pkg); onClose(); }}
-                className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
-            >
-                <Download size={16} className="text-blue-400" />
-                Install to Library
-            </button>
-
-            {isWeb && (
-                <button
-                    onClick={() => {
-                        onClose();
-                        // Download directly
-                        const token = localStorage.getItem('yavam_auth_token');
-                        const url = `/files/?path=${encodeURIComponent(pkg.filePath)}&token=${token || ''}`;
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = pkg.fileName;
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                    }}
-                    className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-white"
-                >
-                    <Download size={16} className="text-green-400" />
-                    Download File
-                </button>
-            )}
-
-            <div className="border-t border-gray-700 my-1"></div>
-
-            <button
-                onClick={() => { onDelete(pkg); onClose(); }}
-                className="w-full text-left px-3 py-2 hover:bg-red-500/20 text-red-400 hover:text-red-300 flex items-center gap-2"
-            >
-                <Trash2 size={16} />
-                Delete {selectedCount > 1 ? `(${selectedCount})` : ""}
-            </button>
+            ))}
         </div>
     );
 };
