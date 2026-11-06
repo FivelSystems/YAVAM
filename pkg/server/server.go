@@ -575,8 +575,11 @@ func (s *Server) Start(port string, libraries []string) error {
 		cfg := s.manager.GetConfig()
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"webMode":      true,
-			"libraries":    cfg.Libraries,
+			"webMode": true,
+			// config.json's own Libraries field is stale (zeroed post-SQLite
+			// migration); the DB is the source of truth, same as App.GetConfig
+			// already does for the desktop bridge.
+			"libraries":    s.manager.GetLibraries(),
 			"version":      s.version,
 			"publicAccess": cfg.PublicAccess,
 			"setupDone":    cfg.SetupDone,
