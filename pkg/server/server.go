@@ -4,11 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"io/fs"
 	"net"
 	"net/http"
-	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -591,73 +589,7 @@ func (s *Server) Start(port string, libraries []string) error {
 	})
 
 	// Upload Endpoint
-	mux.Handle("/api/upload", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		// 500MB max limit
-		if err := r.ParseMultipartForm(500 << 20); err != nil {
-			s.writeError(w, "File too large", http.StatusBadRequest)
-			return
-		}
-
-		files := r.MultipartForm.File["file"]
-		// User requested path (or default to active)
-		targetPath := r.FormValue("path")
-		if targetPath == "" {
-			s.writeError(w, "Target path is required", 400)
-			return
-		}
-
-		// Security Check
-		if err := s.manager.ValidatePath(targetPath); err != nil {
-			s.writeError(w, "Access denied: Invalid library path", 403)
-			return
-		}
-
-		downloadDir := targetPath
-
-		// Calculate potential progress
-		// We can't easily know byte progress without reading all files first, which wastes memory.
-		// We track file count progress instead, matching Desktop behavior.
-		totalFiles := len(files)
-		count := 0
-
-		for i, fileHeader := range files {
-			// Broadcast Progress
-			current := i + 1 // 1-based index
-			s.Broadcast("scan:progress", map[string]int{
-				"current": current,
-				"total":   totalFiles,
-			})
-
-			file, err := fileHeader.Open()
-			if err != nil {
-				continue
-			}
-			defer file.Close()
-
-			dstPath := filepath.Join(downloadDir, filepath.Base(fileHeader.Filename))
-			dst, err := os.Create(dstPath)
-			if err != nil {
-				continue
-			}
-			defer dst.Close()
-
-			if _, err := io.Copy(dst, file); err == nil {
-				count++
-				s.log(fmt.Sprintf("Uploaded: %s (%d bytes)", fileHeader.Filename, fileHeader.Size))
-			}
-		}
-
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": true,
-			"count":   count,
-		})
-	})))
+	mux.Handle("/api/upload", s.AuthMiddleware(http.HandlerFunc(s.handleUpload)))
 
 	// Toggle Endpoint
 	mux.Handle("/api/toggle", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
