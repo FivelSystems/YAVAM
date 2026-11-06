@@ -1,6 +1,6 @@
 # Design: Left sidebar filter panel layout
 
-> **Status:** Draft — ready for implementation on `feature/ui-rework`.
+> **Status:** Implemented on `feature/ui-rework`.
 > **Roadmap:** [Smart search + sidebar redesign](../roadmap/search.md) (the
 > icon-only sidebar described there is a later, larger rework; this spec covers
 > the current full-width sidebar's filter panel and is a compatible stepping

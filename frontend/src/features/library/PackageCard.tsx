@@ -204,7 +204,6 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
                         <h3 className={clsx("font-bold text-gray-200 text-sm truncate pr-2 transition-opacity", hidePackageNames && "opacity-0 select-none")} title={hidePackageNames ? "" : pkg.fileName}>
                             {pkg.meta.packageName || pkg.fileName}
                         </h3>
-                        {/* Status Icon + Rating/Favourite */}
                         <div className="flex items-center gap-1.5 shrink-0">
                             <RatingFavoriteBadge rating={pkg.rating} isFavorite={pkg.isFavorite} />
                             {statusIcon}

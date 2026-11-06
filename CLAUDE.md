@@ -199,7 +199,8 @@ We use [Conventional Branch](https://conventionalbranch.org/) and
 - [docs/WORKFLOWS.md](docs/WORKFLOWS.md) — how the CI workflows are wired.
 
 Commit style is `type(scope): description` (`feat`, `fix`, `refactor`, `test`,
-`chore`, `docs`; scopes like `backend`, `frontend`, `ui`, `security`, `docs`).
+`chore`, `docs`, `revert`; scopes like `backend`, `frontend`, `ui`, `security`,
+`docs`).
 
 ## Conventions & gotchas
 

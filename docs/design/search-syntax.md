@@ -1,6 +1,8 @@
 # Design: Tokenised search syntax
 
-> **Status:** Design — not yet implemented.
+> **Status:** Partially implemented — `status`, `creator`, `type`, `tag`, `size`,
+> `rating`, `favorite` are backed and filter live; `license` is parsed but not
+> yet backed (see issue #59); `^` and `library:` are not yet implemented.
 > **Roadmap:** [Smart search](../roadmap/search.md).
 
 The smart searchbar parses a space-separated list of tokens. Combining rule:
