@@ -5,6 +5,8 @@ interface ToggleProps {
     onChange: (checked: boolean) => void;
     label?: string; // Optional side label
     description?: string; // Optional description
+    /** Optional leading icon, rendered before the label (e.g. a Heart for favourites). */
+    icon?: React.ReactNode;
     disabled?: boolean;
     variant?: 'primary' | 'danger'; // Blue vs Red
     size?: 'sm' | 'md';
@@ -15,6 +17,7 @@ export const Toggle = ({
     onChange,
     label,
     description,
+    icon,
     disabled = false,
     variant = 'primary',
     size = 'md'
@@ -31,10 +34,13 @@ export const Toggle = ({
 
     return (
         <div className={clsx("flex items-center justify-between gap-4", disabled && "opacity-50 pointer-events-none")}>
-            {(label || description) && (
-                <div className="flex-1">
-                    {label && <h4 className="text-sm font-medium text-white">{label}</h4>}
-                    {description && <p className="text-xs text-gray-500">{description}</p>}
+            {(icon || label || description) && (
+                <div className="flex-1 flex items-center gap-2 min-w-0">
+                    {icon && <span className="shrink-0 flex items-center">{icon}</span>}
+                    <div className="min-w-0">
+                        {label && <h4 className={clsx("text-sm font-medium truncate", checked ? "text-white" : "text-gray-300")}>{label}</h4>}
+                        {description && <p className="text-xs text-gray-500">{description}</p>}
+                    </div>
                 </div>
             )}
 

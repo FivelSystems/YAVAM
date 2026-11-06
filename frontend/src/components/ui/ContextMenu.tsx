@@ -1,7 +1,8 @@
 import { useRef, useEffect, useState, useLayoutEffect } from 'react';
 import { VarPackage } from '../../types';
 import clsx from 'clsx';
-import { Power, FolderOpen, Copy, Trash2, FileCode, Scissors, Download, Layers, Sparkles, Star, Heart } from 'lucide-react';
+import { Power, FolderOpen, Copy, Trash2, FileCode, Scissors, Download, Layers, Sparkles, Heart } from 'lucide-react';
+import { RatingStars } from './RatingStars';
 
 interface ContextMenuProps {
     x: number;
@@ -23,28 +24,6 @@ interface ContextMenuProps {
     onSetFavorite: (pkg: VarPackage, favorite: boolean) => void;
 }
 
-// Controlled rating row for the right-click menu: `value` is the live rating,
-// `onRate` receives the star clicked (the parent resolves click-active-to-clear).
-const MenuRatingStars = ({ value, onRate }: { value: number, onRate: (n: number) => void }) => {
-    const [hover, setHover] = useState(0);
-    const shown = hover || value;
-    return (
-        <div className="flex items-center gap-0.5" onMouseLeave={() => setHover(0)}>
-            {[1, 2, 3, 4, 5].map(n => (
-                <button
-                    key={n}
-                    onClick={() => onRate(n)}
-                    onMouseEnter={() => setHover(n)}
-                    className="p-0.5 text-gray-500 hover:text-yellow-400 transition-colors"
-                    title={`Rate ${n} star${n > 1 ? 's' : ''}`}
-                >
-                    <Star size={15} className={clsx(n <= shown ? "fill-yellow-400 text-yellow-400" : "fill-transparent")} />
-                </button>
-            ))}
-        </div>
-    );
-};
-
 const ContextMenu = ({ x, y, pkg, selectedCount = 0, onClose, onToggle, onOpenFolder, onDownload, onCopyPath, onCopyFiles, onCutFile, onDelete, onMerge, onMergeInPlace, onResolve, onSetRating, onSetFavorite }: ContextMenuProps) => {
     const ref = useRef<HTMLDivElement>(null);
     const [position, setPosition] = useState({ top: y, left: x });
@@ -59,7 +38,7 @@ const ContextMenu = ({ x, y, pkg, selectedCount = 0, onClose, onToggle, onOpenFo
     useEffect(() => {
         setRating(pkg?.rating ?? 0);
         setIsFavorite(!!pkg?.isFavorite);
-    }, [pkg?.filePath]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [pkg?.filePath, pkg?.rating, pkg?.isFavorite]);
 
     const rate = (n: number) => {
         if (!pkg) return;
@@ -129,7 +108,7 @@ const ContextMenu = ({ x, y, pkg, selectedCount = 0, onClose, onToggle, onOpenFo
             {!isWeb && (
                 <>
                     <div className="flex items-center justify-between px-3 py-1.5">
-                        <MenuRatingStars value={rating} onRate={rate} />
+                        <RatingStars value={rating} onChange={rate} size={15} gapClassName="gap-0.5" />
                         <button
                             onClick={toggleFavorite}
                             className={clsx("p-0.5 transition-colors", isFavorite ? "text-pink-400" : "text-gray-500 hover:text-pink-400")}

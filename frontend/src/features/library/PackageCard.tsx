@@ -1,9 +1,26 @@
 import { useRef, useState, useEffect, memo } from 'react';
 import { VarPackage } from '../../types';
 import clsx from 'clsx';
-import { AlertCircle, Check, AlertTriangle, Power, Copy } from 'lucide-react';
+import { AlertCircle, Check, AlertTriangle, Power, Copy, Star, Heart } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatBytes } from '../../utils/format';
+
+/** Compact rating/favourite indicator — the only persistent sign of either on the
+ * card itself (previously only visible via the context menu that set them, #54). */
+const RatingFavoriteBadge = ({ rating, isFavorite, className }: { rating?: number; isFavorite?: boolean; className?: string }) => {
+    if (!rating && !isFavorite) return null;
+    return (
+        <div className={clsx("flex items-center gap-1 bg-gray-900/80 backdrop-blur-sm px-1.5 py-0.5 rounded-full border border-gray-700/50 shrink-0", className)}>
+            {!!isFavorite && <Heart size={11} className="fill-pink-400 text-pink-400" />}
+            {!!rating && (
+                <span className="flex items-center gap-0.5 text-[10px] font-semibold text-yellow-400">
+                    <Star size={11} className="fill-yellow-400 text-yellow-400" />
+                    {rating}
+                </span>
+            )}
+        </div>
+    );
+};
 
 interface PackageCardProps {
     pkg: VarPackage;
@@ -187,8 +204,11 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
                         <h3 className={clsx("font-bold text-gray-200 text-sm truncate pr-2 transition-opacity", hidePackageNames && "opacity-0 select-none")} title={hidePackageNames ? "" : pkg.fileName}>
                             {pkg.meta.packageName || pkg.fileName}
                         </h3>
-                        {/* Status Icon */}
-                        <div className="shrink-0">{statusIcon}</div>
+                        {/* Status Icon + Rating/Favourite */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                            <RatingFavoriteBadge rating={pkg.rating} isFavorite={pkg.isFavorite} />
+                            {statusIcon}
+                        </div>
                     </div>
                     <div className="flex justify-between items-center text-xs text-gray-500">
                         <span className={clsx("truncate transition-opacity", hideCreatorNames && "opacity-0 select-none")}>
@@ -249,6 +269,13 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
                     </div>
                 )}
             </div>
+
+            {/* Rating/Favourite — top-left corner, out of the way of the status icon */}
+            {(!!pkg.rating || !!pkg.isFavorite) && (
+                <div className="absolute top-2 left-2 z-10">
+                    <RatingFavoriteBadge rating={pkg.rating} isFavorite={pkg.isFavorite} />
+                </div>
+            )}
 
             {/* Gradient Overlay for Text Readability */}
             <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/40 to-transparent opacity-80 group-hover:opacity-90 transition-opacity" />

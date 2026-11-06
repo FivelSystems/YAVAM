@@ -10,6 +10,8 @@ export interface FilterOption {
     count?: number;
     /** Tints the count badge to flag a value that needs attention. */
     tone?: 'normal' | 'warning' | 'error';
+    /** Native tooltip explaining what this option means, for values whose label alone isn't self-explanatory. */
+    title?: string;
 }
 
 interface FilterDropdownProps {
@@ -28,7 +30,7 @@ interface FilterDropdownProps {
     emptyHint?: string;
 }
 
-const badgeTone = (tone: FilterOption['tone'], selected: boolean): string => {
+export const badgeTone = (tone: FilterOption['tone'], selected: boolean): string => {
     if (tone === 'warning') return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
     if (tone === 'error') return 'bg-red-500/20 text-red-400 border-red-500/30';
     return selected
@@ -94,27 +96,44 @@ export const FilterDropdown = ({
 
     useEffect(() => {
         if (!open) return;
-        if (searchable) searchRef.current?.focus();
 
-        const onDocMouseDown = (e: MouseEvent) => {
+        // On touch devices, autofocusing the search input pops the virtual
+        // keyboard — which fires a `resize` below. Let the user tap the field
+        // themselves instead (#55).
+        const isCoarsePointer = typeof window.matchMedia === 'function'
+            && window.matchMedia('(pointer: coarse)').matches;
+        if (searchable && !isCoarsePointer) searchRef.current?.focus();
+
+        const onDocPointerDown = (e: MouseEvent | TouchEvent) => {
             const t = e.target as Node;
             if (popoverRef.current?.contains(t) || triggerRef.current?.contains(t)) return;
             setOpen(false);
         };
         const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
-        // A dropdown anchored to a button in a scroll container detaches on
-        // scroll; closing is the least surprising behaviour (matches native).
-        const onScrollOrResize = () => setOpen(false);
 
-        document.addEventListener('mousedown', onDocMouseDown);
+        // A dropdown anchored to a button in a scroll container detaches on
+        // scroll/resize; closing is the least surprising behaviour (matches
+        // native). But most mobile browsers fire `window.resize` when the
+        // virtual keyboard opens/closes (height-only change) — that must NOT
+        // close the dropdown mid-typing, so only react to an actual width
+        // change (real resize/rotation), per #55.
+        const widthAtOpen = window.innerWidth;
+        const onResize = () => {
+            if (window.innerWidth !== widthAtOpen) setOpen(false);
+        };
+        const onScroll = () => setOpen(false);
+
+        document.addEventListener('mousedown', onDocPointerDown);
+        document.addEventListener('touchstart', onDocPointerDown);
         document.addEventListener('keydown', onKey);
-        window.addEventListener('resize', onScrollOrResize);
-        window.addEventListener('scroll', onScrollOrResize, true);
+        window.addEventListener('resize', onResize);
+        window.addEventListener('scroll', onScroll, true);
         return () => {
-            document.removeEventListener('mousedown', onDocMouseDown);
+            document.removeEventListener('mousedown', onDocPointerDown);
+            document.removeEventListener('touchstart', onDocPointerDown);
             document.removeEventListener('keydown', onKey);
-            window.removeEventListener('resize', onScrollOrResize);
-            window.removeEventListener('scroll', onScrollOrResize, true);
+            window.removeEventListener('resize', onResize);
+            window.removeEventListener('scroll', onScroll, true);
         };
     }, [open, searchable]);
 
@@ -182,6 +201,7 @@ export const FilterDropdown = ({
                                         key={opt.value}
                                         onClick={() => onToggle(opt.value)}
                                         onContextMenu={onOptionContextMenu ? (e) => { onOptionContextMenu(opt.value, e); setOpen(false); } : undefined}
+                                        title={opt.title}
                                         className={clsx(
                                             'w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-sm transition-colors',
                                             selected ? 'bg-blue-600/15 text-blue-300' : 'text-gray-300 hover:bg-gray-700/70 hover:text-white',

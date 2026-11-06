@@ -39,7 +39,7 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
     const { packages, scanError } = usePackageContext();
     const {
         filteredPkgs, currentPage, itemsPerPage, setCurrentPage,
-        searchQuery, setSearchQuery
+        searchQuery, setSearchQuery, clearFilters
     } = useFilterContext();
     const {
         selectedIds, selectedPackage, setSelectedPackage,
@@ -228,6 +228,13 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
     // Specifically check if selected package is visible in the CURRENT PAGE of the grid
     const isOffScreen = !!(selectedPackage && !currentSlice.some(p => p.filePath === selectedPackage.filePath));
 
+    // selectedPackage is a snapshot taken at selection time; rating/favourite
+    // edits patch the `packages` array in place, so the details panel must read
+    // the live object by filePath instead of the stale selection reference.
+    const livePackage = selectedPackage
+        ? packages.find(p => p.filePath === selectedPackage.filePath) ?? selectedPackage
+        : null;
+
     return (
         <div className="flex-1 flex overflow-hidden">
             <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
@@ -255,6 +262,8 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
                         hidePackageNames={censorThumbnails && hidePackageNames}
                         hideCreatorNames={censorThumbnails && hideCreatorNames}
                         highlightedRequest={highlightedRequest}
+                        isFiltered={searchQuery.trim().length > 0}
+                        onClearFilters={clearFilters}
                     />
                 </div>
 
@@ -274,7 +283,7 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
             <AnimatePresence>
                 {(selectedPackage && isDetailsPanelOpen) && (
                     <RightSidebar
-                        pkg={selectedPackage}
+                        pkg={livePackage ?? selectedPackage}
                         onClose={() => {
                             setIsDetailsPanelOpen(false);
                             setSelectedPackage(null);

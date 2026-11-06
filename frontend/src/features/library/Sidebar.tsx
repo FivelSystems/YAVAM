@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Layers, Package, Settings, CheckCircle2, Trash2, GripVertical, Download, Sparkles, Power, Star, Heart, Boxes, Users, Tags, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Layers, Package, Settings, CheckCircle2, Trash2, GripVertical, Download, Sparkles, Power, Heart, Boxes, Users, Tags, X } from 'lucide-react';
 import { VarPackage } from '../../types';
 import clsx from 'clsx';
 import { useMemo, useState, useEffect } from 'react';
@@ -9,8 +9,9 @@ import { useLibraryContext } from '../../context/LibraryContext';
 import { useActionContext } from '../../context/ActionContext';
 import { STATUS_FILTERS } from '../../constants';
 import { hasToken, toggleToken, getRating, setRating } from '../../utils/search';
-import { FilterDropdown, FilterOption } from '../../components/ui/FilterDropdown';
+import { FilterDropdown, FilterOption, badgeTone } from '../../components/ui/FilterDropdown';
 import { Toggle } from '../../components/ui/Toggle';
+import { RatingStars } from '../../components/ui/RatingStars';
 
 
 // Simple Library Item Component
@@ -48,34 +49,6 @@ const SidebarLibraryItem = ({ lib, isActive, count, onSelect, onRemove }: { lib:
     );
 };
 
-/**
- * An exact-rating control: clicking star N filters to packages rated exactly N;
- * clicking the active star again clears it. Emits `rating:N` into the shared
- * query, matched against each package's stored rating (user_metadata).
- */
-const RatingStars = ({ value, onChange }: { value: number, onChange: (n: number) => void }) => {
-    const [hover, setHover] = useState(0);
-    const shown = hover || value;
-    return (
-        <div className="flex items-center gap-1" onMouseLeave={() => setHover(0)}>
-            {[1, 2, 3, 4, 5].map(n => (
-                <button
-                    key={n}
-                    onClick={() => onChange(n)}
-                    onMouseEnter={() => setHover(n)}
-                    className="p-0.5 text-gray-500 hover:text-yellow-400 transition-colors"
-                    title={`Rated ${n} star${n > 1 ? 's' : ''}`}
-                >
-                    <Star size={18} className={clsx(n <= shown ? "fill-yellow-400 text-yellow-400" : "fill-transparent")} />
-                </button>
-            ))}
-            {value > 0 && (
-                <button onClick={() => onChange(0)} className="ml-1 text-[10px] text-gray-500 hover:text-white">clear</button>
-            )}
-        </div>
-    );
-};
-
 type SidebarProps = {
     // UI Only Props
     onOpenSettings: () => void;
@@ -85,6 +58,13 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
     // Context Consumption
     const { packages, creatorStatus, typeStatus } = usePackageContext();
     const { searchQuery, setSearchQuery } = useFilterContext();
+
+    // Rating/favourite persistence is desktop-only (no server endpoint yet) —
+    // mirrors the isWeb check already used to hide this in ContextMenu.tsx.
+    // @ts-ignore
+    const isWeb = !window.go;
+
+    const isStandalone = (p: VarPackage) => !p.meta?.dependencies || Object.keys(p.meta.dependencies).length === 0;
 
     // The sidebar composes the same tokenised query as the searchbar: a facet is
     // "active" when its token is present, and clicking it toggles that token.
@@ -188,7 +168,6 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
     const statusCounts = useMemo(() => {
         const validPkgs = packages.filter(p => !p.isCorrupt);
         const corruptPkgs = packages.filter(p => p.isCorrupt);
-        const isStandalone = (p: VarPackage) => !p.meta?.dependencies || Object.keys(p.meta.dependencies).length === 0;
 
         return {
             all: packages.length,
@@ -203,18 +182,24 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
         };
     }, [packages]);
 
-    // Status options, hidden when a bucket is empty (mirrors the old list).
+    // Status options, hidden when a bucket is empty (mirrors the old list) — UNLESS
+    // it's the active filter. A bucket that just emptied out (e.g. the last enabled
+    // package was disabled) must stay visible while selected, or the user is left
+    // with an invisible `status:enabled` token still constraining the grid to zero
+    // results, with no control in the list left to switch or clear it (#53).
     const statusOptions = useMemo<FilterOption[]>(() => {
-        const defs: { value: string, label: string, count: number, tone?: FilterOption['tone'] }[] = [
+        const defs: { value: string, label: string, count: number, tone?: FilterOption['tone'], title?: string }[] = [
             { value: 'enabled', label: 'Enabled', count: statusCounts.enabled },
             { value: 'disabled', label: 'Disabled', count: statusCounts.disabled },
             { value: 'missing-deps', label: 'Missing Deps', count: statusCounts.missingDeps, tone: 'error' },
             { value: 'version-conflicts', label: 'Conflicts', count: statusCounts.versionConflicts, tone: 'warning' },
             { value: 'exact-duplicates', label: 'Duplicates', count: statusCounts.exactDuplicates, tone: 'warning' },
             { value: 'corrupt', label: 'Corrupt', count: statusCounts.corrupt, tone: 'error' },
+            { value: 'standalone', label: 'Standalone', count: statusCounts.standalone, title: 'Self-contained: declares no dependencies of its own.' },
+            { value: 'removable', label: 'Removable', count: statusCounts.removable, title: "No other package depends on these, so removing them won't break anything." },
         ];
-        return defs.filter(d => d.count > 0);
-    }, [statusCounts]);
+        return defs.filter(d => d.count > 0 || statusActive(d.value));
+    }, [statusCounts, searchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
     return (
         <aside className="w-64 h-full bg-gray-800 border-r border-gray-700 flex flex-col shadow-xl z-20">
@@ -244,7 +229,7 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
                             </div>
                             {statusCounts.all > 0 && (
                                 <span className="block text-[10px] text-gray-500 leading-none mt-0.5" title="Total packages in this library">
-                                    {statusCounts.all.toLocaleString()} packages
+                                    {`${statusCounts.all.toLocaleString()} packages`}
                                 </span>
                             )}
                         </div>
@@ -352,50 +337,45 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
                     />
                 </div>
 
-                {/* Rating */}
-                <div className="px-1">
-                    <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Rating</span>
-                        {rating > 0 && <span className="text-[10px] text-gray-500">{rating} star{rating > 1 ? 's' : ''}</span>}
-                    </div>
-                    <RatingStars value={rating} onChange={changeRating} />
-                </div>
-
-                {/* Favourites + dependency-relationship toggles */}
-                <div className="space-y-3 border-t border-gray-700/50 pt-4 px-1">
-                    <button
-                        onClick={toggleFavorite}
-                        className={clsx(
-                            "w-full flex items-center gap-2 text-sm transition-colors",
-                            favoriteActive ? "text-pink-400" : "text-gray-400 hover:text-white"
-                        )}
-                    >
-                        <Heart size={16} className={clsx(favoriteActive && "fill-pink-400")} />
-                        <span className="font-medium">Only favourites</span>
-                    </button>
-
-                    <div>
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Dependency relationship</p>
-                        <div className="space-y-2.5">
-                            <div title="Self-contained: declares no dependencies of its own.">
-                                <Toggle
-                                    size="sm"
-                                    checked={statusActive('standalone')}
-                                    onChange={() => toggleStatus('standalone')}
-                                    label={`Standalone (${statusCounts.standalone})`}
-                                />
+                {/* Rating/favourites persistence is desktop-only: no server endpoint on web (#56) */}
+                {!isWeb && (
+                    <div className="space-y-3 border-t border-gray-700/50 pt-4 px-1">
+                        <div>
+                            <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-1.5">Rating</p>
+                            <div className={clsx(
+                                "flex items-center justify-between rounded-md border px-3 py-2",
+                                rating > 0
+                                    ? "bg-blue-600/10 border-blue-600/30 text-blue-300"
+                                    : "bg-gray-900/40 border-gray-700 text-gray-300",
+                            )}>
+                                <RatingStars value={rating} onChange={changeRating} showClearButton />
+                                {rating > 0 && (
+                                    <span className={clsx("text-[10px] px-1.5 py-0.5 rounded-full border shrink-0", badgeTone(undefined, true))}>
+                                        {rating} star{rating > 1 ? 's' : ''}
+                                    </span>
+                                )}
                             </div>
-                            <div title="No other package depends on these, so removing them won't break anything.">
+                        </div>
+
+                        <div>
+                            <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-1.5">Favourites</p>
+                            <div className={clsx(
+                                "rounded-md border px-3 py-2",
+                                favoriteActive
+                                    ? "bg-blue-600/10 border-blue-600/30 text-blue-300"
+                                    : "bg-gray-900/40 border-gray-700 text-gray-300",
+                            )}>
                                 <Toggle
                                     size="sm"
-                                    checked={statusActive('removable')}
-                                    onChange={() => toggleStatus('removable')}
-                                    label={`Removable (${statusCounts.removable})`}
+                                    checked={favoriteActive}
+                                    onChange={toggleFavorite}
+                                    icon={<Heart size={16} className={clsx(favoriteActive ? "fill-pink-400 text-pink-400" : "text-gray-400")} />}
+                                    label="Only favourites"
                                 />
                             </div>
                         </div>
                     </div>
-                </div>
+                )}
             </div>
 
             {/* Context Menu (Using handleSidebarAction from Context) */}
@@ -411,6 +391,8 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
                         if (contextMenu.key === STATUS_FILTERS.VERSION_CONFLICTS) return p.isDuplicate && !p.isCorrupt;
                         if (contextMenu.key === STATUS_FILTERS.EXACT_DUPLICATES) return p.isExactDuplicate && !p.isCorrupt;
                         if (contextMenu.key === STATUS_FILTERS.CORRUPT) return p.isCorrupt;
+                        if (contextMenu.key === STATUS_FILTERS.STANDALONE) return isStandalone(p) && !p.isCorrupt;
+                        if (contextMenu.key === STATUS_FILTERS.REMOVABLE) return p.isRemovable && !p.isCorrupt;
                     }
                     return false;
                 };
