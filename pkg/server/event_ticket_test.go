@@ -35,6 +35,10 @@ func (a *revocableAuthService) ValidateToken(token string) (*auth.User, error) {
 	return nil, auth.ErrInvalidToken
 }
 
+func (a *revocableAuthService) CheckToken(token string) (*auth.User, error) {
+	return a.ValidateToken(token)
+}
+
 func (a *revocableAuthService) revoke(token string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()

@@ -28,6 +28,10 @@ func (m *MockAuthService) ValidateToken(token string) (*auth.User, error) {
 	return nil, auth.ErrInvalidToken
 }
 
+func (m *MockAuthService) CheckToken(token string) (*auth.User, error) {
+	return m.ValidateToken(token)
+}
+
 func (m *MockAuthService) GenerateToken() (string, error) {
 	return "new-token", nil
 }

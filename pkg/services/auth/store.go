@@ -75,5 +75,40 @@ func (s *FileAuthStore) Save(config *AuthConfig) error {
 		return err
 	}
 
-	return os.WriteFile(s.filePath, data, authFilePermissions)
+	return s.writeAtomically(data)
+}
+
+// writeAtomically replaces the auth file via a temp file in the same
+// directory so a crash mid-write never leaves a truncated file behind.
+func (s *FileAuthStore) writeAtomically(data []byte) (err error) {
+	permissions := os.FileMode(authFilePermissions)
+	if info, statErr := os.Stat(s.filePath); statErr == nil {
+		permissions = info.Mode().Perm()
+	}
+
+	tempFile, err := os.CreateTemp(filepath.Dir(s.filePath), filepath.Base(s.filePath)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tempPath := tempFile.Name()
+	defer func() {
+		if err != nil {
+			tempFile.Close()
+			os.Remove(tempPath)
+		}
+	}()
+
+	if err = tempFile.Chmod(permissions); err != nil {
+		return err
+	}
+	if _, err = tempFile.Write(data); err != nil {
+		return err
+	}
+	if err = tempFile.Sync(); err != nil {
+		return err
+	}
+	if err = tempFile.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tempPath, s.filePath)
 }

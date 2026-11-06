@@ -72,7 +72,7 @@ func NewSimpleAuthServiceWithClock(configPath string, now func() time.Time) (*Si
 	needsPersist := s.loadSessions(config)
 	if needsPersist {
 		if err := s.persistState(); err != nil {
-			return nil, err
+			log.Printf("Failed to persist migrated sessions, continuing in memory: %v", err)
 		}
 	}
 	s.lastPersistedAt = s.now()
@@ -194,10 +194,18 @@ func (s *SimpleTokenAuthService) Login(username, password, deviceName string) (s
 		return "", ErrInvalidToken
 	}
 
+	s.mu.RLock()
+	verifiedHash := s.adminHash
+	s.mu.RUnlock()
+
+	if err := bcrypt.CompareHashAndPassword([]byte(verifiedHash), []byte(password)); err != nil {
+		return "", fmt.Errorf("invalid credentials")
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if err := bcrypt.CompareHashAndPassword([]byte(s.adminHash), []byte(password)); err != nil {
+	if s.adminHash != verifiedHash {
 		return "", fmt.Errorf("invalid credentials")
 	}
 
@@ -232,6 +240,17 @@ func (s *SimpleTokenAuthService) CompleteLogin(username, nonce, proof, deviceNam
 // Expired sessions are deleted and reported as ErrInvalidToken. The returned
 // User is a copy that carries the presented token.
 func (s *SimpleTokenAuthService) ValidateToken(token string) (*User, error) {
+	return s.lookupSession(token, true)
+}
+
+// CheckToken applies the same lookup, expiry and revocation rules as
+// ValidateToken but leaves the idle window untouched, so background
+// re-verification does not keep a session alive.
+func (s *SimpleTokenAuthService) CheckToken(token string) (*User, error) {
+	return s.lookupSession(token, false)
+}
+
+func (s *SimpleTokenAuthService) lookupSession(token string, slideIdleWindow bool) (*User, error) {
 	tokenHash := hashToken(token)
 	now := s.now()
 
@@ -249,9 +268,11 @@ func (s *SimpleTokenAuthService) ValidateToken(token string) (*User, error) {
 		return nil, ErrInvalidToken
 	}
 
-	session.LastUsedAt = now
-	if now.Sub(s.lastPersistedAt) >= lastUsedPersistInterval {
-		s.persistOrLog()
+	if slideIdleWindow {
+		session.LastUsedAt = now
+		if now.Sub(s.lastPersistedAt) >= lastUsedPersistInterval {
+			s.persistOrLog()
+		}
 	}
 
 	user := toUser(session)

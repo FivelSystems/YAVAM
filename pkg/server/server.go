@@ -44,6 +44,7 @@ type Server struct {
 	scanWg sync.WaitGroup
 
 	tickets                *eventTicketStore
+	ticketsInit            sync.Once
 	sessionRecheckInterval time.Duration
 
 	SkipEvents bool // For testing
@@ -210,7 +211,7 @@ func (s *Server) Start(port string, libraries []string) error {
 			case <-notify:
 				return
 			case <-sessionRecheck.C:
-				if !s.sessionIsValid(sessionToken) {
+				if !s.sessionStillValid(sessionToken) {
 					return
 				}
 			case msg := <-clientChan:
