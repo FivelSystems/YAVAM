@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+﻿import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { initWailsPolyfill } from './wails-polyfill';
 
 describe('Wails Polyfill SSE Logic', () => {
@@ -23,17 +23,19 @@ describe('Wails Polyfill SSE Logic', () => {
         });
         globalThis.EventSource = MockEventSource as any;
 
-        // Timer Mock
+        vi.stubGlobal('localStorage', { getItem: () => null, setItem: vi.fn(), removeItem: vi.fn() });
         vi.useFakeTimers();
     });
 
     afterEach(() => {
         vi.clearAllMocks();
         vi.useRealTimers();
+        vi.unstubAllGlobals();
     });
 
-    it('should stop reconnecting if auth:logout event is fired', () => {
+    it('should stop reconnecting if auth:logout event is fired', async () => {
         initWailsPolyfill();
+        await vi.advanceTimersByTimeAsync(0);
         expect(globalThis.EventSource).toHaveBeenCalled();
 
         // Simulate Error
@@ -44,7 +46,7 @@ describe('Wails Polyfill SSE Logic', () => {
         window.dispatchEvent(new Event('auth:logout'));
 
         // Fast forward time
-        vi.advanceTimersByTime(6000);
+        await vi.advanceTimersByTimeAsync(60000);
 
         // Should NOT have reconnected
         expect(globalThis.EventSource).toHaveBeenCalledTimes(1);
