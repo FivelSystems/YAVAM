@@ -156,24 +156,14 @@ func (m *Manager) ValidatePath(path string) error {
 	return nil
 }
 
-// validatePath ensures the path is within the allowed root
-func (m *Manager) validatePath(path string, root string) bool {
-	// Basic check: resolve absolute paths and ensure prefix matches
-	rel, err := filepath.Rel(root, path)
-	if err != nil {
-		return false
+// ValidatePaths applies ValidatePath to every entry and fails on the first rejection.
+func (m *Manager) ValidatePaths(paths []string) error {
+	for _, path := range paths {
+		if err := m.ValidatePath(path); err != nil {
+			return err
+		}
 	}
-	if strings.HasPrefix(rel, "..") {
-		return false
-	}
-
-	// Check extension
-	lowerPath := strings.ToLower(path)
-	if !strings.HasSuffix(lowerPath, ".var") && !strings.HasSuffix(lowerPath, ".var.disabled") {
-		return false
-	}
-
-	return true
+	return nil
 }
 
 // User Configuration Methods
@@ -192,18 +182,27 @@ func (m *Manager) DeleteToTrash(path string) error {
 
 // CopyFilesToClipboard copies the file objects to the clipboard (so they can be pasted in Explorer)
 func (m *Manager) CopyFilesToClipboard(paths []string) error {
+	if err := m.ValidatePaths(paths); err != nil {
+		return err
+	}
 	return m.system.CopyFilesToClipboard(paths)
 }
 
 // CutFileToClipboard copies the file to clipboard with "Move" effect (Cut)
-// CutFileToClipboard copies the file to clipboard with "Move" effect (Cut)
 func (m *Manager) CutFileToClipboard(path string) error {
+	if err := m.ValidatePath(path); err != nil {
+		return err
+	}
 	return m.system.CutFileToClipboard(path)
 }
 
-// DownloadPackage copies the package to the destination folder
+// DownloadPackage copies a library package to destDir. Only the source is
+// validated: the destination is a user-chosen export folder (or the default
+// Downloads folder) and is intentionally outside the configured libraries.
 func (m *Manager) DownloadPackage(pkgPath string, destDir string) error {
-	// Check source
+	if err := m.ValidatePath(pkgPath); err != nil {
+		return err
+	}
 	sourceFile, err := os.Open(pkgPath)
 	if err != nil {
 		return err
