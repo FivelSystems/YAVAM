@@ -19,21 +19,32 @@ const (
 	// SessionIdleTimeout is how long a session may go unused before it expires.
 	SessionIdleTimeout = 14 * 24 * time.Hour
 
-	// lastUsedPersistInterval bounds how often sliding last-used updates reach disk.
-	lastUsedPersistInterval = time.Minute
+	// persistRetryInterval bounds how often sliding last-used updates are
+	// written to disk, and how often a failing write is retried or logged.
+	persistRetryInterval = time.Minute
 
 	tokenByteLength     = 32
 	sessionIDByteLength = 8
 )
 
+// authStore is the persistence the service needs; tests substitute failing ones.
+type authStore interface {
+	Load() (*AuthConfig, error)
+	Save(config *AuthConfig) error
+}
+
 // SimpleTokenAuthService implements AuthService using Bcrypt
 type SimpleTokenAuthService struct {
-	mu              sync.RWMutex
-	sessions        map[string]*StoredSession // keyed by hashToken(token)
-	adminHash       string                    // Bcrypt hash of password
-	store           *FileAuthStore
-	now             func() time.Time
-	lastPersistedAt time.Time
+	mu        sync.RWMutex
+	sessions  map[string]*StoredSession // keyed by hashToken(token)
+	adminHash string                    // Bcrypt hash of password
+	store     authStore
+	now       func() time.Time
+
+	// lastPersistAttemptAt advances on failed writes too, so a failing disk is
+	// retried (and logged) once per persistRetryInterval, not on every request.
+	lastPersistAttemptAt time.Time
+	lastFailureLoggedAt  time.Time
 }
 
 func NewSimpleAuthService(configPath string) (*SimpleTokenAuthService, error) {
@@ -42,7 +53,10 @@ func NewSimpleAuthService(configPath string) (*SimpleTokenAuthService, error) {
 
 // NewSimpleAuthServiceWithClock lets tests control session expiry without sleeping.
 func NewSimpleAuthServiceWithClock(configPath string, now func() time.Time) (*SimpleTokenAuthService, error) {
-	store := NewFileAuthStore(configPath)
+	return newSimpleAuthServiceWithStore(NewFileAuthStore(configPath), now)
+}
+
+func newSimpleAuthServiceWithStore(store authStore, now func() time.Time) (*SimpleTokenAuthService, error) {
 	config, err := store.Load()
 	if err != nil {
 		return nil, err
@@ -69,25 +83,30 @@ func NewSimpleAuthServiceWithClock(configPath string, now func() time.Time) (*Si
 		now:       now,
 	}
 
-	needsPersist := s.loadSessions(config)
+	needsPersist, migratedHashes := s.loadSessions(config)
 	if needsPersist {
 		if err := s.persistState(); err != nil {
-			log.Printf("Failed to persist migrated sessions, continuing in memory: %v", err)
+			// Plaintext legacy tokens would stay on disk, so do not honour them
+			// in memory either; their owners simply log in again.
+			for _, tokenHash := range migratedHashes {
+				delete(s.sessions, tokenHash)
+			}
+			log.Printf("Failed to persist migrated sessions, dropped %d legacy sessions: %v", len(migratedHashes), err)
 		}
 	}
-	s.lastPersistedAt = s.now()
+	s.lastPersistAttemptAt = s.now()
 
 	return s, nil
 }
 
 // loadSessions restores persisted sessions, converting legacy raw-token
 // entries into hashed ones and dropping expired ones. It reports whether the
-// on-disk file must be rewritten.
-func (s *SimpleTokenAuthService) loadSessions(config *AuthConfig) bool {
+// on-disk file must be rewritten and which hashes came from legacy entries.
+// A legacy entry never overwrites an already-hashed record.
+func (s *SimpleTokenAuthService) loadSessions(config *AuthConfig) (needsPersist bool, migratedHashes []string) {
 	if config == nil {
-		return false
+		return false, nil
 	}
-	needsPersist := false
 	now := s.now()
 
 	for tokenHash, session := range config.Sessions {
@@ -103,7 +122,11 @@ func (s *SimpleTokenAuthService) loadSessions(config *AuthConfig) bool {
 		if legacy == nil {
 			continue
 		}
-		s.sessions[hashToken(rawToken)] = &StoredSession{
+		tokenHash := hashToken(rawToken)
+		if _, alreadyHashed := s.sessions[tokenHash]; alreadyHashed {
+			continue
+		}
+		s.sessions[tokenHash] = &StoredSession{
 			ID:         legacy.ID,
 			Username:   legacy.Username,
 			Role:       legacy.Role,
@@ -112,9 +135,10 @@ func (s *SimpleTokenAuthService) loadSessions(config *AuthConfig) bool {
 			CreatedAt:  now,
 			LastUsedAt: now,
 		}
+		migratedHashes = append(migratedHashes, tokenHash)
 	}
 
-	return needsPersist
+	return needsPersist, migratedHashes
 }
 
 func hashToken(token string) string {
@@ -136,16 +160,15 @@ func (s *SimpleTokenAuthService) isExpired(session *StoredSession, now time.Time
 }
 
 func (s *SimpleTokenAuthService) persistState() error {
-	if err := s.store.Save(&AuthConfig{
+	s.lastPersistAttemptAt = s.now()
+	return s.store.Save(&AuthConfig{
 		AdminHash: s.adminHash,
 		Sessions:  s.sessions,
-	}); err != nil {
-		return err
-	}
-	s.lastPersistedAt = s.now()
-	return nil
+	})
 }
 
+// SetPassword changes the admin password only if it could be persisted; on
+// failure the previous password stays in effect.
 func (s *SimpleTokenAuthService) SetPassword(newPassword string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -154,8 +177,13 @@ func (s *SimpleTokenAuthService) SetPassword(newPassword string) error {
 	if err != nil {
 		return err
 	}
+	previousHash := s.adminHash
 	s.adminHash = string(hash)
-	return s.persistState()
+	if err := s.persistState(); err != nil {
+		s.adminHash = previousHash
+		return err
+	}
+	return nil
 }
 
 // InitiateLogin is deprecated/noop in bcrypt flow but kept for interface/api compatibility if strictly needed,
@@ -270,7 +298,7 @@ func (s *SimpleTokenAuthService) lookupSession(token string, slideIdleWindow boo
 
 	if slideIdleWindow {
 		session.LastUsedAt = now
-		if now.Sub(s.lastPersistedAt) >= lastUsedPersistInterval {
+		if now.Sub(s.lastPersistAttemptAt) >= persistRetryInterval {
 			s.persistOrLog()
 		}
 	}
@@ -281,7 +309,13 @@ func (s *SimpleTokenAuthService) lookupSession(token string, slideIdleWindow boo
 }
 
 func (s *SimpleTokenAuthService) persistOrLog() {
-	if err := s.persistState(); err != nil {
+	err := s.persistState()
+	if err == nil {
+		return
+	}
+	now := s.now()
+	if now.Sub(s.lastFailureLoggedAt) >= persistRetryInterval {
+		s.lastFailureLoggedAt = now
 		log.Printf("Failed to persist sessions: %v", err)
 	}
 }

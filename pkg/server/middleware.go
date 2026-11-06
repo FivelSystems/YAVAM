@@ -5,8 +5,32 @@ import (
 	"strings"
 )
 
-// AuthMiddleware protects routes requiring authentication
+// AuthMiddleware protects routes requiring authentication and extends the
+// session's idle window on each accepted request.
 func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
+	return s.authenticate(next, s.sessionTokenValidator(true))
+}
+
+// NonSlidingAuthMiddleware applies the same rules as AuthMiddleware for routes
+// that are bookkeeping around a session (such as event-ticket issuance) and
+// must not keep it alive.
+func (s *Server) NonSlidingAuthMiddleware(next http.Handler) http.Handler {
+	return s.authenticate(next, s.sessionTokenValidator(false))
+}
+
+func (s *Server) sessionTokenValidator(slideIdleWindow bool) func(token string) error {
+	return func(token string) error {
+		var err error
+		if slideIdleWindow {
+			_, err = s.auth.ValidateToken(token)
+		} else {
+			_, err = s.auth.CheckToken(token)
+		}
+		return err
+	}
+}
+
+func (s *Server) authenticate(next http.Handler, validateToken func(token string) error) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// 1. Get Token from Header or Query
 		token := ""
@@ -24,8 +48,7 @@ func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 
 		// 2. Validate Token
 		if token != "" {
-			_, err := s.auth.ValidateToken(token)
-			if err == nil {
+			if err := validateToken(token); err == nil {
 				// Token Valid -> Admin Access
 				next.ServeHTTP(w, r)
 				return

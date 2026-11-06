@@ -240,7 +240,7 @@ func TestLastUsedPersistenceIsThrottled(t *testing.T) {
 		return time.Time{}
 	}
 
-	clock.Advance(lastUsedPersistInterval / 4)
+	clock.Advance(persistRetryInterval / 4)
 	if _, err := svc.ValidateToken(token); err != nil {
 		t.Fatal(err)
 	}
@@ -248,7 +248,7 @@ func TestLastUsedPersistenceIsThrottled(t *testing.T) {
 		t.Fatalf("last-used should not be persisted within throttle window, got %v", got)
 	}
 
-	clock.Advance(lastUsedPersistInterval)
+	clock.Advance(persistRetryInterval)
 	if _, err := svc.ValidateToken(token); err != nil {
 		t.Fatal(err)
 	}
