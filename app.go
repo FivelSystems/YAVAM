@@ -166,9 +166,6 @@ func (a *App) OpenFolderInExplorer(path string) {
 }
 
 func (a *App) DeleteFileToRecycleBin(path string) error {
-	if err := a.manager.ValidatePath(path); err != nil {
-		return err
-	}
 	return a.manager.DeleteToTrash(path)
 }
 
@@ -179,9 +176,7 @@ func (a *App) BulkDeleteFilesToRecycleBin(paths []string) []models.BulkDeleteRes
 	results := make([]models.BulkDeleteResult, 0, len(paths))
 	for _, path := range paths {
 		res := models.BulkDeleteResult{FilePath: path}
-		if err := a.manager.ValidatePath(path); err != nil {
-			res.Error = err.Error()
-		} else if err := a.manager.DeleteToTrash(path); err != nil {
+		if err := a.manager.DeleteToTrash(path); err != nil {
 			res.Error = err.Error()
 		} else {
 			res.Success = true
@@ -205,9 +200,7 @@ func (a *App) BulkDeleteFilesToRecycleBinAsync(paths []string) {
 
 		for i, path := range paths {
 			var errStr string
-			if err := a.manager.ValidatePath(path); err != nil {
-				errStr = err.Error()
-			} else if err := a.manager.DeleteToTrash(path); err != nil {
+			if err := a.manager.DeleteToTrash(path); err != nil {
 				errStr = err.Error()
 			} else {
 				succeeded++
@@ -463,10 +456,7 @@ func (a *App) DisableOldVersions(creator string, pkgName string, vamPath string)
 
 // InstallFiles handles dropped files
 func (a *App) InstallFiles(files []string, vamPath string) ([]string, error) {
-	if err := a.manager.ValidatePath(vamPath); err != nil {
-		return nil, err
-	}
-	fmt.Printf("Backend received files to install: %v\n", files)
+	fmt.Printf("Backend received %d files to install\n", len(files))
 	return a.manager.InstallPackage(files, vamPath, func(current, total int) {
 		runtime.EventsEmit(a.ctx, "scan:progress", map[string]int{"current": current, "total": total})
 	})

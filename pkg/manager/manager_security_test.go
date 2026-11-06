@@ -16,7 +16,7 @@ type recordingSystemService struct {
 }
 
 func (s *recordingSystemService) GetDiskSpace(string) (system.DiskSpaceInfo, error) {
-	return system.DiskSpaceInfo{}, nil
+	return system.DiskSpaceInfo{Free: 1 << 40, Total: 1 << 40, TotalFree: 1 << 40}, nil
 }
 func (s *recordingSystemService) OpenFolder(string) error      { return nil }
 func (s *recordingSystemService) DeleteToTrash(string) error   { return nil }

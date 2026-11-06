@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net"
@@ -92,6 +93,15 @@ func (s *Server) writeError(w http.ResponseWriter, message string, code int) {
 		"success": false,
 		"message": message,
 	})
+}
+
+// writeManagerError reports a manager failure, mapping a rejected path to 403.
+func (s *Server) writeManagerError(w http.ResponseWriter, err error) {
+	if errors.Is(err, manager.ErrPathNotAllowed) {
+		s.writeError(w, "Security violation: path not allowed", http.StatusForbidden)
+		return
+	}
+	s.writeError(w, err.Error(), http.StatusInternalServerError)
 }
 
 func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
@@ -629,7 +639,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		newPath, err := s.manager.TogglePackage(nil, req.FilePath, req.Enable, targetLib, req.Merge)
 		if err != nil {
 			s.log(fmt.Sprintf("Error toggling package: %v", err))
-			s.writeError(w, err.Error(), 500)
+			s.writeManagerError(w, err)
 			return
 		}
 
@@ -703,20 +713,15 @@ func (s *Server) Start(port string, libraries []string) error {
 			return
 		}
 
-		// Security Check: Ensure all paths are somewhat valid?
-		// Manager usually handles exact validation, but ensuring containment is good practice.
-		// But LibraryPath might be dynamic.
-		// For now, assume Manager logic is robust or add basic check:
 		if req.LibraryPath == "" {
 			s.writeError(w, "Library path is required", 400)
 			return
 		}
 
-		// Call Manager
 		res, err := s.manager.ResolveConflicts(req.KeepPath, req.Others, req.LibraryPath)
 		if err != nil {
 			s.log(fmt.Sprintf("Error resolving conflicts: %v", err))
-			s.writeError(w, err.Error(), 500)
+			s.writeManagerError(w, err)
 			return
 		}
 
@@ -746,16 +751,6 @@ func (s *Server) Start(port string, libraries []string) error {
 			return
 		}
 
-		// Security check: ensure source files are in allowed libraries?
-		// CopyPackagesToLibrary reads from src.
-		// We should validate sources are in s.libraries OR activePath.
-		for _, src := range req.FilePaths {
-			if err := s.manager.ValidatePath(src); err != nil {
-				s.writeError(w, fmt.Sprintf("Access denied: Source file %s not in allowed libraries", src), 403)
-				return
-			}
-		}
-
 		collisions, err := s.manager.CopyPackagesToLibrary(req.FilePaths, destPath, req.Overwrite, func(current, total int, filename string, status string) {
 			s.Broadcast("install-progress", map[string]interface{}{
 				"current":  current,
@@ -766,7 +761,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		})
 		if err != nil {
 			s.log(fmt.Sprintf("Error installing packages: %v", err))
-			s.writeError(w, err.Error(), 500)
+			s.writeManagerError(w, err)
 			return
 		}
 
