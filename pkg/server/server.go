@@ -702,6 +702,72 @@ func (s *Server) Start(port string, libraries []string) error {
 		})
 	})))
 
+	// Package Rating Endpoint
+	mux.Handle("/api/package-rating", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Family string `json:"family"`
+			Rating int    `json:"rating"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.writeError(w, err.Error(), 400)
+			return
+		}
+		if req.Family == "" {
+			s.writeError(w, "Family is required", 400)
+			return
+		}
+		if req.Rating < 0 || req.Rating > 5 {
+			s.writeError(w, "Rating must be between 0 and 5", 400)
+			return
+		}
+
+		if err := s.manager.SetPackageRating(req.Family, req.Rating); err != nil {
+			s.log(fmt.Sprintf("Error setting package rating: %v", err))
+			s.writeError(w, err.Error(), 500)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+		})
+	})))
+
+	// Package Favorite Endpoint
+	mux.Handle("/api/package-favorite", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			Family   string `json:"family"`
+			Favorite bool   `json:"favorite"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			s.writeError(w, err.Error(), 400)
+			return
+		}
+		if req.Family == "" {
+			s.writeError(w, "Family is required", 400)
+			return
+		}
+
+		if err := s.manager.SetPackageFavorite(req.Family, req.Favorite); err != nil {
+			s.log(fmt.Sprintf("Error setting package favorite: %v", err))
+			s.writeError(w, err.Error(), 500)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+		})
+	})))
+
 	// Delete Endpoint
 	mux.Handle("/api/delete", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
