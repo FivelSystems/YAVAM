@@ -13,6 +13,9 @@ describe('CardGrid empty state (#57 — inline clear-filters escape hatch)', () 
                 totalCount={430}
                 onContextMenu={noop}
                 onSelect={noop}
+                onRate={noop}
+                onToggleFavorite={noop}
+                onOpenActionSheet={noop}
                 viewMode="grid"
                 isFiltered
                 onClearFilters={onClearFilters}
@@ -31,6 +34,9 @@ describe('CardGrid empty state (#57 — inline clear-filters escape hatch)', () 
                 totalCount={0}
                 onContextMenu={noop}
                 onSelect={noop}
+                onRate={noop}
+                onToggleFavorite={noop}
+                onOpenActionSheet={noop}
                 viewMode="grid"
                 isFiltered={false}
             />
@@ -45,6 +51,9 @@ describe('CardGrid empty state (#57 — inline clear-filters escape hatch)', () 
                 totalCount={430}
                 onContextMenu={noop}
                 onSelect={noop}
+                onRate={noop}
+                onToggleFavorite={noop}
+                onOpenActionSheet={noop}
                 viewMode="grid"
                 isFiltered={false}
             />

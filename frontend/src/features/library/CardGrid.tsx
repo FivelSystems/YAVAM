@@ -10,6 +10,9 @@ interface CardGridProps {
     totalCount?: number;
     onContextMenu: (e: React.MouseEvent, pkg: VarPackage) => void;
     onSelect: (pkg: VarPackage, e?: React.MouseEvent) => void;
+    onRate: (pkg: VarPackage, rating: number) => void;
+    onToggleFavorite: (pkg: VarPackage, favorite: boolean) => void;
+    onOpenActionSheet: (pkg: VarPackage) => void;
     selectedPkgId?: string;
     selectedIds?: Set<string>;
     viewMode: 'grid' | 'list';
@@ -25,7 +28,7 @@ interface CardGridProps {
     onClearFilters?: () => void;
 }
 
-const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, selectedPkgId, selectedIds, viewMode, gridSize = 150, censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false, highlightedRequest, isFiltered = false, onClearFilters }: CardGridProps) => {
+const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, onRate, onToggleFavorite, onOpenActionSheet, selectedPkgId, selectedIds, viewMode, gridSize = 150, censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false, highlightedRequest, isFiltered = false, onClearFilters }: CardGridProps) => {
 
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -106,6 +109,9 @@ const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, 
                             pkg={pkg}
                             onContextMenu={onContextMenu}
                             onSelect={onSelect}
+                            onRate={onRate}
+                            onToggleFavorite={onToggleFavorite}
+                            onOpenActionSheet={onOpenActionSheet}
                             isSelected={selectedIds ? selectedIds.has(pkg.filePath) : pkg.filePath === selectedPkgId}
                             isAnchor={pkg.filePath === selectedPkgId}
                             viewMode={viewMode}

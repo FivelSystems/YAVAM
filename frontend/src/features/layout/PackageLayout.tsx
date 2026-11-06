@@ -44,10 +44,10 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
     const {
         selectedIds, selectedPackage, setSelectedPackage,
         isDetailsPanelOpen, setIsDetailsPanelOpen,
-        handlePackageClick, handleContextMenu, setSelectedIds, setContextMenu
+        handlePackageClick, handleContextMenu, handleLongPress, setSelectedIds, setContextMenu
     } = useSelectionContext();
     const { activeLibraryPath, selectLibrary } = useLibraryContext();
-    const { handleSingleResolve, handleGetDependencyStatus } = useActionContext();
+    const { handleSingleResolve, handleGetDependencyStatus, setPackageRating, setPackageFavorite } = useActionContext();
     const { addToast } = useToasts();
 
     // Local UI State
@@ -75,7 +75,8 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
             open: true,
             x: e.clientX,
             y: e.clientY,
-            pkg: pkg
+            pkg: pkg,
+            mode: 'anchored'
         });
     }, [setContextMenu]);
 
@@ -253,6 +254,9 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
                         totalCount={packages.length}
                         onContextMenu={handleContextMenu}
                         onSelect={handlePackageClick}
+                        onRate={setPackageRating}
+                        onToggleFavorite={setPackageFavorite}
+                        onOpenActionSheet={handleLongPress}
                         selectedPkgId={selectedPackage?.filePath}
                         selectedIds={selectedIds}
                         viewMode={viewMode}

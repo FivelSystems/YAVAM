@@ -1,9 +1,11 @@
 import { useRef, useState, useEffect, memo } from 'react';
 import { VarPackage } from '../../types';
 import clsx from 'clsx';
-import { AlertCircle, Check, AlertTriangle, Power, Copy, Star, Heart } from 'lucide-react';
+import { AlertCircle, Check, AlertTriangle, Power, Copy, Star, Heart, MoreVertical } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatBytes } from '../../utils/format';
+import { RatingFavoriteControl } from '../../components/ui/RatingFavoriteControl';
+import { useLongPress } from '../../hooks/useLongPress';
 
 /** Compact rating/favourite indicator — the only persistent sign of either on the
  * card itself (previously only visible via the context menu that set them, #54). */
@@ -26,6 +28,12 @@ interface PackageCardProps {
     pkg: VarPackage;
     onContextMenu: (e: React.MouseEvent, pkg: VarPackage) => void;
     onSelect: (pkg: VarPackage, e?: React.MouseEvent) => void;
+    onRate: (pkg: VarPackage, rating: number) => void;
+    onToggleFavorite: (pkg: VarPackage, favorite: boolean) => void;
+    /** Opens the mobile action sheet for this package — the card's overflow
+     * button and its long-press gesture both lead here; it's the only way to
+     * reach any package action on touch (no right-click equivalent there). */
+    onOpenActionSheet: (pkg: VarPackage) => void;
     isSelected?: boolean;
     isAnchor?: boolean;
     viewMode?: 'grid' | 'list';
@@ -37,8 +45,9 @@ interface PackageCardProps {
     startAnimationTs?: number; // Timestamp to force animation restart (used as key)
 }
 
-const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, viewMode = 'grid', censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false, isHighlighted = false, startAnimationTs }: PackageCardProps) => {
+const PackageCard = memo(({ pkg, onContextMenu, onSelect, onRate, onToggleFavorite, onOpenActionSheet, isSelected, isAnchor, viewMode = 'grid', censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false, isHighlighted = false, startAnimationTs }: PackageCardProps) => {
     const cardRef = useRef<HTMLDivElement>(null);
+    const longPress = useLongPress(() => onOpenActionSheet(pkg));
 
     // ── All hooks must be declared unconditionally (Rules of Hooks) ───────────
     // Do NOT add early returns before these declarations.
@@ -99,6 +108,10 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
 
     // ── Click handler ─────────────────────────────────────────────────────────
     const handleClick = (e: React.MouseEvent) => {
+        // A long-press already opened the action sheet; suppress the tap's
+        // trailing synthetic click so it doesn't also select the card.
+        if (longPress.consumeLongPress()) return;
+
         // Bump this package to the front of the Hard Pass queue on any click.
         if (pkg.scanPhase !== 'analyzed' && window.go) {
             // @ts-ignore
@@ -106,6 +119,8 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
         }
         onSelect(pkg, e);
     };
+
+    const { consumeLongPress, ...longPressHandlers } = longPress;
 
 
 
@@ -171,6 +186,7 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
                     "relative group rounded-lg border overflow-hidden cursor-pointer bg-gray-900 transition-colors hover:bg-gray-800 flex items-center h-20 p-2 gap-3",
                     statusClass
                 )}
+                {...longPressHandlers}
             >
                 {/* Small Thumbnail */}
                 <div className="h-16 w-16 bg-gray-800 rounded overflow-hidden shrink-0 relative">
@@ -205,8 +221,25 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
                             {pkg.meta.packageName || pkg.fileName}
                         </h3>
                         <div className="flex items-center gap-1.5 shrink-0">
-                            <RatingFavoriteBadge rating={pkg.rating} isFavorite={pkg.isFavorite} />
+                            <RatingFavoriteBadge rating={pkg.rating} isFavorite={pkg.isFavorite} className="group-hover:hidden" />
+                            <div className="hidden group-hover:block" onClick={(e) => e.stopPropagation()}>
+                                <RatingFavoriteControl
+                                    rating={pkg.rating ?? 0}
+                                    isFavorite={!!pkg.isFavorite}
+                                    onRate={(n) => onRate(pkg, n)}
+                                    onToggleFavorite={() => onToggleFavorite(pkg, !pkg.isFavorite)}
+                                    layout="compact"
+                                    size={14}
+                                />
+                            </div>
                             {statusIcon}
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onOpenActionSheet(pkg); }}
+                                className="md:hidden p-1.5 rounded-full bg-gray-900/80 backdrop-blur-sm border border-gray-700/50 text-gray-300"
+                                title="Package actions"
+                            >
+                                <MoreVertical size={14} />
+                            </button>
                         </div>
                     </div>
                     <div className="flex justify-between items-center text-xs text-gray-500">
@@ -240,6 +273,7 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
                 "relative group rounded-xl border-2 overflow-hidden cursor-pointer bg-gray-900 aspect-square transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:z-10",
                 statusClass
             )}
+            {...longPressHandlers}
         >
             {/* Full size thumbnail */}
             <div className="absolute inset-0 w-full h-full">
@@ -269,12 +303,47 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
                 )}
             </div>
 
-            {/* Rating/Favourite — top-left corner, out of the way of the status icon */}
-            {(!!pkg.rating || !!pkg.isFavorite) && (
-                <div className="absolute top-2 left-2 z-10">
+            {/* Rating/Favourite — top-left corner. Both layers occupy the same slot
+                and crossfade via opacity, so there's no layout shift and no second,
+                redundant rating display once a rating exists. The interactive layer
+                renders unconditionally on hover (even unrated), so a never-rated
+                card can be rated directly from the grid. */}
+            <div className="absolute top-2 left-2 z-10">
+                <div className={clsx(
+                    "transition-opacity duration-150",
+                    "opacity-100 group-hover:opacity-0 group-hover:pointer-events-none"
+                )}>
                     <RatingFavoriteBadge rating={pkg.rating} isFavorite={pkg.isFavorite} />
                 </div>
-            )}
+                <div
+                    className={clsx(
+                        "absolute inset-0 transition-opacity duration-150",
+                        "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto"
+                    )}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <RatingFavoriteControl
+                        rating={pkg.rating ?? 0}
+                        isFavorite={!!pkg.isFavorite}
+                        onRate={(n) => onRate(pkg, n)}
+                        onToggleFavorite={() => onToggleFavorite(pkg, !pkg.isFavorite)}
+                        layout="compact"
+                        size={14}
+                    />
+                </div>
+            </div>
+
+            {/* Mobile overflow entry point — not hover-gated (touch has no hover);
+                the only way to reach any package action on a phone/tablet, since
+                right-click has no touch equivalent. Long-press (see useLongPress
+                above) opens the same sheet without the visible affordance. */}
+            <button
+                onClick={(e) => { e.stopPropagation(); onOpenActionSheet(pkg); }}
+                className="md:hidden absolute top-2 right-2 z-10 p-1.5 rounded-full bg-gray-900/80 backdrop-blur-sm border border-gray-700/50 text-gray-300"
+                title="Package actions"
+            >
+                <MoreVertical size={14} />
+            </button>
 
             {/* Gradient Overlay for Text Readability */}
             <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/40 to-transparent opacity-80 group-hover:opacity-90 transition-opacity" />
