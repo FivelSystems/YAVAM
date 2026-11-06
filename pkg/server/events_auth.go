@@ -27,14 +27,9 @@ func (s *Server) recheckInterval() time.Duration {
 	return defaultSessionRecheckInterval
 }
 
+// sessionIsValid checks a session without extending its idle window, so
+// opening or reconnecting the event stream does not keep a session alive.
 func (s *Server) sessionIsValid(sessionToken string) bool {
-	_, err := s.auth.ValidateToken(sessionToken)
-	return err == nil
-}
-
-// sessionStillValid is the periodic recheck of an open stream; unlike
-// sessionIsValid it must not extend the session's idle window.
-func (s *Server) sessionStillValid(sessionToken string) bool {
 	_, err := s.auth.CheckToken(sessionToken)
 	return err == nil
 }

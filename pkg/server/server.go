@@ -180,7 +180,7 @@ func (s *Server) Start(port string, libraries []string) error {
 	mux := http.NewServeMux()
 
 	// SSE Endpoint (Secured)
-	mux.Handle("/api/events/ticket", s.AuthMiddleware(http.HandlerFunc(s.handleEventTicket)))
+	mux.Handle("/api/events/ticket", s.NonSlidingAuthMiddleware(http.HandlerFunc(s.handleEventTicket)))
 
 	mux.Handle("/api/events", s.eventsAuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sessionToken, _ := r.Context().Value(sessionTokenContextKey{}).(string)
@@ -211,7 +211,7 @@ func (s *Server) Start(port string, libraries []string) error {
 			case <-notify:
 				return
 			case <-sessionRecheck.C:
-				if !s.sessionStillValid(sessionToken) {
+				if !s.sessionIsValid(sessionToken) {
 					return
 				}
 			case msg := <-clientChan:
