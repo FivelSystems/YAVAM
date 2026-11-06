@@ -42,3 +42,6 @@ MEMORY.md
 
 # Local dev to-do notebook (not published)
 /TODO.md
+
+# Destructive-testing sandbox (never the real libraries)
+/devlibrary/
