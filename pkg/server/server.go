@@ -42,6 +42,9 @@ type Server struct {
 
 	scanWg sync.WaitGroup
 
+	tickets                *eventTicketStore
+	sessionRecheckInterval time.Duration
+
 	SkipEvents bool // For testing
 }
 
@@ -54,6 +57,7 @@ func NewServer(ctx context.Context, m *manager.Manager, authService auth.AuthSer
 		assets:    assets,
 		version:   version,
 		clients:   make(map[chan string]bool),
+		tickets:   newEventTicketStore(time.Now),
 	}
 }
 
@@ -165,7 +169,10 @@ func (s *Server) Start(port string, libraries []string) error {
 	mux := http.NewServeMux()
 
 	// SSE Endpoint (Secured)
-	mux.Handle("/api/events", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/events/ticket", s.AuthMiddleware(http.HandlerFunc(s.handleEventTicket)))
+
+	mux.Handle("/api/events", s.eventsAuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sessionToken, _ := r.Context().Value(sessionTokenContextKey{}).(string)
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
@@ -185,11 +192,17 @@ func (s *Server) Start(port string, libraries []string) error {
 		notify := r.Context().Done()
 		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
+		sessionRecheck := time.NewTicker(s.recheckInterval())
+		defer sessionRecheck.Stop()
 
 		for {
 			select {
 			case <-notify:
 				return
+			case <-sessionRecheck.C:
+				if !s.sessionIsValid(sessionToken) {
+					return
+				}
 			case msg := <-clientChan:
 				fmt.Fprint(w, msg)
 				if flusher, ok := w.(http.Flusher); ok {
