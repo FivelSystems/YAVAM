@@ -909,14 +909,22 @@ export const usePackageActions = (
     // snapshot): the caller owns the live value and passes what it should become,
     // so repeated clicks stay correct even while the menu is open.
     const setPackageRating = useCallback(async (pkg: VarPackage, rating: number) => {
-        // @ts-ignore
-        if (!window.go) return addToast("Ratings are available on the desktop app for now", 'info');
         const family = familyOf(pkg);
         const prev = pkg.rating ?? 0;
         patchFamily(family, { rating }); // optimistic
         try {
             // @ts-ignore
-            await window.go.main.App.SetPackageRating(family, rating);
+            if (window.go) {
+                // @ts-ignore
+                await window.go.main.App.SetPackageRating(family, rating);
+            } else {
+                const res = await fetchWithAuth('/api/package-rating', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ family, rating }),
+                }).then(r => r.json());
+                if (!res.success) throw new Error(res.message || res.error || "Unknown error");
+            }
         } catch (e) {
             console.error(e);
             patchFamily(family, { rating: prev }); // rollback
@@ -925,14 +933,22 @@ export const usePackageActions = (
     }, [addToast, patchFamily]);
 
     const setPackageFavorite = useCallback(async (pkg: VarPackage, favorite: boolean) => {
-        // @ts-ignore
-        if (!window.go) return addToast("Favourites are available on the desktop app for now", 'info');
         const family = familyOf(pkg);
         const prev = !!pkg.isFavorite;
         patchFamily(family, { isFavorite: favorite }); // optimistic
         try {
             // @ts-ignore
-            await window.go.main.App.SetPackageFavorite(family, favorite);
+            if (window.go) {
+                // @ts-ignore
+                await window.go.main.App.SetPackageFavorite(family, favorite);
+            } else {
+                const res = await fetchWithAuth('/api/package-favorite', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ family, favorite }),
+                }).then(r => r.json());
+                if (!res.success) throw new Error(res.message || res.error || "Unknown error");
+            }
         } catch (e) {
             console.error(e);
             patchFamily(family, { isFavorite: prev }); // rollback

@@ -59,11 +59,6 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
     const { packages, creatorStatus, typeStatus } = usePackageContext();
     const { searchQuery, setSearchQuery } = useFilterContext();
 
-    // Rating/favourite persistence is desktop-only (no server endpoint yet) —
-    // mirrors the isWeb check already used to hide this in ContextMenu.tsx.
-    // @ts-ignore
-    const isWeb = !window.go;
-
     const isStandalone = (p: VarPackage) => !p.meta?.dependencies || Object.keys(p.meta.dependencies).length === 0;
 
     // The sidebar composes the same tokenised query as the searchbar: a facet is
@@ -337,45 +332,42 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
                     />
                 </div>
 
-                {/* Rating/favourites persistence is desktop-only: no server endpoint on web (#56) */}
-                {!isWeb && (
-                    <div className="space-y-3 border-t border-gray-700/50 pt-4 px-1">
-                        <div>
-                            <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-1.5">Rating</p>
-                            <div className={clsx(
-                                "flex items-center justify-between rounded-md border px-3 py-2",
-                                rating > 0
-                                    ? "bg-blue-600/10 border-blue-600/30 text-blue-300"
-                                    : "bg-gray-900/40 border-gray-700 text-gray-300",
-                            )}>
-                                <RatingStars value={rating} onChange={changeRating} showClearButton />
-                                {rating > 0 && (
-                                    <span className={clsx("text-[10px] px-1.5 py-0.5 rounded-full border shrink-0", badgeTone(undefined, true))}>
-                                        {rating} star{rating > 1 ? 's' : ''}
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-
-                        <div>
-                            <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-1.5">Favourites</p>
-                            <div className={clsx(
-                                "rounded-md border px-3 py-2",
-                                favoriteActive
-                                    ? "bg-blue-600/10 border-blue-600/30 text-blue-300"
-                                    : "bg-gray-900/40 border-gray-700 text-gray-300",
-                            )}>
-                                <Toggle
-                                    size="sm"
-                                    checked={favoriteActive}
-                                    onChange={toggleFavorite}
-                                    icon={<Heart size={16} className={clsx(favoriteActive ? "fill-pink-400 text-pink-400" : "text-gray-400")} />}
-                                    label="Only favourites"
-                                />
-                            </div>
+                <div className="space-y-3 border-t border-gray-700/50 pt-4 px-1">
+                    <div>
+                        <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-1.5">Rating</p>
+                        <div className={clsx(
+                            "flex items-center justify-between rounded-md border px-3 py-2",
+                            rating > 0
+                                ? "bg-blue-600/10 border-blue-600/30 text-blue-300"
+                                : "bg-gray-900/40 border-gray-700 text-gray-300",
+                        )}>
+                            <RatingStars value={rating} onChange={changeRating} showClearButton />
+                            {rating > 0 && (
+                                <span className={clsx("text-[10px] px-1.5 py-0.5 rounded-full border shrink-0", badgeTone(undefined, true))}>
+                                    {rating} star{rating > 1 ? 's' : ''}
+                                </span>
+                            )}
                         </div>
                     </div>
-                )}
+
+                    <div>
+                        <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-1.5">Favourites</p>
+                        <div className={clsx(
+                            "rounded-md border px-3 py-2",
+                            favoriteActive
+                                ? "bg-blue-600/10 border-blue-600/30 text-blue-300"
+                                : "bg-gray-900/40 border-gray-700 text-gray-300",
+                        )}>
+                            <Toggle
+                                size="sm"
+                                checked={favoriteActive}
+                                onChange={toggleFavorite}
+                                icon={<Heart size={16} className={clsx(favoriteActive ? "fill-pink-400 text-pink-400" : "text-gray-400")} />}
+                                label="Only favourites"
+                            />
+                        </div>
+                    </div>
+                </div>
             </div>
 
             {/* Context Menu (Using handleSidebarAction from Context) */}
