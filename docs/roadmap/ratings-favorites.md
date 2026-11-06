@@ -8,7 +8,9 @@ license, hide unwanted packages.
 
 ## Delivers
 
-- Favourite toggle and 1–5 star rating, in the details panel (never on the card).
+- Favourite toggle and 1–5 star rating, surfaced in the details panel, the
+  context menu, and — per the [card rework](../design/package-card-rework.md)
+  — directly on the card via a hover-reveal control.
 - License badge in the details panel, next to the creator name.
 - Search, filter, and sort by favourite, rating, and license.
 - Hide/unhide via an `is_hidden` flag — removes a package from the grid without
