@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { X, Box, FileImage, User, Scissors, Copy, AlertCircle, Puzzle, Music, Image as ImageIcon, Heart } from 'lucide-react';
+import { X, Box, FileImage, User, Scissors, Copy, AlertCircle, Puzzle, Music, Image as ImageIcon } from 'lucide-react';
 import clsx from 'clsx';
 import { motion } from 'framer-motion';
 import { VarPackage, DependencyLocation } from '../../types';
@@ -13,7 +13,8 @@ import { fetchWithAuth } from '../../services/api';
 import { formatBytes } from '../../utils/format';
 import { DependencyGroup, DependencyGroupItem } from './components/DependencyGroup';
 import { ImageCarouselModal, CarouselImage } from './components/ImageCarouselModal';
-import { RatingStars } from '../../components/ui/RatingStars';
+import { RatingFavoriteControl } from '../../components/ui/RatingFavoriteControl';
+import { useLiveRatingFavorite } from '../../hooks/useLiveRatingFavorite';
 
 export interface PackageContent {
     filePath: string;
@@ -52,32 +53,11 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
     const thumbSrc = useThumbnail(pkg);
     const { packages } = usePackageContext();
     const { setPackageRating, setPackageFavorite } = useActionContext();
-    // @ts-ignore
-    const isWeb = !window.go;
 
     // Live rating/favourite, independent of the (possibly stale) `pkg` prop snapshot —
-    // mirrors the same pattern already used by ContextMenu.tsx's rating row, so this
-    // panel reflects a click immediately instead of waiting for reselection (#54).
-    const [liveRating, setLiveRating] = useState(pkg?.rating ?? 0);
-    const [liveFavorite, setLiveFavorite] = useState(!!pkg?.isFavorite);
-    useEffect(() => {
-        setLiveRating(pkg?.rating ?? 0);
-        setLiveFavorite(!!pkg?.isFavorite);
-    }, [pkg?.filePath, pkg?.rating, pkg?.isFavorite]);
-
-    const handleRate = (n: number) => {
-        if (!pkg) return;
-        const next = n === liveRating ? 0 : n; // click the active star to clear
-        setLiveRating(next);
-        setPackageRating(pkg, next);
-    };
-
-    const handleToggleFavorite = () => {
-        if (!pkg) return;
-        const next = !liveFavorite;
-        setLiveFavorite(next);
-        setPackageFavorite(pkg, next);
-    };
+    // mirrors the same pattern used by ContextMenu.tsx's rating row, so this panel
+    // reflects a click immediately instead of waiting for reselection (#54).
+    const { rating: liveRating, isFavorite: liveFavorite, rate: handleRate, toggleFavorite: handleToggleFavorite } = useLiveRatingFavorite(pkg, setPackageRating, setPackageFavorite);
 
     useEffect(() => {
         let isActive = true;
@@ -311,19 +291,16 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                     </div>
                 </div>
 
-                {/* Rating/Favourite — persistent, desktop-only (no server endpoint on web, #56) */}
-                {!isWeb && (
-                    <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
-                        <RatingStars value={liveRating} onChange={handleRate} size={16} />
-                        <button
-                            onClick={handleToggleFavorite}
-                            className={clsx("p-1 rounded transition-colors", liveFavorite ? "text-pink-400" : "text-gray-500 hover:text-pink-400")}
-                            title={liveFavorite ? "Remove from favourites" : "Add to favourites"}
-                        >
-                            <Heart size={18} className={clsx(liveFavorite && "fill-pink-400")} />
-                        </button>
-                    </div>
-                )}
+                {/* Rating/Favourite — persistent, now backed by the web write path too (#56) */}
+                <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+                    <RatingFavoriteControl
+                        rating={liveRating}
+                        isFavorite={liveFavorite}
+                        onRate={handleRate}
+                        onToggleFavorite={handleToggleFavorite}
+                        size={16}
+                    />
+                </div>
 
                 {/* Conflict/Duplicate Resolver - Prominent if Issue Exists */}
                 {(pkg.isDuplicate || pkg.isExactDuplicate) && (
