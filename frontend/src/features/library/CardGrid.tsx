@@ -102,7 +102,10 @@ const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, 
                         initial="hidden"
                         animate="visible"
                         exit="exit"
-                        className=""
+                        // Grid items default to min-width: auto, so unbreakable card content
+                        // (long VaM filenames with no spaces) can inflate a track past its
+                        // minmax() size instead of wrapping/truncating within it.
+                        className="min-w-0"
                     // Removed layout prop for performance
                     >
                         <PackageCard
