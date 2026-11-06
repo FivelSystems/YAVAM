@@ -16,9 +16,8 @@ pure-Go, no CGO for the DB).
 
 ## Prime directives
 
-- **Explicit consent to publish.** Never `git push`, merge a branch (even
-  locally), or otherwise share code externally without the user's approval
-  of the current state.
+- **Explicit consent to publish.** Never `git push` (or otherwise share code
+  externally) without the user's approval of the current state.
 - **Constructive pushback over compliance.** If a request is insecure,
   non-performant, or wrong, stop and explain why, then offer a better path. Don't
   ship "working but messy" code.
