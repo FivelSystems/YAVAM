@@ -3,6 +3,8 @@ package server
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -181,6 +183,133 @@ func TestUpload_DuplicateOnlyCheckedInTargetLibrary(t *testing.T) {
 
 	if code := postUpload(t, s, target, "A.B.1.var"); code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", code)
+	}
+}
+
+func TestUpload_RejectsUnsafeNamesWithoutCreatingFiles(t *testing.T) {
+	names := []string{
+		"x.var:payload.var", "foo:bar.var", "NUL.var", "nul.VAR", "COM1.var", "lpt9.var.disabled", "Aux.var",
+		"a?b.var", "a*b.var", "a<b.var", "a>b.var", "a|b.var", `a"b.var`, " leading.var",
+	}
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
+			library := t.TempDir()
+			s := startUploadTestServer(t, library)
+			if code := postUpload(t, s, library, name); code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d", code)
+			}
+			if found := listDir(t, library); len(found) != 0 {
+				t.Fatalf("library should be empty, found %v", found)
+			}
+		})
+	}
+}
+
+func TestUpload_AcceptsNormalNames(t *testing.T) {
+	library := t.TempDir()
+	s := startUploadTestServer(t, library)
+	if code := postUpload(t, s, library, "Creator.Package.1.var", "Creator.Pack with spaces.2.var"); code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", code)
+	}
+	if found := listDir(t, library); len(found) != 2 {
+		t.Fatalf("expected two packages, found %v", found)
+	}
+}
+
+func TestUpload_TooManyFilesRejected(t *testing.T) {
+	library := t.TempDir()
+	s := startUploadTestServer(t, library)
+	names := make([]string, maxUploadFilesPerRequest+1)
+	for i := range names {
+		names[i] = fmt.Sprintf("A.B.%d.var", i)
+	}
+	if code := postUpload(t, s, library, names...); code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413, got %d", code)
+	}
+	if found := listDir(t, library); len(found) != 0 {
+		t.Fatalf("library should be empty, found %v", found)
+	}
+}
+
+func TestUpload_OversizedRequestRejected(t *testing.T) {
+	library := t.TempDir()
+	s := startUploadTestServer(t, library)
+
+	var body bytes.Buffer
+	form := multipart.NewWriter(&body)
+	form.WriteField("path", library)
+	part, _ := form.CreateFormFile("file", "A.B.1.var")
+	part.Write(bytes.Repeat([]byte("x"), 4096))
+	form.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/upload", &body)
+	req.Header.Set("Content-Type", form.FormDataContentType())
+	req.Header.Set("Authorization", "Bearer valid")
+	w := httptest.NewRecorder()
+
+	original := uploadRequestLimit
+	uploadRequestLimit = 1024
+	t.Cleanup(func() { uploadRequestLimit = original })
+
+	s.httpSrv.Handler.ServeHTTP(w, req)
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413, got %d", w.Code)
+	}
+	if found := listDir(t, library); len(found) != 0 {
+		t.Fatalf("library should be empty, found %v", found)
+	}
+}
+
+func TestUpload_WriteFailureRollsBackAndReturns500(t *testing.T) {
+	library := t.TempDir()
+	s := startUploadTestServer(t, library)
+
+	calls := 0
+	original := saveUploadFile
+	saveUploadFile = func(destination string, header *multipart.FileHeader) error {
+		calls++
+		if calls == 2 {
+			return errors.New("disk failure")
+		}
+		return original(destination, header)
+	}
+	t.Cleanup(func() { saveUploadFile = original })
+
+	if code := postUpload(t, s, library, "A.B.1.var", "A.B.2.var", "A.B.3.var"); code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", code)
+	}
+	if found := listDir(t, library); len(found) != 0 {
+		t.Fatalf("files from the failed request must be removed, found %v", found)
+	}
+}
+
+func TestUpload_ConflictMidBatchRollsBackAndReturns409(t *testing.T) {
+	library := t.TempDir()
+	s := startUploadTestServer(t, library)
+	collidingPath := filepath.Join(library, "A.B.2.var")
+
+	calls := 0
+	original := saveUploadFile
+	saveUploadFile = func(destination string, header *multipart.FileHeader) error {
+		calls++
+		if calls == 2 {
+			if err := os.WriteFile(collidingPath, []byte("original"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return original(destination, header)
+	}
+	t.Cleanup(func() { saveUploadFile = original })
+
+	if code := postUpload(t, s, library, "A.B.1.var", "A.B.2.var"); code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d", code)
+	}
+	found := listDir(t, library)
+	if len(found) != 1 || found[0] != "A.B.2.var" {
+		t.Fatalf("only the pre-existing colliding file should remain, found %v", found)
+	}
+	if content, _ := os.ReadFile(collidingPath); string(content) != "original" {
+		t.Fatalf("colliding file must be untouched, got %q", content)
 	}
 }
 
