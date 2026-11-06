@@ -24,8 +24,13 @@ export const useLayoutSettings = (): LayoutSettings => {
     });
 
     const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+        // The stored value is a desktop rail-collapse preference; it must never
+        // carry an "open" drawer into a narrow viewport (e.g. a browser window
+        // resized smaller, or a device-emulation toggle reusing the same origin's
+        // storage), since the mobile sidebar is an overlay, not a rail.
+        if (window.innerWidth <= 768) return false;
         const stored = localStorage.getItem('layout_isSidebarOpen');
-        return stored ? stored === 'true' : window.innerWidth > 768;
+        return stored ? stored === 'true' : true;
     });
 
     const [minimizeOnClose, setMinimizeOnClose] = useState(() => {

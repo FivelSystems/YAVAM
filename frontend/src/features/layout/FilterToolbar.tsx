@@ -40,7 +40,7 @@ export const FilterToolbar: React.FC<FilterToolbarProps> = ({
     ];
 
     return (
-        <header className="flex flex-col bg-gray-800 border-b border-gray-700 shadow-md z-30 shrink-0">
+        <header className="relative flex flex-col bg-gray-800 border-b border-gray-700 shadow-md z-30 shrink-0">
             <div className="flex flex-col md:flex-row md:justify-between items-center p-4 gap-4 md:gap-0">
 
                 {/* Left Group: Toggle + Search */}
