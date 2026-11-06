@@ -32,6 +32,22 @@ func (s *Server) sessionIsValid(sessionToken string) bool {
 	return err == nil
 }
 
+// sessionStillValid is the periodic recheck of an open stream; unlike
+// sessionIsValid it must not extend the session's idle window.
+func (s *Server) sessionStillValid(sessionToken string) bool {
+	_, err := s.auth.CheckToken(sessionToken)
+	return err == nil
+}
+
+func (s *Server) ticketStore() *eventTicketStore {
+	s.ticketsInit.Do(func() {
+		if s.tickets == nil {
+			s.tickets = newEventTicketStore(time.Now)
+		}
+	})
+	return s.tickets
+}
+
 // eventsAuthMiddleware authenticates the event stream with either a Bearer
 // header or a one-time ticket. The long-lived token in the query string is
 // deliberately not accepted here. The resolved session token is passed to the
@@ -41,7 +57,7 @@ func (s *Server) eventsAuthMiddleware(next http.Handler) http.Handler {
 		sessionToken := bearerToken(r)
 		if sessionToken == "" {
 			if ticket := r.URL.Query().Get("ticket"); ticket != "" {
-				sessionToken, _ = s.tickets.Consume(ticket)
+				sessionToken, _ = s.ticketStore().Consume(ticket)
 			}
 		}
 		if sessionToken == "" || !s.sessionIsValid(sessionToken) {
@@ -64,7 +80,7 @@ func (s *Server) handleEventTicket(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	ticket, err := s.tickets.Issue(sessionToken)
+	ticket, err := s.ticketStore().Issue(sessionToken)
 	if err == ErrTicketLimitReached {
 		s.writeError(w, "Too many pending tickets", http.StatusTooManyRequests)
 		return

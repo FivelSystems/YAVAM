@@ -30,6 +30,9 @@ type AuthService interface {
 	// ValidateToken checks if a token is valid and returns the associated user
 	ValidateToken(token string) (*User, error)
 
+	// CheckToken validates like ValidateToken without extending the session
+	CheckToken(token string) (*User, error)
+
 	// GenerateToken creates a new token for internal use
 	GenerateToken() (string, error)
 
