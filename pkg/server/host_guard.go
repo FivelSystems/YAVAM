@@ -148,18 +148,24 @@ func (s *Server) originAllowed(origin string) bool {
 // explainRefusedHost and explainRefusedOrigin tell the desktop console why a
 // request was refused, so a user on a custom LAN DNS name learns about
 // serverAllowedHosts. Only the sanitised Host or Origin header is logged,
-// rate-limited per distinct value.
+// rate-limited per distinct value and globally, see refusalNotices.
 func (s *Server) explainRefusedHost(host string) {
 	logged := utils.SanitizeForLog(host)
-	if s.refusalNotices.shouldNotice(hostRefusalPrefix + logged) {
-		s.log(fmt.Sprintf("Request refused: host %s is not allowed. To allow it, add it to serverAllowedHosts in config.json.", logged))
-	}
+	s.logRefusal(hostRefusalPrefix+logged, fmt.Sprintf("Request refused: host %s is not allowed. To allow it, add it to serverAllowedHosts in config.json.", logged))
 }
 
 func (s *Server) explainRefusedOrigin(origin string) {
 	logged := utils.SanitizeForLog(origin)
-	if s.refusalNotices.shouldNotice(originRefusalPrefix + logged) {
-		s.log(fmt.Sprintf("Request refused: origin %s is not allowed. To allow its host, add it to serverAllowedHosts in config.json.", logged))
+	s.logRefusal(originRefusalPrefix+logged, fmt.Sprintf("Request refused: origin %s is not allowed. To allow its host, add it to serverAllowedHosts in config.json.", logged))
+}
+
+func (s *Server) logRefusal(subject, message string) {
+	decision := s.refusalNotices.decide(subject)
+	if decision.suppressedEarlier > 0 {
+		s.log(fmt.Sprintf(refusalSuppressedLineFormat, decision.suppressedEarlier))
+	}
+	if decision.log {
+		s.log(message)
 	}
 }
 
