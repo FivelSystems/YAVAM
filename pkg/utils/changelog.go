@@ -7,25 +7,34 @@ import (
 
 var changelogHeadingPattern = regexp.MustCompile(`(?m)^## \[([^\]]+)\]`)
 
-// ExtractChangelogSection returns the body of the "## [<version>]" section
-// from a Keep a Changelog document, for the given app version. Only the
-// bracketed version is matched (trailing date/text on the heading line is
-// ignored), and a leading "v" plus any "-prerelease" suffix (e.g. an Unstable
-// build's "1.4.0-unstable.20261108.abc123") are stripped before comparing.
+// ExtractChangelogSection returns the given app's "What's New" notes from a
+// Keep a Changelog document: everything from the "## [<version>]" heading
+// matching that version through the end of the file, so a user who skipped
+// several releases still sees everything they missed, not just the latest
+// one. Only the bracketed version is matched (trailing date/text on the
+// heading line is ignored), and a leading "v" plus any "-prerelease" suffix
+// (e.g. an Unstable build's "1.4.0-unstable.20261108.abc123") are stripped
+// before comparing.
 //
-// If no section matches that version — the normal case for an Unstable build,
+// What it must never do is include anything ABOVE that heading — on `main`,
+// that's the "## [Unreleased]" section (and, if newer tagged sections exist
+// above the running version for any reason, those too), none of which has
+// shipped in this build yet.
+//
+// If no heading matches the version — the normal case for an Unstable build,
 // whose version was never given its own heading — it falls back to
-// "## [Unreleased]". If neither is found, the whole changelog is returned
-// unchanged so callers never see an empty result.
+// "## [Unreleased]" (which, for that build, legitimately has shipped). If
+// neither is found, the whole changelog is returned unchanged so callers
+// never see an empty result.
 func ExtractChangelogSection(changelog, version string) string {
-	sections := splitChangelogSections(changelog)
+	headings := findChangelogHeadings(changelog)
 
 	target := normalizeChangelogVersion(version)
-	if body, ok := sections[target]; ok {
-		return body
+	if start, ok := headings[target]; ok {
+		return strings.TrimSpace(changelog[start:])
 	}
-	if body, ok := sections["unreleased"]; ok {
-		return body
+	if start, ok := headings["unreleased"]; ok {
+		return strings.TrimSpace(changelog[start:])
 	}
 	return changelog
 }
@@ -38,29 +47,18 @@ func normalizeChangelogVersion(version string) string {
 	return strings.ToLower(version)
 }
 
-// splitChangelogSections maps each lowercased "## [...]" heading to the
-// markdown body that follows it, up to the next such heading.
-func splitChangelogSections(changelog string) map[string]string {
+// findChangelogHeadings maps each lowercased "## [...]" heading to the byte
+// offset where that heading's own line begins.
+func findChangelogHeadings(changelog string) map[string]int {
 	matches := changelogHeadingPattern.FindAllStringSubmatchIndex(changelog, -1)
-	sections := make(map[string]string, len(matches))
+	headings := make(map[string]int, len(matches))
 
-	for i, m := range matches {
-		headingEnd := m[1]
-		bodyStart := strings.IndexByte(changelog[headingEnd:], '\n')
-		if bodyStart == -1 {
-			bodyStart = len(changelog)
-		} else {
-			bodyStart += headingEnd + 1
-		}
-
-		bodyEnd := len(changelog)
-		if i+1 < len(matches) {
-			bodyEnd = matches[i+1][0]
-		}
-
+	for _, m := range matches {
 		key := normalizeChangelogVersion(changelog[m[2]:m[3]])
-		sections[key] = strings.TrimSpace(changelog[bodyStart:bodyEnd])
+		if _, exists := headings[key]; !exists {
+			headings[key] = m[0]
+		}
 	}
 
-	return sections
+	return headings
 }
