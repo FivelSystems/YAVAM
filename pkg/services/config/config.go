@@ -187,13 +187,20 @@ func (s *fileConfigService) Update(fn func(*Config)) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	fn(s.config)
-	s.config.ServerBindAddress = normaliseBindAddress(s.config.ServerBindAddress)
-	s.config.ServerAllowedHosts = normaliseAllowedHosts(s.config.ServerAllowedHosts)
+	// fn works on a copy that replaces the live configuration only once it is
+	// on disk, so a failed write leaves memory and disk agreeing.
+	updated := s.config.Clone()
+	fn(updated)
+	updated.ServerBindAddress = normaliseBindAddress(updated.ServerBindAddress)
+	updated.ServerAllowedHosts = normaliseAllowedHosts(updated.ServerAllowedHosts)
 
-	data, err := json.MarshalIndent(s.config, "", "  ")
+	data, err := json.MarshalIndent(updated, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.path, data, 0644)
+	if err := os.WriteFile(s.path, data, 0644); err != nil {
+		return err
+	}
+	s.config = updated
+	return nil
 }
