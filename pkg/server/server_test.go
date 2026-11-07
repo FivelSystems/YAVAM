@@ -45,7 +45,7 @@ func TestStartServer(t *testing.T) {
 	s.SkipEvents = true
 
 	// Test 1: Start with valid path (Port 0 = Random Free Port)
-	err := s.Start("0", []string{"C:/tmp"})
+	err := s.Start("127.0.0.1", "0", []string{"C:/tmp"})
 	if err != nil {
 		t.Fatalf("Start() failed with valid path: %v", err)
 	}
@@ -54,7 +54,7 @@ func TestStartServer(t *testing.T) {
 	}
 
 	// Test 2: Start again should fail
-	err = s.Start("0", nil)
+	err = s.Start("127.0.0.1", "0", nil)
 	if err == nil || err.Error() != "server is already running" {
 		t.Error("Start() should fail if already running")
 	}
@@ -82,7 +82,7 @@ func TestStartServer_EmptyPath(t *testing.T) {
 	s.SkipEvents = true
 
 	// Test 2: Start with empty path (Should succeed now)
-	err := s.Start("0", []string{})
+	err := s.Start("127.0.0.1", "0", []string{})
 	if err != nil {
 		t.Fatalf("Start() failed with empty path: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestAPI_EmptyPathSecurity(t *testing.T) {
 	s.SkipEvents = true
 
 	// Start with empty path
-	s.Start("0", []string{})
+	s.Start("127.0.0.1", "0", []string{})
 
 	// Construct Request to /api/packages
 	req := httptest.NewRequest("GET", "/api/packages", nil)
@@ -133,7 +133,7 @@ func TestAPI_ExplicitPathSecurity(t *testing.T) {
 	s.SkipEvents = true
 
 	// Start with allowed path
-	s.Start("0", []string{"C:/Allowed"})
+	s.Start("127.0.0.1", "0", []string{"C:/Allowed"})
 
 	// Let's test blocking of unsafe path
 	req := httptest.NewRequest("GET", "/api/packages?path=C:/Secrets", nil)
@@ -156,7 +156,7 @@ func TestAPI_Config_SetupDone(t *testing.T) {
 
 	s := NewServer(context.Background(), mgr, mockAuth, mockAssets, "1.0.0", func() {})
 	s.SkipEvents = true
-	s.Start("0", []string{"C:/Allowed"})
+	s.Start("127.0.0.1", "0", []string{"C:/Allowed"})
 
 	req := httptest.NewRequest("GET", "/api/config", nil)
 	req.Header.Set("Authorization", "Bearer valid")

@@ -14,7 +14,7 @@ func startTestServer(t *testing.T, onRestore func()) *Server {
 	mgr := manager.NewManager(nil, nil, &TestServerConfigService{libraries: []string{"C:/Allowed"}})
 	s := NewServer(context.Background(), mgr, &MockAuthService{validToken: "valid"}, mockAssets, "1.0.0", onRestore)
 	s.SkipEvents = true
-	if err := s.Start("0", []string{"C:/Allowed"}); err != nil {
+	if err := s.Start("127.0.0.1", "0", []string{"C:/Allowed"}); err != nil {
 		t.Fatalf("Start() failed: %v", err)
 	}
 	t.Cleanup(func() { s.Stop() })
@@ -56,6 +56,31 @@ func TestAPI_AuthenticatedRestoreAndCancel(t *testing.T) {
 	}
 }
 
+// unauthenticatedRoutes is the complete set of routes reachable without a
+// token. Adding a route here is a deliberate security decision.
+var unauthenticatedRoutes = []struct {
+	method string
+	path   string
+	body   string
+}{
+	{http.MethodPost, "/api/auth/login", loginBody},
+	{http.MethodPost, "/api/auth/pair", `{"code":"ABCD-2345"}`},
+	{http.MethodGet, "/api/auth/status", ""},
+}
+
+func TestAPI_UnauthenticatedRoutesNeedNoToken(t *testing.T) {
+	for _, route := range unauthenticatedRoutes {
+		s := startTestServer(t, func() {})
+		w := do(s, route.method, route.path, route.body, "127.0.0.1:50000", nil)
+		if route.path == "/api/auth/status" && w.Code != http.StatusOK {
+			t.Errorf("%s %s must answer 200 without authentication, got %d", route.method, route.path, w.Code)
+		}
+		if w.Code == http.StatusNotFound {
+			t.Errorf("%s %s is not registered", route.method, route.path)
+		}
+	}
+}
+
 func oversizedJSONBody() string {
 	return `{"username":"` + strings.Repeat("a", maxJSONBodyBytes+1) + `"}`
 }
@@ -73,6 +98,7 @@ func TestAPI_OversizedJSONBodyRejected(t *testing.T) {
 
 	for _, tt := range tests {
 		req := httptest.NewRequest(http.MethodPost, tt.path, strings.NewReader(oversizedJSONBody()))
+		req.RemoteAddr = "127.0.0.1:50000"
 		if tt.authenticated {
 			req.Header.Set("Authorization", "Bearer valid")
 		}

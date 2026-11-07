@@ -121,7 +121,7 @@ func (a *App) startup(ctx context.Context) {
 			}
 			// Use GetLibraries() — reads from DB, not from config.json
 			// (config.json libraries array is zeroed after Phase 2 migration)
-			if err := a.server.Start(port, a.manager.GetLibraries()); err == nil {
+			if err := a.server.Start(config.ResolveBindHost(cfg.ServerBindAddress), port, a.manager.GetLibraries()); err == nil {
 				runtime.EventsEmit(a.ctx, "server:status:changed", true)
 			}
 		}()
@@ -836,7 +836,7 @@ func (a *App) StartServer() error {
 		port = "18888"
 	}
 
-	err := a.server.Start(port, a.manager.GetLibraries())
+	err := a.server.Start(config.ResolveBindHost(cfg.ServerBindAddress), port, a.manager.GetLibraries())
 	if err == nil {
 		runtime.EventsEmit(a.ctx, "server:status:changed", true)
 	}
