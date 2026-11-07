@@ -60,7 +60,8 @@ type Server struct {
 	readHeaderTimeout   time.Duration // zero selects defaultReadHeaderTimeout
 	idleTimeout         time.Duration // zero selects defaultIdleTimeout
 
-	machineNames map[string]bool // hostnames this machine answers to, see machineHostNames
+	machineNames   map[string]bool // hostnames this machine answers to, see machineHostNames
+	refusalNotices *refusalNotices
 }
 
 const (
@@ -86,7 +87,8 @@ func NewServer(ctx context.Context, m *manager.Manager, authService auth.AuthSer
 		clients:   make(map[chan string]bool),
 		tickets:   newEventTicketStore(time.Now),
 
-		machineNames: machineHostNames(),
+		machineNames:   machineHostNames(),
+		refusalNotices: newRefusalNotices(time.Now, refusalNoticeInterval, refusalNoticeMaxTracked),
 
 		remoteLoginThrottle:   NewLoginThrottle(time.Now, loginThrottleBaseDelay, loginThrottleMaxDelay),
 		loopbackLoginThrottle: NewLoginThrottle(time.Now, loginThrottleBaseDelay, loginThrottleMaxDelay),

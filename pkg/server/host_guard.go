@@ -1,14 +1,19 @@
 package server
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
+	"yavam/pkg/utils"
 )
 
 const (
+	hostRefusalPrefix   = "host:"
+	originRefusalPrefix = "origin:"
+
 	localhostName = "localhost"
 	mDNSSuffix    = ".local"
 
@@ -79,16 +84,36 @@ func (s *Server) originAllowed(origin string) bool {
 	return s.hostAllowed(hostNameOf(parsed.Host))
 }
 
+// explainRefusedHost and explainRefusedOrigin tell the desktop console why a
+// request was refused, so a user on a custom LAN DNS name learns about
+// serverAllowedHosts. Only the sanitised Host or Origin header is logged,
+// rate-limited per distinct value.
+func (s *Server) explainRefusedHost(host string) {
+	logged := utils.SanitizeForLog(host)
+	if s.refusalNotices.shouldNotice(hostRefusalPrefix + logged) {
+		s.log(fmt.Sprintf("Request refused: host %s is not allowed. To allow it, add it to serverAllowedHosts in config.json.", logged))
+	}
+}
+
+func (s *Server) explainRefusedOrigin(origin string) {
+	logged := utils.SanitizeForLog(origin)
+	if s.refusalNotices.shouldNotice(originRefusalPrefix + logged) {
+		s.log(fmt.Sprintf("Request refused: origin %s is not allowed. To allow its host, add it to serverAllowedHosts in config.json.", logged))
+	}
+}
+
 // hostGuardMiddleware refuses requests addressed to a name the server does not
 // recognise, and requests whose Origin names such a host. Users who open the
 // app by a custom LAN DNS name list it in config.json "serverAllowedHosts".
 func (s *Server) hostGuardMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !s.hostAllowed(hostNameOf(r.Host)) {
+			s.explainRefusedHost(r.Host)
 			s.writeError(w, messageRequestNotAllowed, http.StatusMisdirectedRequest)
 			return
 		}
 		if origin := r.Header.Get(headerOrigin); origin != "" && !s.originAllowed(origin) {
+			s.explainRefusedOrigin(origin)
 			s.writeError(w, messageRequestNotAllowed, http.StatusForbidden)
 			return
 		}
