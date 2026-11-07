@@ -147,16 +147,21 @@ func (s *fileConfigService) Save(cfg *Config) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.config = cfg.Clone()
-	s.config.ServerBindAddress = normaliseBindAddress(s.config.ServerBindAddress)
-	s.config.ServerAllowedHosts = normaliseAllowedHosts(s.config.ServerAllowedHosts)
+	// The snapshot replaces the live configuration only once it is on disk, so
+	// a failed write leaves memory and disk agreeing.
+	snapshot := cfg.Clone()
+	snapshot.ServerBindAddress = normaliseBindAddress(snapshot.ServerBindAddress)
+	snapshot.ServerAllowedHosts = normaliseAllowedHosts(snapshot.ServerAllowedHosts)
 
-	data, err := json.MarshalIndent(s.config, "", "  ")
+	data, err := json.MarshalIndent(snapshot, "", "  ")
 	if err != nil {
 		return err
 	}
-
-	return os.WriteFile(s.path, data, 0644)
+	if err := os.WriteFile(s.path, data, 0644); err != nil {
+		return err
+	}
+	s.config = snapshot
+	return nil
 }
 
 func (s *fileConfigService) Get() *Config {
