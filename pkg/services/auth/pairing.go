@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 	"unicode"
-	"unicode/utf8"
 )
 
 const (
@@ -28,9 +27,7 @@ const (
 	// byte with len-1 selects symbols without modulo bias.
 	pairingAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
-	maxPairedDeviceNameLength = 64
-	defaultPairedDeviceName   = "Paired Device"
-	pairedSessionUsername     = "admin"
+	pairedSessionUsername = "admin"
 )
 
 var (
@@ -86,23 +83,6 @@ func generatePairingCode() (string, error) {
 	return string(symbols[:pairingCodeGroupLength]) + "-" + string(symbols[pairingCodeGroupLength:]), nil
 }
 
-func sanitizePairedDeviceName(name string) string {
-	printable := strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
-			return -1
-		}
-		return r
-	}, name)
-	trimmed := strings.TrimSpace(printable)
-	if utf8.RuneCountInString(trimmed) > maxPairedDeviceNameLength {
-		trimmed = strings.TrimSpace(string([]rune(trimmed)[:maxPairedDeviceNameLength]))
-	}
-	if trimmed == "" {
-		return defaultPairedDeviceName
-	}
-	return trimmed
-}
-
 // CreatePairingCode replaces any outstanding code with a fresh one. A
 // non-positive ttl selects DefaultPairingTTL.
 func (s *SimpleTokenAuthService) CreatePairingCode(ttl time.Duration) (PairingCode, error) {
@@ -150,10 +130,10 @@ func (s *SimpleTokenAuthService) RedeemPairingCode(code, deviceName string) (str
 		return "", ErrInvalidPairingCode
 	}
 
-	deviceName = sanitizePairedDeviceName(deviceName)
+	deviceName = sanitizeDeviceName(deviceName, pairedDeviceName)
 	replaced := s.detachSessionsOfDevice(pairedSessionUsername, deviceName)
 
-	token, err := s.createSession(pairedSessionUsername, deviceName)
+	token, evicted, err := s.createSession(pairedSessionUsername, deviceName)
 	if err != nil {
 		s.restoreSessions(replaced)
 		return "", err
@@ -161,6 +141,7 @@ func (s *SimpleTokenAuthService) RedeemPairingCode(code, deviceName string) (str
 	if err := s.persistState(); err != nil {
 		delete(s.sessions, hashToken(token))
 		s.restoreSessions(replaced)
+		s.restoreSessions(evicted)
 		return "", fmt.Errorf("persist paired session: %w", err)
 	}
 	return token, nil

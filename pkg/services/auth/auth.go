@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"sort"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -23,6 +24,10 @@ const (
 	// persistRetryInterval bounds how often sliding last-used updates are
 	// written to disk, and how often a failing write is retried or logged.
 	persistRetryInterval = time.Minute
+
+	// maxSessions bounds the persisted session table; past it the least
+	// recently used session is evicted to make room.
+	maxSessions = 50
 
 	tokenByteLength     = 32
 	sessionIDByteLength = 8
@@ -239,16 +244,19 @@ func (s *SimpleTokenAuthService) InitiateLogin(username string) (string, error) 
 }
 
 // createSession registers a new session and returns the raw token, which is
-// never stored. Callers must hold s.mu for writing.
-func (s *SimpleTokenAuthService) createSession(username, deviceName string) (string, error) {
+// never stored, plus any sessions evicted to stay within maxSessions so a
+// caller that rolls back can restore them. Callers must hold s.mu for writing.
+func (s *SimpleTokenAuthService) createSession(username, deviceName string) (string, map[string]*StoredSession, error) {
 	token, err := randomHex(tokenByteLength)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	sessionID, err := randomHex(sessionIDByteLength)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
+
+	evicted := s.evictLeastRecentlyUsed(maxSessions - 1)
 
 	now := s.now()
 	s.sessions[hashToken(token)] = &StoredSession{
@@ -259,7 +267,38 @@ func (s *SimpleTokenAuthService) createSession(username, deviceName string) (str
 		CreatedAt:  now,
 		LastUsedAt: now,
 	}
-	return token, nil
+	return token, evicted, nil
+}
+
+// evictLeastRecentlyUsed removes sessions, least recently used first, until at
+// most keep remain. Ties fall back to the older creation time, then the token
+// hash, so the order is deterministic. Callers must hold s.mu for writing.
+func (s *SimpleTokenAuthService) evictLeastRecentlyUsed(keep int) map[string]*StoredSession {
+	evicted := make(map[string]*StoredSession)
+	if len(s.sessions) <= keep {
+		return evicted
+	}
+
+	hashes := make([]string, 0, len(s.sessions))
+	for tokenHash := range s.sessions {
+		hashes = append(hashes, tokenHash)
+	}
+	sort.Slice(hashes, func(i, j int) bool {
+		a, b := s.sessions[hashes[i]], s.sessions[hashes[j]]
+		if !a.LastUsedAt.Equal(b.LastUsedAt) {
+			return a.LastUsedAt.Before(b.LastUsedAt)
+		}
+		if !a.CreatedAt.Equal(b.CreatedAt) {
+			return a.CreatedAt.Before(b.CreatedAt)
+		}
+		return hashes[i] < hashes[j]
+	})
+
+	for _, tokenHash := range hashes[:len(s.sessions)-keep] {
+		evicted[tokenHash] = s.sessions[tokenHash]
+		delete(s.sessions, tokenHash)
+	}
+	return evicted
 }
 
 // Login verifies credentials directly using Bcrypt
@@ -283,9 +322,7 @@ func (s *SimpleTokenAuthService) Login(username, password, deviceName string) (s
 		return "", fmt.Errorf("invalid credentials")
 	}
 
-	if deviceName == "" {
-		deviceName = "Unknown Device"
-	}
+	deviceName = sanitizeDeviceName(deviceName, defaultDeviceName)
 
 	for tokenHash, session := range s.sessions {
 		if session.DeviceName == deviceName && session.Username == username {
@@ -293,7 +330,7 @@ func (s *SimpleTokenAuthService) Login(username, password, deviceName string) (s
 		}
 	}
 
-	token, err := s.createSession(username, deviceName)
+	token, _, err := s.createSession(username, deviceName)
 	if err != nil {
 		return "", err
 	}
@@ -381,7 +418,7 @@ func (s *SimpleTokenAuthService) GenerateToken() (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	token, err := s.createSession("system", "Local System")
+	token, _, err := s.createSession("system", localSystemDevice)
 	if err != nil {
 		return "", err
 	}
