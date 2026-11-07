@@ -22,6 +22,11 @@ type Config struct {
 	ServerEnabled    bool                `json:"serverEnabled"`
 	ServerPort       string              `json:"serverPort"`
 	AuthPollInterval int                 `json:"authPollInterval"`
+	// AllowRemotePasswordLogin lets non-loopback clients log in with the admin
+	// password. Off by default for every config, including ones without the key.
+	AllowRemotePasswordLogin bool `json:"allowRemotePasswordLogin"`
+	// ServerBindAddress is "" or "all" (every interface), "loopback", or a local interface IP.
+	ServerBindAddress string `json:"serverBindAddress"`
 	LastSeenVersion  string              `json:"lastSeenVersion"`
 	UpdateChannel    string              `json:"updateChannel"` // "stable" (default) | "unstable"
 	PrivacyMode      bool                `json:"privacyMode"`
@@ -93,6 +98,7 @@ func (s *fileConfigService) Load() (*Config, error) {
 	if err != nil {
 		return s.config, err
 	}
+	s.config.ServerBindAddress = normaliseBindAddress(s.config.ServerBindAddress)
 
 	// Migration: existing users who configured libraries before the SetupWizard
 	// existed will have setupDone=false. Treat a non-empty library list as implicit proof
@@ -112,6 +118,7 @@ func (s *fileConfigService) Save(cfg *Config) error {
 
 	// Update internal state
 	s.config = cfg
+	s.config.ServerBindAddress = normaliseBindAddress(s.config.ServerBindAddress)
 
 	data, err := json.MarshalIndent(s.config, "", "  ")
 	if err != nil {
@@ -152,6 +159,7 @@ func (s *fileConfigService) Update(fn func(*Config)) error {
 	defer s.mu.Unlock()
 
 	fn(s.config)
+	s.config.ServerBindAddress = normaliseBindAddress(s.config.ServerBindAddress)
 
 	data, err := json.MarshalIndent(s.config, "", "  ")
 	if err != nil {
