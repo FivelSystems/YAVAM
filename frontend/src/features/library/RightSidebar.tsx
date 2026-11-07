@@ -8,10 +8,13 @@ import { useThumbnail } from '../../hooks/useThumbnail';
 import { findPackageByFamily, getBlurStyle } from './utils';
 import { resolveDependency } from '../../utils/dependency';
 import { usePackageContext } from '../../context/PackageContext';
+import { useActionContext } from '../../context/ActionContext';
 import { fetchWithAuth } from '../../services/api';
 import { formatBytes } from '../../utils/format';
 import { DependencyGroup, DependencyGroupItem } from './components/DependencyGroup';
 import { ImageCarouselModal, CarouselImage } from './components/ImageCarouselModal';
+import { RatingFavoriteControl } from '../../components/ui/RatingFavoriteControl';
+import { useLiveRatingFavorite } from '../../hooks/useLiveRatingFavorite';
 
 export interface PackageContent {
     filePath: string;
@@ -49,6 +52,12 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
     const [externalMap, setExternalMap] = useState<Record<string, DependencyLocation>>({});
     const thumbSrc = useThumbnail(pkg);
     const { packages } = usePackageContext();
+    const { setPackageRating, setPackageFavorite } = useActionContext();
+
+    // Live rating/favourite, independent of the (possibly stale) `pkg` prop snapshot —
+    // mirrors the same pattern used by ContextMenu.tsx's rating row, so this panel
+    // reflects a click immediately instead of waiting for reselection (#54).
+    const { rating: liveRating, isFavorite: liveFavorite, rate: handleRate, toggleFavorite: handleToggleFavorite } = useLiveRatingFavorite(pkg, setPackageRating, setPackageFavorite);
 
     useEffect(() => {
         let isActive = true;
@@ -281,6 +290,17 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                             </span>
                         </div>
                     </div>
+                </div>
+
+                {/* Rating/Favourite — persistent, now backed by the web write path too (#56) */}
+                <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+                    <RatingFavoriteControl
+                        rating={liveRating}
+                        isFavorite={liveFavorite}
+                        onRate={handleRate}
+                        onToggleFavorite={handleToggleFavorite}
+                        size={16}
+                    />
                 </div>
 
                 {/* Conflict/Duplicate Resolver - Prominent if Issue Exists */}

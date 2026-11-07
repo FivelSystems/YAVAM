@@ -11,6 +11,7 @@ import { ToastContainer } from './features/layout/ToastContainer';
 import { EmptyState } from './features/layout/EmptyState';
 import DragDropOverlay from './features/upload/DragDropOverlay';
 import ContextMenu from './components/ui/ContextMenu';
+import { ActionSheet } from './components/ui/ActionSheet';
 import { useActionContext } from './context/ActionContext';
 import { useToasts } from './context/ToastContext';
 
@@ -130,7 +131,8 @@ const DashboardContent = () => {
 
     const {
         handleBulkToggle, handleOpenFolder, setInstallModal, handleCopyPath,
-        handleCopyFiles, handleCutFile, handleDeleteClick, handleInstantMerge, handleSingleResolve
+        handleCopyFiles, handleCutFile, handleDeleteClick, handleInstantMerge, handleSingleResolve,
+        setPackageRating, setPackageFavorite
     } = useActionContext();
 
     // Drag & Drop (Upload)
@@ -301,7 +303,7 @@ const DashboardContent = () => {
 
             {/* -- Modals -- */}
 
-            {contextMenu.open && contextMenu.pkg && (
+            {contextMenu.open && contextMenu.pkg && contextMenu.mode === 'anchored' && (
                 <ContextMenu
                     x={contextMenu.x}
                     y={contextMenu.y}
@@ -333,8 +335,45 @@ const DashboardContent = () => {
                     onMerge={(p) => handleInstantMerge(p, false)}
                     onMergeInPlace={(p) => handleInstantMerge(p, true)}
                     onResolve={handleSingleResolve}
+                    onSetRating={setPackageRating}
+                    onSetFavorite={setPackageFavorite}
                 />
             )}
+
+            {/* Mobile presentation of the same actions — stays mounted (unlike
+                ContextMenu) so its slide-up/down exit animation can play; `pkg`
+                going null is what closes it. */}
+            <ActionSheet
+                pkg={contextMenu.open && contextMenu.mode === 'sheet' ? contextMenu.pkg : null}
+                selectedCount={contextMenu.pkg && selectedIds.has(contextMenu.pkg.filePath) ? selectedIds.size : 1}
+                onClose={() => setContextMenu({ ...contextMenu, open: false })}
+                onToggle={(p) => handleBulkToggle(p)}
+                onOpenFolder={handleOpenFolder}
+                onDownload={(p) => {
+                    let targets = [p];
+                    if (selectedIds.has(p.filePath) && selectedIds.size > 1) {
+                        targets = packages.filter(pkg => selectedIds.has(pkg.filePath));
+                    }
+                    setInstallModal({ open: true, pkgs: targets });
+                }}
+                onCopyPath={handleCopyPath}
+                onCopyFiles={(pkgs) => {
+                    const pkg = pkgs[0];
+                    if (pkg && selectedIds.has(pkg.filePath) && selectedIds.size > 1) {
+                        const targets = packages.filter(p => selectedIds.has(p.filePath));
+                        handleCopyFiles(targets);
+                    } else {
+                        handleCopyFiles(pkgs);
+                    }
+                }}
+                onCutFile={handleCutFile}
+                onDelete={handleDeleteClick}
+                onMerge={(p) => handleInstantMerge(p, false)}
+                onMergeInPlace={(p) => handleInstantMerge(p, true)}
+                onResolve={handleSingleResolve}
+                onSetRating={setPackageRating}
+                onSetFavorite={setPackageFavorite}
+            />
 
             <SystemModals
                 isSettingsOpen={isSettingsOpen}

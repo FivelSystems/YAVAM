@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hasToken, hasField, addToken, removeToken, toggleToken, clearField } from './tokens';
+import { hasToken, hasField, addToken, removeToken, toggleToken, clearField, getRating, setRating } from './tokens';
 
 describe('token helpers', () => {
     it('adds a token and detects it case-insensitively', () => {
@@ -46,5 +46,22 @@ describe('token helpers', () => {
         const q = addToken('red dress', 'type', 'scene');
         expect(q).toBe('type:scene red dress');
         expect(removeToken(q, 'type', 'scene')).toBe('red dress');
+    });
+});
+
+describe('rating helpers', () => {
+    it('reads the active exact rating, defaulting to 0', () => {
+        expect(getRating('')).toBe(0);
+        expect(getRating('rating:4')).toBe(4);
+        expect(getRating('creator:shaper rating:2')).toBe(2);
+    });
+
+    it('sets an exact rating, replacing any existing one (unique, not additive)', () => {
+        expect(getRating(setRating('rating:2', 5))).toBe(5);
+        expect(setRating('', 3)).toBe('rating:3');
+    });
+
+    it('clears the rating filter when set to zero', () => {
+        expect(setRating('creator:shaper rating:4', 0)).toBe('creator:shaper');
     });
 });

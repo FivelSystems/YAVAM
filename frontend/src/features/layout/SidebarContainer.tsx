@@ -23,18 +23,19 @@ export const SidebarContainer: React.FC<SidebarContainerProps> = ({ isOpen, setI
                 )}
             </AnimatePresence>
 
-            {/* Sidebar Wrapper */}
+            {/* Sidebar Wrapper.
+                Width stays fixed at w-64; only transform (slide) and margin
+                (reclaim desktop layout space) animate — both are cheap and, unlike
+                animating width, never reflow the sidebar's own content mid-transition. */}
             <div className={clsx(
-                "z-40 transition-all duration-300 ease-in-out bg-gray-800 shrink-0 border-t border-gray-700",
-                "md:relative md:h-full",
+                "z-40 w-64 bg-gray-800 shrink-0 border-t border-gray-700",
+                "md:relative md:h-full will-change-transform transition-[transform,margin] duration-300 ease-in-out",
                 // @ts-ignore
                 typeof window !== 'undefined' && window.go ? "fixed left-0 top-8 bottom-0" : "fixed left-0 top-0 bottom-0",
                 "shadow-2xl md:shadow-none md:top-0 md:bottom-auto",
-                isOpen ? "w-64 translate-x-0" : "w-0 -translate-x-full md:translate-x-0 md:w-0 overflow-hidden"
+                isOpen ? "translate-x-0 md:ml-0" : "-translate-x-full md:-ml-64"
             )}>
-                <div className="w-64 h-full"> {/* Inner container to maintain width while parent animates */}
-                    {children}
-                </div>
+                {children}
             </div>
         </>
     );

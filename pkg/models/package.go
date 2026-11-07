@@ -25,8 +25,9 @@ type VarPackage struct {
 	MissingDeps     []string `json:"missingDeps"`
 	IsDuplicate     bool     `json:"isDuplicate"`
 	IsFavorite      bool     `json:"isFavorite"`
+	Rating          int      `json:"rating"` // 0–5 stars, keyed by family in user_metadata (0 = unrated)
 	IsHidden        bool     `json:"isHidden"`
-	IsOrphan        bool     `json:"isOrphan"`        // true = no other package depends on this one
+	IsRemovable     bool     `json:"isRemovable"`     // true = no other package depends on this one, so removing it breaks nothing
 	IsExactDuplicate bool    `json:"isExactDuplicate"` // true = same version+size exists at another path
 	ReferencedBy    []string `json:"referencedBy,omitempty"` // families that depend on this package
 	ObsoletedBy     string   `json:"obsoletedBy,omitempty"`  // reason this copy is obsolete/redundant

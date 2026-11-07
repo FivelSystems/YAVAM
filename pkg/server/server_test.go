@@ -1,10 +1,11 @@
-package server
+﻿package server
 
 import (
 	"context"
 	"embed"
 	"encoding/json"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"yavam/pkg/manager"
@@ -177,8 +178,107 @@ func TestAPI_Config_SetupDone(t *testing.T) {
 		t.Errorf("Expected setupDone: true in response, got: %v", resp["setupDone"])
 	}
 
+	// /api/config reports the DB-backed library list (manager.GetLibraries()),
+	// matching the desktop bridge's App.GetConfig — not the config service's own
+	// (stale, pre-SQLite-migration) Libraries field. The DB is shared across this
+	// whole test binary run (one YAVAM_DATA_DIR for the package), so other tests'
+	// libraries accumulate alongside this one's; assert presence, not exclusivity.
 	libs, ok := resp["libraries"].([]interface{})
-	if !ok || len(libs) != 1 || libs[0] != "C:/Allowed" {
-		t.Errorf("Expected libraries: [C:/Allowed] in response, got: %v", resp["libraries"])
+	if !ok {
+		t.Fatalf("Expected libraries to be a list in response, got: %v", resp["libraries"])
+	}
+	found := false
+	for _, lib := range libs {
+		if lib == "C:/Allowed" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Expected libraries to contain C:/Allowed, got: %v", resp["libraries"])
+	}
+}
+
+func newTestServerWithManager(t *testing.T) *Server {
+	t.Helper()
+	mockAuth := &MockAuthService{validToken: "valid"}
+	cfgSvc := &TestServerConfigService{libraries: []string{"C:/Allowed"}, setupDone: true}
+	mgr := manager.NewManager(nil, nil, cfgSvc)
+
+	s := NewServer(context.Background(), mgr, mockAuth, mockAssets, "1.0.0", func() {})
+	s.SkipEvents = true
+	s.Start("127.0.0.1", "0", []string{"C:/Allowed"})
+	return s
+}
+
+func postJSONRaw(t *testing.T, s *Server, path string, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := newTestRequest("POST", path, strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer valid")
+	w := httptest.NewRecorder()
+	s.httpSrv.Handler.ServeHTTP(w, req)
+	return w
+}
+
+func TestAPI_PackageRating_OutOfRange(t *testing.T) {
+	s := newTestServerWithManager(t)
+
+	for _, rating := range []int{6, -1} {
+		w := postJSONRaw(t, s, "/api/package-rating", `{"family":"Creator.Package","rating":`+strconv.Itoa(rating)+`}`)
+		if w.Code != 400 {
+			t.Errorf("rating %d: expected 400, got %d. Body: %s", rating, w.Code, w.Body.String())
+		}
+	}
+}
+
+func TestAPI_PackageRating_EmptyFamily(t *testing.T) {
+	s := newTestServerWithManager(t)
+
+	w := postJSONRaw(t, s, "/api/package-rating", `{"family":"","rating":3}`)
+	if w.Code != 400 {
+		t.Errorf("Expected 400 for empty family, got %d. Body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestAPI_PackageRating_HappyPath(t *testing.T) {
+	s := newTestServerWithManager(t)
+
+	w := postJSONRaw(t, s, "/api/package-rating", `{"family":"Creator.Package","rating":4}`)
+	if w.Code != 200 {
+		t.Fatalf("Expected 200 OK, got %d. Body: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
+	if resp["success"] != true {
+		t.Errorf("Expected success: true, got: %v", resp)
+	}
+}
+
+func TestAPI_PackageFavorite_EmptyFamily(t *testing.T) {
+	s := newTestServerWithManager(t)
+
+	w := postJSONRaw(t, s, "/api/package-favorite", `{"family":"","favorite":true}`)
+	if w.Code != 400 {
+		t.Errorf("Expected 400 for empty family, got %d. Body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestAPI_PackageFavorite_HappyPath(t *testing.T) {
+	s := newTestServerWithManager(t)
+
+	w := postJSONRaw(t, s, "/api/package-favorite", `{"family":"Creator.Package","favorite":true}`)
+	if w.Code != 200 {
+		t.Fatalf("Expected 200 OK, got %d. Body: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
+	if resp["success"] != true {
+		t.Errorf("Expected success: true, got: %v", resp)
 	}
 }

@@ -50,3 +50,24 @@ export const clearField = (query: string, field: TokenField): string =>
     buildQueryString(
         parseSearchQuery(query).tokens.filter(t => !(t.op === 'require' && t.field === field)),
     );
+
+/** Read the active exact-rating filter (`rating:N`), or 0 when none is set. */
+export const getRating = (query: string): number => {
+    const token = parseSearchQuery(query).tokens.find(
+        t => t.op === 'require' && t.field === 'rating' && /^\d+$/.test(t.value),
+    );
+    if (!token) return 0;
+    const n = parseInt(token.value, 10);
+    return Number.isFinite(n) ? n : 0;
+};
+
+/**
+ * Set the rating filter to exactly N stars, replacing any existing rating token.
+ * Rating is an exact match, not a minimum: with no way to also set an upper
+ * bound, a minimum couldn't express "show me only the 3-star ones", and a
+ * package has a single rating so ORing values is meaningless. `n <= 0` clears it.
+ */
+export const setRating = (query: string, n: number): string => {
+    const cleared = clearField(query, 'rating');
+    return n > 0 ? addToken(cleared, 'rating', String(n)) : cleared;
+};

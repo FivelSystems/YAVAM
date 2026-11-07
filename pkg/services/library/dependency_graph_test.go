@@ -66,8 +66,8 @@ func TestReverseDependencyAcrossVersions(t *testing.T) {
 	if len(baseAnalysis.ReferencedBy) != 2 {
 		t.Fatalf("Base should be used by 2 families despite version/.latest mismatch, got %v", baseAnalysis.ReferencedBy)
 	}
-	if baseAnalysis.IsOrphan {
-		t.Fatalf("Base is referenced, must not be flagged orphan")
+	if baseAnalysis.IsRemovable {
+		t.Fatalf("Base is referenced, must not be flagged removable")
 	}
 
 	// The dependency is present, so dependents report nothing missing.
@@ -119,7 +119,7 @@ func TestReverseDependencyIsDistinctPerPackageCrossLibrary(t *testing.T) {
 	byPath := make(map[string]PackageAnalysis)
 	for _, a := range AnalyzePackages(lib1, db) {
 		byPath[a.FilePath] = a
-		t.Logf("used-by[%s] = %v (orphan=%v)", a.FilePath, a.ReferencedBy, a.IsOrphan)
+		t.Logf("used-by[%s] = %v (removable=%v)", a.FilePath, a.ReferencedBy, a.IsRemovable)
 	}
 
 	a := byPath[baseA.FilePath].ReferencedBy

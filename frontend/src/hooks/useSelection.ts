@@ -1,12 +1,16 @@
 import { useState, useCallback } from 'react';
 import { VarPackage } from '../types';
 
+/** 'anchored': desktop right-click popover, positioned at (x, y).
+ *  'sheet': mobile bottom sheet (long-press or the card's overflow button) — no position needed. */
+export type SelectionTargetMode = 'anchored' | 'sheet';
+
 export const useSelection = (filteredPkgs: VarPackage[], itemsPerPage: number, setCurrentPage: (page: number) => void, currentPage: number) => {
     // Selection State
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [selectedPackage, setSelectedPackage] = useState<VarPackage | null>(null);
     const [isDetailsPanelOpen, setIsDetailsPanelOpen] = useState(false);
-    const [contextMenu, setContextMenu] = useState<{ open: boolean, x: number, y: number, pkg: VarPackage | null }>({ open: false, x: 0, y: 0, pkg: null });
+    const [contextMenu, setContextMenu] = useState<{ open: boolean, x: number, y: number, pkg: VarPackage | null, mode: SelectionTargetMode }>({ open: false, x: 0, y: 0, pkg: null, mode: 'anchored' });
 
     // Handle Click (Shift/Ctrl Logic)
     const handlePackageClick = useCallback((pkg: VarPackage, e?: React.MouseEvent) => {
@@ -64,7 +68,25 @@ export const useSelection = (filteredPkgs: VarPackage[], itemsPerPage: number, s
             open: true,
             x: e.clientX,
             y: e.clientY,
-            pkg: pkg
+            pkg: pkg,
+            mode: 'anchored'
+        });
+    }, [selectedIds]);
+
+    // Handle Long-press / overflow-button — mobile's only entry point to
+    // package actions (no right-click equivalent on touch), so it opens the
+    // same sheet regardless of which of the two triggered it.
+    const handleLongPress = useCallback((pkg: VarPackage) => {
+        if (!selectedIds.has(pkg.filePath)) {
+            setSelectedPackage(pkg);
+            setSelectedIds(new Set([pkg.filePath]));
+        }
+        setContextMenu({
+            open: true,
+            x: 0,
+            y: 0,
+            pkg: pkg,
+            mode: 'sheet'
         });
     }, [selectedIds]);
 
@@ -113,7 +135,7 @@ export const useSelection = (filteredPkgs: VarPackage[], itemsPerPage: number, s
         setSelectedIds(new Set());
         setSelectedPackage(null);
         setIsDetailsPanelOpen(false);
-        setContextMenu({ open: false, x: 0, y: 0, pkg: null });
+        setContextMenu({ open: false, x: 0, y: 0, pkg: null, mode: 'anchored' });
     }, []);
 
     return {
@@ -123,6 +145,7 @@ export const useSelection = (filteredPkgs: VarPackage[], itemsPerPage: number, s
         contextMenu, setContextMenu,
         handlePackageClick,
         handleContextMenu,
+        handleLongPress,
         navigate,
         selectAllPage,
         clearSelection

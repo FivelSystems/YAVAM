@@ -1,5 +1,5 @@
 import React, { createContext, useContext } from 'react';
-import { useSelection } from '../hooks/useSelection';
+import { useSelection, SelectionTargetMode } from '../hooks/useSelection';
 import { useFilterContext } from './FilterContext';
 import { VarPackage } from '../types';
 import { useKeybindSubscription } from './KeybindContext';
@@ -11,10 +11,11 @@ interface SelectionContextType {
     setSelectedPackage: (p: VarPackage | null) => void;
     isDetailsPanelOpen: boolean;
     setIsDetailsPanelOpen: (v: boolean) => void;
-    contextMenu: { open: boolean; x: number; y: number; pkg: VarPackage | null };
+    contextMenu: { open: boolean; x: number; y: number; pkg: VarPackage | null; mode: SelectionTargetMode };
     setContextMenu: (v: any) => void;
     handlePackageClick: (pkg: VarPackage, e?: React.MouseEvent) => void;
     handleContextMenu: (e: React.MouseEvent, pkg: VarPackage) => void;
+    handleLongPress: (pkg: VarPackage) => void;
     navigate: (direction: -1 | 1, add: boolean) => void;
     selectAllPage: () => number;
     clearSelection: () => void;

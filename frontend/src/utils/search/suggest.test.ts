@@ -53,7 +53,7 @@ describe('getSuggestions', () => {
 
     it('lists all searchable fields when empty', () => {
         const s = getSuggestions('', vocab);
-        expect(s.map(x => x.field)).toEqual(['creator', 'type', 'tag', 'status', 'size']);
+        expect(s.map(x => x.field)).toEqual(['creator', 'type', 'tag', 'status', 'rating', 'favorite', 'size']);
     });
 
     it('returns nothing for an inert field prefix', () => {

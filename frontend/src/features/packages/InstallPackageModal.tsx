@@ -117,32 +117,16 @@ export const InstallPackageModal = ({ isOpen, onClose, packages, allPackages, li
         setProgress(null);
         setStatusHistory({});
 
-        // Setup Wails Event Listener
+        // Setup Wails Event Listener (window.runtime.EventsOn is polyfilled in Web Mode too, see wails-polyfill.ts)
         let cleanupEvents: (() => void) | null = null;
 
         // @ts-ignore
-        if (window.runtime) {
-            // @ts-ignore
-            cleanupEvents = window.runtime.EventsOn("install-progress", (data: any) => {
-                setProgress(data);
-                if (data.status) {
-                    setStatusHistory(prev => ({ ...prev, [data.filename]: data.status }));
-                }
-            });
-        } else {
-            // Web Mode - Listen for Custom Events dispatched by App.tsx from SSE
-            const handler = (e: any) => {
-                const data = e.detail;
-                if (data) {
-                    setProgress(data);
-                    if (data.status) {
-                        setStatusHistory(prev => ({ ...prev, [data.filename]: data.status }));
-                    }
-                }
-            };
-            window.addEventListener('install-progress', handler);
-            cleanupEvents = () => window.removeEventListener('install-progress', handler);
-        }
+        cleanupEvents = window.runtime.EventsOn("install-progress", (data: any) => {
+            setProgress(data);
+            if (data.status) {
+                setStatusHistory(prev => ({ ...prev, [data.filename]: data.status }));
+            }
+        });
 
         try {
             const paths = resolvedPackages.map(p => p.filePath);

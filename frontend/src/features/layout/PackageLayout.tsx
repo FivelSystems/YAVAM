@@ -39,15 +39,15 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
     const { packages, scanError } = usePackageContext();
     const {
         filteredPkgs, currentPage, itemsPerPage, setCurrentPage,
-        searchQuery, setSearchQuery
+        searchQuery, setSearchQuery, clearFilters
     } = useFilterContext();
     const {
         selectedIds, selectedPackage, setSelectedPackage,
         isDetailsPanelOpen, setIsDetailsPanelOpen,
-        handlePackageClick, handleContextMenu, setSelectedIds, setContextMenu
+        handlePackageClick, handleContextMenu, handleLongPress, setSelectedIds, setContextMenu
     } = useSelectionContext();
     const { activeLibraryPath, selectLibrary } = useLibraryContext();
-    const { handleSingleResolve, handleGetDependencyStatus } = useActionContext();
+    const { handleSingleResolve, handleGetDependencyStatus, setPackageRating, setPackageFavorite } = useActionContext();
     const { addToast } = useToasts();
 
     // Local UI State
@@ -75,7 +75,8 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
             open: true,
             x: e.clientX,
             y: e.clientY,
-            pkg: pkg
+            pkg: pkg,
+            mode: 'anchored'
         });
     }, [setContextMenu]);
 
@@ -228,6 +229,13 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
     // Specifically check if selected package is visible in the CURRENT PAGE of the grid
     const isOffScreen = !!(selectedPackage && !currentSlice.some(p => p.filePath === selectedPackage.filePath));
 
+    // selectedPackage is a snapshot taken at selection time; rating/favourite
+    // edits patch the `packages` array in place, so the details panel must read
+    // the live object by filePath instead of the stale selection reference.
+    const livePackage = selectedPackage
+        ? packages.find(p => p.filePath === selectedPackage.filePath) ?? selectedPackage
+        : null;
+
     return (
         <div className="flex-1 flex overflow-hidden">
             <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
@@ -246,6 +254,9 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
                         totalCount={packages.length}
                         onContextMenu={handleContextMenu}
                         onSelect={handlePackageClick}
+                        onRate={setPackageRating}
+                        onToggleFavorite={setPackageFavorite}
+                        onOpenActionSheet={handleLongPress}
                         selectedPkgId={selectedPackage?.filePath}
                         selectedIds={selectedIds}
                         viewMode={viewMode}
@@ -255,6 +266,8 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
                         hidePackageNames={censorThumbnails && hidePackageNames}
                         hideCreatorNames={censorThumbnails && hideCreatorNames}
                         highlightedRequest={highlightedRequest}
+                        isFiltered={searchQuery.trim().length > 0}
+                        onClearFilters={clearFilters}
                     />
                 </div>
 
@@ -274,7 +287,7 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
             <AnimatePresence>
                 {(selectedPackage && isDetailsPanelOpen) && (
                     <RightSidebar
-                        pkg={selectedPackage}
+                        pkg={livePackage ?? selectedPackage}
                         onClose={() => {
                             setIsDetailsPanelOpen(false);
                             setSelectedPackage(null);

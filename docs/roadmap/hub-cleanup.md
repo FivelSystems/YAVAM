@@ -1,7 +1,8 @@
 # VaM Hub integration + Discover + Cleanup view
 
 > **Status:** 🗄️ Backlog · **Horizon:** Later · **Targets:** 2.0 · **Depends on:** [pockets](pockets.md).
-> [Roadmap index](../ROADMAP.md) · **Spec (cleanup feeder):** [design/pocket-system.md](../design/pocket-system.md).
+> [Roadmap index](../ROADMAP.md) · **Spec (cleanup feeder):** [design/pocket-system.md](../design/pocket-system.md) ·
+> **Spec (Hub HTTP surface):** [design/vam-hub-api.md](../design/vam-hub-api.md).
 
 Connect YAVAM to the VaM Hub to resolve missing dependencies, discover content, and
 reclaim disk space — all reviewed through the same pocket modal.

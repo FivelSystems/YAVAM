@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export interface LayoutSettings {
     viewMode: 'grid' | 'list';
@@ -23,10 +23,32 @@ export const useLayoutSettings = (): LayoutSettings => {
         return stored ? parseInt(stored, 10) : 200;
     });
 
-    const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
-        const stored = localStorage.getItem('layout_isSidebarOpen');
-        return stored ? stored === 'true' : window.innerWidth > 768;
-    });
+    // The sidebar is navigation state, not a persisted display preference — it
+    // gates access to the library switcher itself, unlike viewMode/gridSize/
+    // sortMode. Desktop always starts open; mobile always starts closed. Either
+    // can still be toggled within the session, that toggle just isn't remembered
+    // across loads or breakpoint crossings.
+    const [isSidebarOpen, _setIsSidebarOpen] = useState(() => window.innerWidth > 768);
+    const isMobileRef = useRef(window.innerWidth <= 768);
+
+    const setIsSidebarOpen: React.Dispatch<React.SetStateAction<boolean>> = (value) => {
+        _setIsSidebarOpen(prev => (typeof value === 'function' ? (value as (p: boolean) => boolean)(prev) : value));
+    };
+
+    // Pure CSS (Tailwind `md:` classes) already reacts live to resizing; this
+    // only re-syncs the JS-computed open/closed state, which is otherwise fixed
+    // at mount — closing the drawer when live-resizing into mobile, and
+    // reopening it when resizing back out to desktop.
+    useEffect(() => {
+        const handleResize = () => {
+            const isMobile = window.innerWidth <= 768;
+            if (isMobile === isMobileRef.current) return;
+            isMobileRef.current = isMobile;
+            _setIsSidebarOpen(!isMobile);
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     const [minimizeOnClose, setMinimizeOnClose] = useState(() => {
         return localStorage.getItem('app_minimizeOnClose') === 'true';
@@ -40,10 +62,6 @@ export const useLayoutSettings = (): LayoutSettings => {
     useEffect(() => {
         localStorage.setItem('layout_gridSize', String(gridSize));
     }, [gridSize]);
-
-    useEffect(() => {
-        localStorage.setItem('layout_isSidebarOpen', String(isSidebarOpen));
-    }, [isSidebarOpen]);
 
     // Sync Minimize setting to Backend
     useEffect(() => {

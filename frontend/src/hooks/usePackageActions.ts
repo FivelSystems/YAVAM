@@ -460,7 +460,7 @@ export const usePackageActions = (
                 if (key === 'enabled') return p.isEnabled && !p.isCorrupt;
                 if (key === 'disabled') return !p.isEnabled && !p.isCorrupt;
                 if (key === 'missing-deps') return p.missingDeps && p.missingDeps.length > 0 && !p.isCorrupt;
-                if (key === 'unreferenced') return p.isOrphan && !p.isCorrupt;
+                if (key === 'removable') return p.isRemovable && !p.isCorrupt;
                 if (key === 'version-conflicts') return p.isDuplicate && !p.isCorrupt; // Using 'isDuplicate' flag for 'Obsolete/Conflict' bucket logic
                 if (key === 'exact-duplicates') return p.isExactDuplicate && !p.isCorrupt;
                 if (key === 'corrupt') return p.isCorrupt;
@@ -984,6 +984,70 @@ export const usePackageActions = (
         } catch (e) { console.error(e); }
     }, [addToast]);
 
+
+    // -- Ratings & Favourites (user_metadata, keyed by family) --
+
+    // Rating and favourite are version-agnostic: they attach to the whole family
+    // (Creator.Name), so every physical copy in state is updated together.
+    const familyOf = (pkg: VarPackage) => `${pkg.meta.creator}.${pkg.meta.packageName}`.toLowerCase();
+
+    const patchFamily = useCallback((family: string, patch: Partial<VarPackage>) => {
+        setPackages(prev => prev.map(p =>
+            `${p.meta.creator}.${p.meta.packageName}`.toLowerCase() === family ? { ...p, ...patch } : p
+        ));
+    }, [setPackages]);
+
+    // These set an EXPLICIT target value (not a toggle off a possibly-stale
+    // snapshot): the caller owns the live value and passes what it should become,
+    // so repeated clicks stay correct even while the menu is open.
+    const setPackageRating = useCallback(async (pkg: VarPackage, rating: number) => {
+        const family = familyOf(pkg);
+        const prev = pkg.rating ?? 0;
+        patchFamily(family, { rating }); // optimistic
+        try {
+            // @ts-ignore
+            if (window.go) {
+                // @ts-ignore
+                await window.go.main.App.SetPackageRating(family, rating);
+            } else {
+                const res = await fetchWithAuth('/api/package-rating', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ family, rating }),
+                }).then(r => r.json());
+                if (!res.success) throw new Error(res.message || res.error || "Unknown error");
+            }
+        } catch (e) {
+            console.error(e);
+            patchFamily(family, { rating: prev }); // rollback
+            addToast("Failed to save rating: " + e, 'error');
+        }
+    }, [addToast, patchFamily]);
+
+    const setPackageFavorite = useCallback(async (pkg: VarPackage, favorite: boolean) => {
+        const family = familyOf(pkg);
+        const prev = !!pkg.isFavorite;
+        patchFamily(family, { isFavorite: favorite }); // optimistic
+        try {
+            // @ts-ignore
+            if (window.go) {
+                // @ts-ignore
+                await window.go.main.App.SetPackageFavorite(family, favorite);
+            } else {
+                const res = await fetchWithAuth('/api/package-favorite', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ family, favorite }),
+                }).then(r => r.json());
+                if (!res.success) throw new Error(res.message || res.error || "Unknown error");
+            }
+        } catch (e) {
+            console.error(e);
+            patchFamily(family, { isFavorite: prev }); // rollback
+            addToast("Failed to update favourite: " + e, 'error');
+        }
+    }, [addToast, patchFamily]);
+
     return {
         // Actions
         togglePackage,
@@ -1000,6 +1064,8 @@ export const usePackageActions = (
         handleCopyPath,
         handleCopyFiles,
         handleCutFile,
+        setPackageRating,
+        setPackageFavorite,
 
         // Modal State
         installModal, setInstallModal,

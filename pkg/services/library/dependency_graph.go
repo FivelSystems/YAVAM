@@ -173,7 +173,7 @@ func AnalyzePackages(pkgs []models.VarPackage, db *database.DB) []PackageAnalysi
 }
 
 // applyTo overwrites the dependency-related fields of analyses (MissingDeps,
-// ReferencedBy, IsOrphan) with results resolved against the global graph.
+// ReferencedBy, IsRemovable) with results resolved against the global graph.
 func (g *DependencyGraph) applyTo(analyses []PackageAnalysis, pkgs []models.VarPackage) {
 	byPath := make(map[string]models.VarPackage, len(pkgs))
 	for _, p := range pkgs {
@@ -188,7 +188,9 @@ func (g *DependencyGraph) applyTo(analyses []PackageAnalysis, pkgs []models.VarP
 
 		referencedBy := g.dependentsOf(familyOf(p))
 		analyses[i].ReferencedBy = referencedBy
-		analyses[i].IsOrphan = p.IsEnabled && !p.IsCorrupt && p.Meta.Creator != "" && len(referencedBy) == 0
+		// Enable-agnostic: a disabled package still exists in YAVAM's view, so
+		// "no package depends on it" holds regardless of its VaM enabled state.
+		analyses[i].IsRemovable = !p.IsCorrupt && p.Meta.Creator != "" && len(referencedBy) == 0
 
 		analyses[i].MissingDeps = g.missingDepsOf(p)
 	}

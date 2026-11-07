@@ -1,17 +1,17 @@
-import { ChevronDown, ChevronRight, Layers, Package, Settings, CheckCircle2, CircleOff, Power, Sparkles, Trash2, GripVertical, Download, AlertCircle, AlertTriangle, Copy, Unlink, Search } from 'lucide-react';
-import { VarPackage } from '../../types';
+import { ChevronDown, ChevronRight, Layers, Package, Settings, Trash2, GripVertical, Heart, Boxes, Users, Tags, X } from 'lucide-react';
 import clsx from 'clsx';
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Reorder, useDragControls } from "framer-motion";
 import { usePackageContext } from '../../context/PackageContext';
 import { useFilterContext } from '../../context/FilterContext';
 import { useLibraryContext } from '../../context/LibraryContext';
-import { useActionContext } from '../../context/ActionContext';
 import { STATUS_FILTERS } from '../../constants';
+import { hasToken, toggleToken, getRating, setRating } from '../../utils/search';
+import { FilterDropdown, FilterOption, badgeTone } from '../../components/ui/FilterDropdown';
+import { Toggle } from '../../components/ui/Toggle';
+import { RatingStars } from '../../components/ui/RatingStars';
 import { getStoredToken } from '../../services/auth';
-import { hasToken, hasField, toggleToken, clearField } from '../../utils/search';
-
-
+import { SidebarGroupMenu, SidebarGroupType, isStandalone } from './SidebarGroupMenu';
 
 // Simple Library Item Component
 const SidebarLibraryItem = ({ lib, isActive, count, onSelect, onRemove }: { lib: string, isActive: boolean, count?: number, onSelect: () => void, onRemove?: (lib: string) => void }) => {
@@ -48,15 +48,6 @@ const SidebarLibraryItem = ({ lib, isActive, count, onSelect, onRemove }: { lib:
     );
 };
 
-
-const getStatusClasses = (status: 'normal' | 'warning' | 'error' | undefined, isSelected: boolean) => {
-    if (status === 'warning') return "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30";
-    if (status === 'error') return "bg-red-500/20 text-red-400 border border-red-500/30";
-    return isSelected
-        ? "bg-blue-600/20 text-blue-300" // Normal Selected
-        : "bg-gray-700 text-gray-400 group-hover:bg-gray-600"; // Normal Unselected
-};
-
 type SidebarProps = {
     // UI Only Props
     onOpenSettings: () => void;
@@ -70,32 +61,24 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
     // The sidebar composes the same tokenised query as the searchbar: a facet is
     // "active" when its token is present, and clicking it toggles that token.
     const statusActive = (value: string) => hasToken(searchQuery, 'status', value);
-    const noStatus = !hasField(searchQuery, 'status');
     const toggleStatus = (value: string) => setSearchQuery(toggleToken(searchQuery, 'status', value));
-    const showAll = () => setSearchQuery(clearField(searchQuery, 'status'));
+    const anyFilterActive = searchQuery.trim().length > 0;
+    const clearAllFilters = () => setSearchQuery('');
+
+    const rating = getRating(searchQuery);
+    const changeRating = (n: number) => setSearchQuery(setRating(searchQuery, n === rating ? 0 : n));
+    const favoriteActive = hasToken(searchQuery, 'favorite', 'true');
+    const toggleFavorite = () => setSearchQuery(toggleToken(searchQuery, 'favorite', 'true'));
+
     const {
         libraries, activeLibIndex, selectLibrary,
         removeLibrary, reorderLibraries, browseAndAdd
     } = useLibraryContext();
-    const { handleSidebarAction, handleDeleteClick } = useActionContext();
 
     // Local State
-    const [collapsed, setCollapsed] = useState({ status: false, creators: true, types: false });
     const [isLibDropdownOpen, setIsLibDropdownOpen] = useState(false);
-    const [contextMenu, setContextMenu] = useState<{ open: boolean, x: number, y: number, groupType: 'creator' | 'type' | 'status', key: string } | null>(null);
+    const [contextMenu, setContextMenu] = useState<{ open: boolean, x: number, y: number, groupType: SidebarGroupType, key: string } | null>(null);
     const [libraryCounts, setLibraryCounts] = useState<Record<string, number>>({});
-
-    // Creator Search State
-    const [creatorSearch, setCreatorSearch] = useState("");
-    const [isCreatorSearchOpen, setIsCreatorSearchOpen] = useState(false);
-    const searchInputRef = useRef<HTMLInputElement>(null);
-
-    // Auto-focus search input
-    useEffect(() => {
-        if (isCreatorSearchOpen && searchInputRef.current) {
-            searchInputRef.current.focus();
-        }
-    }, [isCreatorSearchOpen]);
 
     // Fetch Library Counts (Unified)
     useEffect(() => {
@@ -129,34 +112,19 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
             }
         };
 
-        // Fetch on mount, and whenever library list changes
         fetchCounts();
-
-        // Also fetch whenever package list updates (implies scan/action finished)
-        // This ensures counts stay largely in sync with operations
-    }, [libraries, packages]); // Added packages dependency to trigger refresh on scan completion
+    }, [libraries, packages]);
 
     const currentLibPath = libraries && libraries[activeLibIndex] ? libraries[activeLibIndex] : "No Library Selected";
     const currentLibName = currentLibPath.split(/[/\\]/).pop() || "Library";
 
-    const toggleSection = (section: 'status' | 'creators' | 'types') => {
-        setCollapsed(prev => ({ ...prev, [section]: !prev[section] }));
-    };
-
-    const handleContextMenu = (e: React.MouseEvent, groupType: 'creator' | 'type' | 'status', key: string) => {
+    const handleContextMenu = (e: React.MouseEvent, groupType: SidebarGroupType, key: string) => {
         e.preventDefault();
         setContextMenu({ open: true, x: e.clientX, y: e.clientY, groupType, key });
     };
 
-    // Close context menu on global click
-    useEffect(() => {
-        const close = () => setContextMenu(null);
-        window.addEventListener('click', close);
-        return () => window.removeEventListener('click', close);
-    }, []);
-
-    // Memoized Lists (Moved from Props to Context-Derived)
-    const types = useMemo(() => {
+    // Category (type) options for the Categories dropdown.
+    const typeOptions = useMemo<FilterOption[]>(() => {
         const counts: Record<string, number> = {};
         packages.forEach(p => {
             // Corrupt packages have their own Status filter; exclude them here
@@ -165,17 +133,21 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
             const t = p.type || 'Other';
             counts[t] = (counts[t] || 0) + 1;
         });
-        return Object.entries(counts).sort((a, b) => b[1] - a[1]);
-    }, [packages]);
+        return Object.entries(counts)
+            .sort((a, b) => b[1] - a[1])
+            .map(([value, count]) => ({ value, label: value, count, tone: typeStatus[value] }));
+    }, [packages, typeStatus]);
 
-    const creators = useMemo(() => {
+    const creatorOptions = useMemo<FilterOption[]>(() => {
         const counts: Record<string, number> = {};
         packages.forEach(p => {
             const c = p.meta.creator || "Unknown";
             counts[c] = (counts[c] || 0) + 1;
         });
-        return Object.entries(counts).sort((a, b) => a[0].localeCompare(b[0]));
-    }, [packages]);
+        return Object.entries(counts)
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([value, count]) => ({ value, label: value, count, tone: creatorStatus[value] }));
+    }, [packages, creatorStatus]);
 
     const statusCounts = useMemo(() => {
         const validPkgs = packages.filter(p => !p.isCorrupt);
@@ -188,10 +160,30 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
             missingDeps: validPkgs.filter(p => p.missingDeps && p.missingDeps.length > 0).length,
             versionConflicts: validPkgs.filter(p => p.isDuplicate).length,
             exactDuplicates: validPkgs.filter(p => p.isExactDuplicate).length,
-            orphans: validPkgs.filter(p => p.isOrphan).length,
+            removable: validPkgs.filter(p => p.isRemovable).length,
+            standalone: validPkgs.filter(isStandalone).length,
             corrupt: corruptPkgs.length
         };
     }, [packages]);
+
+    // Status options, hidden when a bucket is empty (mirrors the old list) — UNLESS
+    // it's the active filter. A bucket that just emptied out (e.g. the last enabled
+    // package was disabled) must stay visible while selected, or the user is left
+    // with an invisible `status:enabled` token still constraining the grid to zero
+    // results, with no control in the list left to switch or clear it (#53).
+    const statusOptions = useMemo<FilterOption[]>(() => {
+        const defs: { value: string, label: string, count: number, tone?: FilterOption['tone'], title?: string }[] = [
+            { value: 'enabled', label: 'Enabled', count: statusCounts.enabled },
+            { value: 'disabled', label: 'Disabled', count: statusCounts.disabled },
+            { value: 'missing-deps', label: 'Missing Deps', count: statusCounts.missingDeps, tone: 'error' },
+            { value: 'version-conflicts', label: 'Conflicts', count: statusCounts.versionConflicts, tone: 'warning' },
+            { value: 'exact-duplicates', label: 'Duplicates', count: statusCounts.exactDuplicates, tone: 'warning' },
+            { value: 'corrupt', label: 'Corrupt', count: statusCounts.corrupt, tone: 'error' },
+            { value: 'standalone', label: 'Standalone', count: statusCounts.standalone, title: 'Self-contained: declares no dependencies of its own.' },
+            { value: 'removable', label: 'Removable', count: statusCounts.removable, title: "No other package depends on these, so removing them won't break anything." },
+        ];
+        return defs.filter(d => d.count > 0 || statusActive(d.value));
+    }, [statusCounts, searchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
     return (
         <aside className="w-64 h-full bg-gray-800 border-r border-gray-700 flex flex-col shadow-xl z-20">
@@ -216,9 +208,14 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
                             onClick={() => setIsLibDropdownOpen(!isLibDropdownOpen)}
                         >
                             <span className="text-[10px] text-gray-500 uppercase tracking-wider block leading-none mb-0.5">Library</span>
-                            <div className="font-bold text-gray-200 text-sm truncate leading-tight select-none" title={currentLibPath}>
+                            <div className="font-bold text-gray-200 text-sm leading-tight select-none truncate" title={currentLibPath}>
                                 {currentLibName}
                             </div>
+                            {statusCounts.all > 0 && (
+                                <span className="block text-[10px] text-gray-500 leading-none mt-0.5" title="Total packages in this library">
+                                    {`${statusCounts.all.toLocaleString()} packages`}
+                                </span>
+                            )}
                         </div>
 
                         <button
@@ -271,234 +268,107 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
                 </div>
             </div>
 
-            {/* Status Sections */}
-            <div className="flex-1 overflow-hidden flex flex-col custom-scrollbar overflow-y-auto">
-                {/* STATUS SECTION */}
-                <div className="p-4 border-b border-gray-700/50">
-                    <button onClick={() => toggleSection('status')} className="w-full flex items-center justify-between text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2 hover:text-gray-300">
-                        <span>Status</span>
-                        {!collapsed.status ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    </button>
-                    {!collapsed.status && (
-                        <div className="space-y-1 animation-fade-in">
-                            {/* All */}
-                            <button onClick={showAll} onContextMenu={(e) => handleContextMenu(e, 'status', STATUS_FILTERS.ALL)} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", noStatus ? "bg-blue-600/10 text-blue-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
-                                <div className="flex items-center gap-3"><Layers size={18} /> All Packages</div>
-                                <span className={clsx("text-xs px-2 py-0.5 rounded-full font-medium transition-colors", noStatus ? "bg-blue-500/20 text-blue-300" : "bg-gray-800 text-gray-400 group-hover:bg-gray-700 group-hover:text-gray-300")}>{statusCounts.all}</span>
-                            </button>
-                            {/* Enabled */}
-                            {statusCounts.enabled > 0 && (
-                                <button onClick={() => toggleStatus('enabled')} onContextMenu={(e) => handleContextMenu(e, 'status', 'enabled')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", statusActive('enabled') ? "bg-green-500/10 text-green-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
-                                    <div className="flex items-center gap-3"><CheckCircle2 size={18} /> Enabled</div>
-                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-green-500/20 text-green-400 border border-green-500/10 group-hover:bg-green-500/30 transition-colors">{statusCounts.enabled}</span>
-                                </button>
-                            )}
-                            {/* Disabled */}
-                            {statusCounts.disabled > 0 && (
-                                <button onClick={() => toggleStatus('disabled')} onContextMenu={(e) => handleContextMenu(e, 'status', 'disabled')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", statusActive('disabled') ? "bg-gray-600/20 text-gray-200" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
-                                    <div className="flex items-center gap-3"><CircleOff size={18} /> Disabled</div>
-                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-700 text-gray-300 border border-gray-600 group-hover:bg-gray-600 transition-colors">{statusCounts.disabled}</span>
-                                </button>
-                            )}
-                            {/* Missing Dependencies */}
-                            {statusCounts.missingDeps > 0 && (
-                                <button onClick={() => toggleStatus('missing-deps')} onContextMenu={(e) => handleContextMenu(e, 'status', 'missing-deps')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", statusActive('missing-deps') ? "bg-red-500/10 text-red-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
-                                    <div className="flex items-center gap-3"><AlertCircle size={18} /> Missing Deps</div>
-                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-500/20 text-red-400 border border-red-500/10 group-hover:bg-red-500/30 transition-colors">{statusCounts.missingDeps}</span>
-                                </button>
-                            )}
-                            {/* Version Conflicts (Obsolete) */}
-                            {statusCounts.versionConflicts > 0 && (
-                                <button onClick={() => toggleStatus('version-conflicts')} onContextMenu={(e) => handleContextMenu(e, 'status', 'version-conflicts')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", statusActive('version-conflicts') ? "bg-yellow-500/10 text-yellow-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
-                                    <div className="flex items-center gap-3"><AlertTriangle size={18} /> Conflicts</div>
-                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-yellow-500/20 text-yellow-400 border border-yellow-500/10 group-hover:bg-yellow-500/30 transition-colors">{statusCounts.versionConflicts}</span>
-                                </button>
-                            )}
-                            {/* Exact Duplicates */}
-                            {statusCounts.exactDuplicates > 0 && (
-                                <button onClick={() => toggleStatus('exact-duplicates')} onContextMenu={(e) => handleContextMenu(e, 'status', 'exact-duplicates')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", statusActive('exact-duplicates') ? "bg-purple-500/10 text-purple-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
-                                    <div className="flex items-center gap-3"><Copy size={18} /> Duplicates</div>
-                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-purple-500/20 text-purple-400 border border-purple-500/10 group-hover:bg-purple-500/30 transition-colors">{statusCounts.exactDuplicates}</span>
-                                </button>
-                            )}
-                            {/* Corrupt */}
-                            {statusCounts.corrupt > 0 && (
-                                <button onClick={() => toggleStatus('corrupt')} onContextMenu={(e) => handleContextMenu(e, 'status', 'corrupt')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", statusActive('corrupt') ? "bg-red-600/20 text-red-500" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
-                                    <div className="flex items-center gap-3"><AlertTriangle size={18} /> Corrupt</div>
-                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-600/20 text-red-500 border border-red-600/10 group-hover:bg-red-600/30 transition-colors">{statusCounts.corrupt}</span>
-                                </button>
-                            )}
-                            {/* Unreferenced (Orphans) */}
-                            {statusCounts.orphans > 0 && (
-                                <button onClick={() => toggleStatus('unreferenced')} onContextMenu={(e) => handleContextMenu(e, 'status', 'unreferenced')} className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", statusActive('unreferenced') ? "bg-violet-600/20 text-violet-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}>
-                                    <div className="flex items-center gap-3"><Unlink size={18} /> Unreferenced</div>
-                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-violet-600/20 text-violet-400 border border-violet-600/10 group-hover:bg-violet-600/30 transition-colors">{statusCounts.orphans}</span>
-                                </button>
-                            )}
-                        </div>
+            {/* Filters */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-4">
+                {/* Filter panel header. Right-click exposes the library-wide bulk
+                    actions that used to hang off the old "All Packages" button. */}
+                <div
+                    className="flex items-center justify-between px-1 h-5"
+                    onContextMenu={(e) => handleContextMenu(e, 'status', STATUS_FILTERS.ALL)}
+                >
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Filters</span>
+                    {anyFilterActive && (
+                        <button
+                            onClick={clearAllFilters}
+                            className="text-[11px] text-gray-400 hover:text-white flex items-center gap-1 transition-colors"
+                            title="Clear every active filter"
+                        >
+                            <X size={12} /> Clear all
+                        </button>
                     )}
                 </div>
 
-                {/* CREATORS */}
-                <div className="p-4 border-b border-gray-700/50">
-                    {!isCreatorSearchOpen ? (
-                        <div className="flex items-center justify-between mb-2 px-2 group/header">
-                            <button onClick={() => toggleSection('creators')} className="flex-1 flex items-center justify-between text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-300">
-                                <span>Creators</span>
-                                {!collapsed.creators ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                            </button>
-                            {!collapsed.creators && (
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); setIsCreatorSearchOpen(true); }}
-                                    className="ml-2 text-gray-500 hover:text-white opacity-0 group-hover/header:opacity-100 transition-opacity p-0.5 rounded hover:bg-gray-700"
-                                    title="Search Creators"
-                                >
-                                    <Search size={12} />
-                                </button>
+                {/* Dropdown filters (one shared FilterDropdown, three configurations) */}
+                <div className="space-y-2">
+                    <FilterDropdown
+                        label="Status"
+                        icon={<Boxes size={16} />}
+                        options={statusOptions}
+                        isSelected={statusActive}
+                        onToggle={toggleStatus}
+                        onOptionContextMenu={(value, e) => handleContextMenu(e, 'status', value)}
+                        emptyHint="No status buckets"
+                    />
+                    <FilterDropdown
+                        label="Creators"
+                        icon={<Users size={16} />}
+                        options={creatorOptions}
+                        isSelected={(v) => hasToken(searchQuery, 'creator', v)}
+                        onToggle={(v) => setSearchQuery(toggleToken(searchQuery, 'creator', v))}
+                        searchable
+                        searchPlaceholder="Filter creators…"
+                        onOptionContextMenu={(value, e) => handleContextMenu(e, 'creator', value)}
+                    />
+                    <FilterDropdown
+                        label="Categories"
+                        icon={<Tags size={16} />}
+                        options={typeOptions}
+                        isSelected={(v) => hasToken(searchQuery, 'type', v)}
+                        onToggle={(v) => setSearchQuery(toggleToken(searchQuery, 'type', v))}
+                        searchable
+                        searchPlaceholder="Filter categories…"
+                        onOptionContextMenu={(value, e) => handleContextMenu(e, 'type', value)}
+                    />
+                </div>
+
+                <div className="space-y-3 border-t border-gray-700/50 pt-4 px-1">
+                    <div>
+                        <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-1.5">Rating</p>
+                        <div className={clsx(
+                            "flex items-center justify-between rounded-md border px-3 py-2",
+                            rating > 0
+                                ? "bg-blue-600/10 border-blue-600/30 text-blue-300"
+                                : "bg-gray-900/40 border-gray-700 text-gray-300",
+                        )}>
+                            <RatingStars value={rating} onChange={changeRating} showClearButton />
+                            {rating > 0 && (
+                                <span className={clsx("text-[10px] px-1.5 py-0.5 rounded-full border shrink-0", badgeTone(undefined, true))}>
+                                    {rating} star{rating > 1 ? 's' : ''}
+                                </span>
                             )}
                         </div>
-                    ) : (
-                        <div className="mb-2 px-1 relative">
-                            <input
-                                ref={searchInputRef}
-                                type="text"
-                                className="w-full bg-gray-900 border border-blue-500/50 rounded px-2 py-0.5 text-xs text-white focus:outline-none placeholder-gray-600 transition-all"
-                                placeholder="Filter creators..."
-                                value={creatorSearch}
-                                onChange={e => setCreatorSearch(e.target.value)}
-                                onBlur={() => {
-                                    // Delay to allow click events on items to fire before closing/clearing
-                                    setTimeout(() => {
-                                        setIsCreatorSearchOpen(false);
-                                        setCreatorSearch(""); // Clear filter on close
-                                    }, 200);
-                                }}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Escape' || e.key === 'Enter') {
-                                        setIsCreatorSearchOpen(false);
-                                        setCreatorSearch("");
-                                    }
-                                }}
+                    </div>
+
+                    <div>
+                        <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-1.5">Favourites</p>
+                        <div className={clsx(
+                            "rounded-md border px-3 py-2",
+                            favoriteActive
+                                ? "bg-blue-600/10 border-blue-600/30 text-blue-300"
+                                : "bg-gray-900/40 border-gray-700 text-gray-300",
+                        )}>
+                            <Toggle
+                                size="sm"
+                                checked={favoriteActive}
+                                onChange={toggleFavorite}
+                                icon={<Heart size={16} className={clsx(favoriteActive ? "fill-pink-400 text-pink-400" : "text-gray-400")} />}
+                                label="Only favourites"
                             />
                         </div>
-                    )}
-                    {!collapsed.creators && (
-                        <div className="space-y-1">
-                            {creators
-                                .filter(([name]) => !creatorSearch || name.toLowerCase().includes(creatorSearch.toLowerCase()))
-                                .map(([name, count]) => (
-                                    <button
-                                        key={name}
-                                        onClick={() => setSearchQuery(toggleToken(searchQuery, 'creator', name))}
-                                        onContextMenu={(e) => handleContextMenu(e, 'creator', name)}
-                                        className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", hasToken(searchQuery, 'creator', name) ? "bg-blue-600/10 text-blue-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
-                                    >
-                                        <span className="truncate text-left flex-1">{name}</span>
-                                        <span className={clsx("text-xs px-1.5 py-0.5 rounded-full transition-colors border border-transparent", getStatusClasses(creatorStatus[name], hasToken(searchQuery, 'creator', name)))}>{count}</span>
-                                    </button>
-                                ))}
-                        </div>
-                    )}
-                </div>
-
-                {/* TYPES */}
-                <div className="p-4 border-b border-gray-700/50">
-                    <button onClick={() => toggleSection('types')} className="w-full flex items-center justify-between text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2 hover:text-gray-300">
-                        <span>Categories</span>
-                        {!collapsed.types ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    </button>
-                    {!collapsed.types && (
-                        <div className="space-y-1">
-                            {types.map(([name, count]) => (
-                                <button
-                                    key={name}
-                                    onClick={() => setSearchQuery(toggleToken(searchQuery, 'type', name))}
-                                    onContextMenu={(e) => handleContextMenu(e, 'type', name)}
-                                    className={clsx("w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm group", hasToken(searchQuery, 'type', name) ? "bg-blue-600/10 text-blue-400" : "text-gray-400 hover:bg-gray-700 hover:text-white")}
-                                >
-                                    <span className="truncate text-left flex-1">{name}</span>
-                                    <span className={clsx("text-xs px-1.5 py-0.5 rounded-full transition-colors border border-transparent", getStatusClasses(typeStatus[name], hasToken(searchQuery, 'type', name)))}>{count}</span>
-                                </button>
-                            ))}
-                        </div>
-                    )}
+                    </div>
                 </div>
             </div>
 
-            {/* Context Menu (Using handleSidebarAction from Context) */}
-            {contextMenu && (() => {
-                const isPackageInContext = (p: VarPackage) => {
-                    if (contextMenu.groupType === 'creator') return (p.meta.creator || "Unknown") === contextMenu.key;
-                    if (contextMenu.groupType === 'type') return (p.type || "Unknown") === contextMenu.key;
-                    if (contextMenu.groupType === 'status') {
-                        if (contextMenu.key === STATUS_FILTERS.ALL) return true;
-                        if (contextMenu.key === STATUS_FILTERS.ENABLED) return p.isEnabled && !p.isCorrupt;
-                        if (contextMenu.key === STATUS_FILTERS.DISABLED) return !p.isEnabled && !p.isCorrupt;
-                        if (contextMenu.key === STATUS_FILTERS.MISSING_DEPS) return p.missingDeps && p.missingDeps.length > 0 && !p.isCorrupt;
-                        if (contextMenu.key === STATUS_FILTERS.VERSION_CONFLICTS) return p.isDuplicate && !p.isCorrupt;
-                        if (contextMenu.key === STATUS_FILTERS.EXACT_DUPLICATES) return p.isExactDuplicate && !p.isCorrupt;
-                        if (contextMenu.key === STATUS_FILTERS.CORRUPT) return p.isCorrupt;
-                        if (contextMenu.key === STATUS_FILTERS.UNREFERENCED) return p.isOrphan && !p.isCorrupt;
-                    }
-                    return false;
-                };
-
-                const hasDisabled = packages.some(p => isPackageInContext(p) && !p.isEnabled);
-                const hasEnabled = packages.some(p => isPackageInContext(p) && p.isEnabled);
-                // Broaden conflict detection to include exact duplicates
-                const hasConflicts = packages.some(p => isPackageInContext(p) && (p.isDuplicate || p.isExactDuplicate));
-
-                // Show cleanup if there are actual conflicts OR if we are in a grouping mode (Creator/Type) where manual cleanup is useful
-                const showCleanup = hasConflicts || contextMenu.groupType === 'creator' || contextMenu.groupType === 'type';
-
-                return (
-                    <div className="fixed z-50 bg-gray-800 border border-gray-700 rounded-lg shadow-xl py-1 min-w-[160px]" style={{ top: contextMenu.y, left: contextMenu.x }} onClick={(e) => e.stopPropagation()}>
-                        <div className="px-3 py-1 text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-700/50 mb-1 truncate max-w-[200px]">{contextMenu.key}</div>
-                        {hasDisabled && (
-                            <button onClick={() => { handleSidebarAction('enable-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
-                                <CheckCircle2 size={14} className="text-green-500" /> Enable All
-                            </button>
-                        )}
-                        {hasEnabled && (
-                            <button onClick={() => { handleSidebarAction('disable-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
-                                <Power size={14} className="text-gray-400" /> Disable All
-                            </button>
-                        )}
-                        <div className="border-b border-gray-700/50 my-1"></div>
-                        {showCleanup && (
-                            <button onClick={() => { handleSidebarAction('resolve-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
-                                <Sparkles size={14} className="text-purple-400" /> Package Cleanup
-                            </button>
-                        )}
-                        <div className="border-b border-gray-700/50 my-1"></div>
-                        <button onClick={() => { handleSidebarAction('install-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
-                            <Download size={14} className="text-blue-400" /> Install All to Library
-                        </button>
-                        {/* Delete All Corrupt — only shown for the Corrupt status group */}
-                        {contextMenu.groupType === 'status' && contextMenu.key === STATUS_FILTERS.CORRUPT && (() => {
-                            const corruptPkgs = packages.filter(p => p.isCorrupt);
-                            if (corruptPkgs.length === 0) return null;
-                            return (
-                                <>
-                                    <div className="border-b border-gray-700/50 my-1"></div>
-                                    <button
-                                        onClick={() => {
-                                            setContextMenu(null);
-                                            // Feed the first corrupt package to handleDeleteClick
-                                            // (it will detect the full set via selectedIds or use the pkgs list directly)
-                                            // We pass the package list directly via the multi-select path.
-                                            handleDeleteClick(corruptPkgs[0], corruptPkgs);
-                                        }}
-                                        className="w-full text-left px-3 py-2 hover:bg-red-900/40 flex items-center gap-2 text-sm text-red-400"
-                                    >
-                                        <Trash2 size={14} className="text-red-400" /> Delete ({corruptPkgs.length})
-                                    </button>
-                                </>
-                            );
-                        })()}
-                    </div>
-                );
-            })()}
+            {/* Bulk actions for a right-clicked creator/type/status facet. */}
+            {contextMenu && (
+                <SidebarGroupMenu
+                    anchor={{ x: contextMenu.x, y: contextMenu.y }}
+                    groupType={contextMenu.groupType}
+                    groupKey={contextMenu.key}
+                    packages={packages}
+                    onClose={() => setContextMenu(null)}
+                />
+            )}
 
         </aside>
     );

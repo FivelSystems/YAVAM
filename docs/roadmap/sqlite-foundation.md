@@ -21,8 +21,10 @@ the DB; doing both at once avoids a second card refactor.
 
 ## Card cleanliness rule
 
-Cards show only thumbnail, name, creator, status tint, size, and type badge.
-Ratings, favourites, and license badges live in the details panel, never on a card.
+Cards default to showing only thumbnail, name, creator, status tint, size, and
+type badge. Rating and favourite are the one exception, surfaced as a
+hover-reveal control per the [card rework](../design/package-card-rework.md) —
+license badges remain details-panel-only.
 
 ## Regression (P0)
 
