@@ -52,6 +52,9 @@ type Server struct {
 
 	logObserver func(message string) // tests capture log lines here
 	boundAddr   string               // actual listener address, set by Start
+
+	remoteLoginThrottle   *LoginThrottle
+	loopbackLoginThrottle *LoginThrottle
 }
 
 func NewServer(ctx context.Context, m *manager.Manager, authService auth.AuthService, assets fs.FS, version string, onRestore func()) *Server {
@@ -64,6 +67,9 @@ func NewServer(ctx context.Context, m *manager.Manager, authService auth.AuthSer
 		version:   version,
 		clients:   make(map[chan string]bool),
 		tickets:   newEventTicketStore(time.Now),
+
+		remoteLoginThrottle:   NewLoginThrottle(time.Now, loginThrottleBaseDelay, loginThrottleMaxDelay),
+		loopbackLoginThrottle: NewLoginThrottle(time.Now, loginThrottleBaseDelay, loginThrottleMaxDelay),
 	}
 }
 
@@ -302,6 +308,12 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 			return
 		}
 
+		throttle := s.throttleFor(r)
+		if admitted, retryAfter := throttle.Admit(); !admitted {
+			s.writeThrottled(w, retryAfter)
+			return
+		}
+
 		var req struct {
 			Username   string `json:"username"`
 			Password   string `json:"password"`
@@ -318,7 +330,8 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 			s.writeError(w, "Invalid credentials", 401)
 			return
 		}
-		s.log(fmt.Sprintf("User %s logged in successfully from %s", utils.SanitizeForLog(req.Username), utils.SanitizeForLog(req.DeviceName)))
+		throttle.Succeeded()
+		s.log(fmt.Sprintf("User %s logged in successfully from %s",utils.SanitizeForLog(req.Username), utils.SanitizeForLog(req.DeviceName)))
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{

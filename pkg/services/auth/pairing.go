@@ -16,8 +16,10 @@ const (
 	// DefaultPairingTTL is how long a pairing code stays redeemable.
 	DefaultPairingTTL = 3 * time.Minute
 
-	// MaxPairingFailures is how many wrong redemptions destroy the outstanding code.
-	MaxPairingFailures = 5
+	// MaxPairingFailures is how many wrong redemptions destroy the outstanding
+	// code. The code space (2^40) keeps a guess at roughly 1e-11 per code at
+	// this limit; a higher limit only makes deliberately burning a code costlier.
+	MaxPairingFailures = 10
 
 	pairingCodeLength      = 8
 	pairingCodeGroupLength = 4

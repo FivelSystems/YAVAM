@@ -173,6 +173,12 @@ func TestFailuresDestroyTheCode(t *testing.T) {
 	}
 }
 
+func TestFailureLimitIsTen(t *testing.T) {
+	if MaxPairingFailures != 10 {
+		t.Fatalf("MaxPairingFailures = %d, want 10", MaxPairingFailures)
+	}
+}
+
 func TestCodeSurvivesFewerFailuresThanTheLimit(t *testing.T) {
 	svc, _ := newPairingService(t)
 	code := issueCode(t, svc)
