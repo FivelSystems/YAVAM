@@ -897,7 +897,7 @@ func (a *App) RestartApp() {
 
 // GetChangelog returns the markdown content for the current version
 func (a *App) GetChangelog() (string, error) {
-	return changelogData, nil
+	return utils.ExtractChangelogSection(changelogData, a.GetAppVersion()), nil
 }
 
 // SetLastSeenVersion updates the config with the latest seen version
