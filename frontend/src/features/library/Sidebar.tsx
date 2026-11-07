@@ -1,18 +1,17 @@
-import { ChevronDown, ChevronRight, Layers, Package, Settings, CheckCircle2, Trash2, GripVertical, Download, Sparkles, Power, Heart, Boxes, Users, Tags, X } from 'lucide-react';
-import { VarPackage } from '../../types';
+import { ChevronDown, ChevronRight, Layers, Package, Settings, Trash2, GripVertical, Heart, Boxes, Users, Tags, X } from 'lucide-react';
 import clsx from 'clsx';
 import { useMemo, useState, useEffect } from 'react';
 import { Reorder, useDragControls } from "framer-motion";
 import { usePackageContext } from '../../context/PackageContext';
 import { useFilterContext } from '../../context/FilterContext';
 import { useLibraryContext } from '../../context/LibraryContext';
-import { useActionContext } from '../../context/ActionContext';
 import { STATUS_FILTERS } from '../../constants';
 import { hasToken, toggleToken, getRating, setRating } from '../../utils/search';
 import { FilterDropdown, FilterOption, badgeTone } from '../../components/ui/FilterDropdown';
 import { Toggle } from '../../components/ui/Toggle';
 import { RatingStars } from '../../components/ui/RatingStars';
 import { getStoredToken } from '../../services/auth';
+import { SidebarGroupMenu, SidebarGroupType, isStandalone } from './SidebarGroupMenu';
 
 // Simple Library Item Component
 const SidebarLibraryItem = ({ lib, isActive, count, onSelect, onRemove }: { lib: string, isActive: boolean, count?: number, onSelect: () => void, onRemove?: (lib: string) => void }) => {
@@ -59,8 +58,6 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
     const { packages, creatorStatus, typeStatus } = usePackageContext();
     const { searchQuery, setSearchQuery } = useFilterContext();
 
-    const isStandalone = (p: VarPackage) => !p.meta?.dependencies || Object.keys(p.meta.dependencies).length === 0;
-
     // The sidebar composes the same tokenised query as the searchbar: a facet is
     // "active" when its token is present, and clicking it toggles that token.
     const statusActive = (value: string) => hasToken(searchQuery, 'status', value);
@@ -77,11 +74,10 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
         libraries, activeLibIndex, selectLibrary,
         removeLibrary, reorderLibraries, browseAndAdd
     } = useLibraryContext();
-    const { handleSidebarAction, handleDeleteClick } = useActionContext();
 
     // Local State
     const [isLibDropdownOpen, setIsLibDropdownOpen] = useState(false);
-    const [contextMenu, setContextMenu] = useState<{ open: boolean, x: number, y: number, groupType: 'creator' | 'type' | 'status', key: string } | null>(null);
+    const [contextMenu, setContextMenu] = useState<{ open: boolean, x: number, y: number, groupType: SidebarGroupType, key: string } | null>(null);
     const [libraryCounts, setLibraryCounts] = useState<Record<string, number>>({});
 
     // Fetch Library Counts (Unified)
@@ -122,17 +118,10 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
     const currentLibPath = libraries && libraries[activeLibIndex] ? libraries[activeLibIndex] : "No Library Selected";
     const currentLibName = currentLibPath.split(/[/\\]/).pop() || "Library";
 
-    const handleContextMenu = (e: React.MouseEvent, groupType: 'creator' | 'type' | 'status', key: string) => {
+    const handleContextMenu = (e: React.MouseEvent, groupType: SidebarGroupType, key: string) => {
         e.preventDefault();
         setContextMenu({ open: true, x: e.clientX, y: e.clientY, groupType, key });
     };
-
-    // Close context menu on global click
-    useEffect(() => {
-        const close = () => setContextMenu(null);
-        window.addEventListener('click', close);
-        return () => window.removeEventListener('click', close);
-    }, []);
 
     // Category (type) options for the Categories dropdown.
     const typeOptions = useMemo<FilterOption[]>(() => {
@@ -370,78 +359,16 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
                 </div>
             </div>
 
-            {/* Context Menu (Using handleSidebarAction from Context) */}
-            {contextMenu && (() => {
-                const isPackageInContext = (p: VarPackage) => {
-                    if (contextMenu.groupType === 'creator') return (p.meta.creator || "Unknown") === contextMenu.key;
-                    if (contextMenu.groupType === 'type') return (p.type || "Unknown") === contextMenu.key;
-                    if (contextMenu.groupType === 'status') {
-                        if (contextMenu.key === STATUS_FILTERS.ALL) return true;
-                        if (contextMenu.key === STATUS_FILTERS.ENABLED) return p.isEnabled && !p.isCorrupt;
-                        if (contextMenu.key === STATUS_FILTERS.DISABLED) return !p.isEnabled && !p.isCorrupt;
-                        if (contextMenu.key === STATUS_FILTERS.MISSING_DEPS) return p.missingDeps && p.missingDeps.length > 0 && !p.isCorrupt;
-                        if (contextMenu.key === STATUS_FILTERS.VERSION_CONFLICTS) return p.isDuplicate && !p.isCorrupt;
-                        if (contextMenu.key === STATUS_FILTERS.EXACT_DUPLICATES) return p.isExactDuplicate && !p.isCorrupt;
-                        if (contextMenu.key === STATUS_FILTERS.CORRUPT) return p.isCorrupt;
-                        if (contextMenu.key === STATUS_FILTERS.STANDALONE) return isStandalone(p) && !p.isCorrupt;
-                        if (contextMenu.key === STATUS_FILTERS.REMOVABLE) return p.isRemovable && !p.isCorrupt;
-                    }
-                    return false;
-                };
-
-                const hasDisabled = packages.some(p => isPackageInContext(p) && !p.isEnabled);
-                const hasEnabled = packages.some(p => isPackageInContext(p) && p.isEnabled);
-                // Broaden conflict detection to include exact duplicates
-                const hasConflicts = packages.some(p => isPackageInContext(p) && (p.isDuplicate || p.isExactDuplicate));
-
-                // Show cleanup if there are actual conflicts OR if we are in a grouping mode (Creator/Type) where manual cleanup is useful
-                const showCleanup = hasConflicts || contextMenu.groupType === 'creator' || contextMenu.groupType === 'type';
-
-                return (
-                    <div className="fixed z-50 bg-gray-800 border border-gray-700 rounded-lg shadow-xl py-1 min-w-[160px]" style={{ top: contextMenu.y, left: contextMenu.x }} onClick={(e) => e.stopPropagation()}>
-                        <div className="px-3 py-1 text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-700/50 mb-1 truncate max-w-[200px]">{contextMenu.key}</div>
-                        {hasDisabled && (
-                            <button onClick={() => { handleSidebarAction('enable-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
-                                <CheckCircle2 size={14} className="text-green-500" /> Enable All
-                            </button>
-                        )}
-                        {hasEnabled && (
-                            <button onClick={() => { handleSidebarAction('disable-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
-                                <Power size={14} className="text-gray-400" /> Disable All
-                            </button>
-                        )}
-                        <div className="border-b border-gray-700/50 my-1"></div>
-                        {showCleanup && (
-                            <button onClick={() => { handleSidebarAction('resolve-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
-                                <Sparkles size={14} className="text-purple-400" /> Package Cleanup
-                            </button>
-                        )}
-                        <div className="border-b border-gray-700/50 my-1"></div>
-                        <button onClick={() => { handleSidebarAction('install-all', contextMenu.groupType, contextMenu.key); setContextMenu(null); }} className="w-full text-left px-3 py-2 hover:bg-gray-700 flex items-center gap-2 text-sm text-gray-200">
-                            <Download size={14} className="text-blue-400" /> Install All to Library
-                        </button>
-                        {/* Delete All Corrupt — only shown for the Corrupt status group */}
-                        {contextMenu.groupType === 'status' && contextMenu.key === STATUS_FILTERS.CORRUPT && (() => {
-                            const corruptPkgs = packages.filter(p => p.isCorrupt);
-                            if (corruptPkgs.length === 0) return null;
-                            return (
-                                <>
-                                    <div className="border-b border-gray-700/50 my-1"></div>
-                                    <button
-                                        onClick={() => {
-                                            setContextMenu(null);
-                                            handleDeleteClick(corruptPkgs[0], corruptPkgs);
-                                        }}
-                                        className="w-full text-left px-3 py-2 hover:bg-red-900/40 flex items-center gap-2 text-sm text-red-400"
-                                    >
-                                        <Trash2 size={14} className="text-red-400" /> Delete ({corruptPkgs.length})
-                                    </button>
-                                </>
-                            );
-                        })()}
-                    </div>
-                );
-            })()}
+            {/* Bulk actions for a right-clicked creator/type/status facet. */}
+            {contextMenu && (
+                <SidebarGroupMenu
+                    anchor={{ x: contextMenu.x, y: contextMenu.y }}
+                    groupType={contextMenu.groupType}
+                    groupKey={contextMenu.key}
+                    packages={packages}
+                    onClose={() => setContextMenu(null)}
+                />
+            )}
 
         </aside>
     );
