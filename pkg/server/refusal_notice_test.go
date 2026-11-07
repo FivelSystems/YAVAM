@@ -154,3 +154,78 @@ func TestRefusalLog_NeverIncludesPathOrQuery(t *testing.T) {
 		t.Fatalf("request URL leaked into the log: %q", joined)
 	}
 }
+
+func suppressedSummaryLines(logs *logCapture) []string {
+	var lines []string
+	for _, line := range strings.Split(logs.joined(), "\n") {
+		if strings.Contains(line, "were not logged") {
+			lines = append(lines, line)
+		}
+	}
+	return lines
+}
+
+func TestRefusalLog_FloodOfDistinctHostsIsCappedPerWindowWithOneSummary(t *testing.T) {
+	s, logs, clock := newRefusalTestServer(t, refusalNoticeMaxTracked)
+	const flood = 40
+
+	for i := 0; i < flood; i++ {
+		statusWithHost(s, fmt.Sprintf("flood%d.example", i))
+	}
+	if got := len(refusalLines(logs)); got != refusalNoticeMaxPerWindow {
+		t.Fatalf("logged %d refusal lines in one window, cap is %d", got, refusalNoticeMaxPerWindow)
+	}
+	if got := len(suppressedSummaryLines(logs)); got != 0 {
+		t.Fatalf("summary emitted before the window ended: %d", got)
+	}
+
+	clock.Advance(refusalNoticeWindow)
+	statusWithHost(s, "next-window.example")
+
+	summaries := suppressedSummaryLines(logs)
+	want := fmt.Sprintf("%d more refused requests were not logged.", flood-refusalNoticeMaxPerWindow)
+	if len(summaries) != 1 || !strings.HasSuffix(summaries[0], want) {
+		t.Fatalf("got %q, want one summary ending %q", summaries, want)
+	}
+	if got := len(refusalLines(logs)); got != refusalNoticeMaxPerWindow+1 {
+		t.Fatalf("the new window should log again: %d refusal lines", got)
+	}
+
+	for i := 0; i < flood; i++ {
+		statusWithHost(s, fmt.Sprintf("second%d.example", i))
+	}
+	if got := len(refusalLines(logs)); got != 2*refusalNoticeMaxPerWindow {
+		t.Fatalf("second window logged %d lines in total, want %d", got, 2*refusalNoticeMaxPerWindow)
+	}
+	if got := len(suppressedSummaryLines(logs)); got != 1 {
+		t.Fatalf("a window with nothing new to report must not repeat the summary, have %d", got)
+	}
+}
+
+func TestRefusalLog_QuietWindowEmitsNoSummary(t *testing.T) {
+	s, logs, clock := newRefusalTestServer(t, refusalNoticeMaxTracked)
+
+	statusWithHost(s, "a.example")
+	clock.Advance(refusalNoticeWindow)
+	statusWithHost(s, "b.example")
+
+	if got := len(suppressedSummaryLines(logs)); got != 0 {
+		t.Fatalf("unexpected summary: %q", suppressedSummaryLines(logs))
+	}
+}
+
+func TestRefusalLog_RepeatsOfLoggedHostDoNotUseTheGlobalCap(t *testing.T) {
+	s, logs, _ := newRefusalTestServer(t, refusalNoticeMaxTracked)
+
+	for i := 0; i < refusalNoticeMaxPerWindow-1; i++ {
+		statusWithHost(s, fmt.Sprintf("h%d.example", i))
+	}
+	for i := 0; i < 100; i++ {
+		statusWithHost(s, "h0.example")
+	}
+	statusWithHost(s, "last.example")
+
+	if got := len(refusalLines(logs)); got != refusalNoticeMaxPerWindow {
+		t.Fatalf("logged %d lines, want %d", got, refusalNoticeMaxPerWindow)
+	}
+}
