@@ -66,6 +66,50 @@ describe('LoginModal', () => {
         expect(screen.queryByLabelText(/access password/i)).not.toBeInTheDocument();
     });
 
+    describe('password-unavailable hint', () => {
+        const HINT = /password sign-in is turned off for other devices/i;
+
+        it('explains why when password sign-in is not allowed', async () => {
+            mockServer({ ...OPEN, passwordLoginAllowed: false });
+            renderModal();
+
+            expect(await screen.findByText(HINT)).toBeInTheDocument();
+        });
+
+        it('is hidden when password sign-in is allowed', async () => {
+            mockServer(OPEN);
+            renderModal();
+
+            await screen.findByLabelText(/access password/i);
+            expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+        });
+
+        it('is hidden on the setup-required screen', async () => {
+            mockServer({ setupRequired: true, passwordLoginAllowed: false, pairingAvailable: false });
+            renderModal();
+
+            await screen.findByText(/setup required/i);
+            expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+        });
+
+        it('includes the current port in the localhost suggestion', async () => {
+            vi.stubGlobal('location', { ...window.location, port: '8765' });
+            mockServer({ ...OPEN, passwordLoginAllowed: false });
+            renderModal();
+
+            expect(await screen.findByText(/http:\/\/localhost:8765/)).toBeInTheDocument();
+        });
+
+        it('omits the localhost suggestion when there is no port', async () => {
+            vi.stubGlobal('location', { ...window.location, port: '' });
+            mockServer({ ...OPEN, passwordLoginAllowed: false });
+            renderModal();
+
+            expect(await screen.findByText(HINT)).toBeInTheDocument();
+            expect(screen.queryByText(/localhost/)).not.toBeInTheDocument();
+        });
+    });
+
     it('shows a static setup-required screen with no form', async () => {
         mockServer({ setupRequired: true, passwordLoginAllowed: false, pairingAvailable: false });
         renderModal();
