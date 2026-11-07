@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import PackageCard from './PackageCard';
 import { VarPackage } from '../../types';
 
@@ -57,10 +57,46 @@ describe('PackageCard — rating/favourite hover control and mobile overflow ent
         expect(onSelect).not.toHaveBeenCalled();
     });
 
-    it('grid view: rating a never-rated card from the hover control does not also select it', () => {
+    it('grid view: a never-rated, non-favourited card shows no rating/favourite badge or popover trigger', () => {
+        const pkg = makePkg({ rating: 0, isFavorite: false });
+        render(
+            <PackageCard
+                pkg={pkg}
+                onContextMenu={noop}
+                onSelect={noop}
+                onRate={noop}
+                onToggleFavorite={noop}
+                onOpenActionSheet={noop}
+                viewMode="grid"
+            />
+        );
+        expect(screen.queryByTitle('Rating & favourite')).not.toBeInTheDocument();
+    });
+
+    it('grid view: clicking the badge opens a popover with the rating/favourite control, without also selecting the card', () => {
+        const onSelect = vi.fn();
+        const pkg = makePkg({ rating: 3, isFavorite: false });
+        render(
+            <PackageCard
+                pkg={pkg}
+                onContextMenu={noop}
+                onSelect={onSelect}
+                onRate={noop}
+                onToggleFavorite={noop}
+                onOpenActionSheet={noop}
+                viewMode="grid"
+            />
+        );
+        expect(screen.queryByTitle('Rate 4 stars')).not.toBeInTheDocument();
+        fireEvent.click(screen.getByTitle('Rating & favourite'));
+        expect(screen.getByTitle('Rate 4 stars')).toBeInTheDocument();
+        expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it('grid view: rating from the open popover does not also select the card', () => {
         const onRate = vi.fn();
         const onSelect = vi.fn();
-        const pkg = makePkg({ rating: 0, isFavorite: false });
+        const pkg = makePkg({ rating: 3, isFavorite: false });
         render(
             <PackageCard
                 pkg={pkg}
@@ -72,15 +108,16 @@ describe('PackageCard — rating/favourite hover control and mobile overflow ent
                 viewMode="grid"
             />
         );
+        fireEvent.click(screen.getByTitle('Rating & favourite'));
         fireEvent.click(screen.getByTitle('Rate 4 stars'));
         expect(onRate).toHaveBeenCalledWith(pkg, 4);
         expect(onSelect).not.toHaveBeenCalled();
     });
 
-    it('grid view: toggling favourite from the hover control does not also select the card', () => {
+    it('grid view: toggling favourite from the open popover does not also select the card', () => {
         const onToggleFavorite = vi.fn();
         const onSelect = vi.fn();
-        const pkg = makePkg({ rating: 0, isFavorite: false });
+        const pkg = makePkg({ rating: 0, isFavorite: true });
         render(
             <PackageCard
                 pkg={pkg}
@@ -92,9 +129,49 @@ describe('PackageCard — rating/favourite hover control and mobile overflow ent
                 viewMode="grid"
             />
         );
-        fireEvent.click(screen.getByTitle('Add to favourites'));
-        expect(onToggleFavorite).toHaveBeenCalledWith(pkg, true);
+        fireEvent.click(screen.getByTitle('Rating & favourite'));
+        fireEvent.click(screen.getByTitle('Remove from favourites'));
+        expect(onToggleFavorite).toHaveBeenCalledWith(pkg, false);
         expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it('grid view: clicking outside the open popover closes it', async () => {
+        const pkg = makePkg({ rating: 3, isFavorite: false });
+        render(
+            <PackageCard
+                pkg={pkg}
+                onContextMenu={noop}
+                onSelect={noop}
+                onRate={noop}
+                onToggleFavorite={noop}
+                onOpenActionSheet={noop}
+                viewMode="grid"
+            />
+        );
+        fireEvent.click(screen.getByTitle('Rating & favourite'));
+        expect(screen.getByTitle('Rate 4 stars')).toBeInTheDocument();
+        fireEvent.mouseDown(document.body);
+        // The popover plays an exit animation (AnimatePresence) before unmounting.
+        await waitFor(() => expect(screen.queryByTitle('Rate 4 stars')).not.toBeInTheDocument());
+    });
+
+    it('grid view: pressing Escape closes the open popover', async () => {
+        const pkg = makePkg({ rating: 3, isFavorite: false });
+        render(
+            <PackageCard
+                pkg={pkg}
+                onContextMenu={noop}
+                onSelect={noop}
+                onRate={noop}
+                onToggleFavorite={noop}
+                onOpenActionSheet={noop}
+                viewMode="grid"
+            />
+        );
+        fireEvent.click(screen.getByTitle('Rating & favourite'));
+        expect(screen.getByTitle('Rate 4 stars')).toBeInTheDocument();
+        fireEvent.keyDown(document, { key: 'Escape' });
+        await waitFor(() => expect(screen.queryByTitle('Rate 4 stars')).not.toBeInTheDocument());
     });
 
     it('list view: renders the mobile overflow button next to the status icon', () => {

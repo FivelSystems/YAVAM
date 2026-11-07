@@ -118,7 +118,104 @@ clears it, the heart toggles. Replace the inline duplicates in `ContextMenu.tsx`
 and `RightSidebar.tsx` with this component as part of this phase (don't leave
 three copies of the pattern once a fourth and fifth are added).
 
-### 2. `PackageCard.tsx`: badge becomes interactive on hover, not duplicated
+### 2. `PackageCard.tsx`: badge stays passive at rest; a click opens an interactive popover (revised after live review)
+
+The crossfade-on-card-hover design below shipped exactly as originally
+specified and was reviewed live (`wails dev`, real click-through). Two
+problems surfaced — neither is a bug, the code matches the spec — that are
+UX calls this section now reverses:
+
+1. **The trigger was the whole card, not the rating element.** `group-hover`
+   fires from mousing over the thumbnail, the title, or just passing through
+   to reach another card — none of which means "I want to rate this." Because
+   the interactive layer rendered unconditionally even when nothing was set
+   yet (deliberate, per the original spec below), every unrated card in the
+   grid — the majority of a typical library — sprouted a 5-star row the
+   instant the pointer passed over it. Combined with the card's other hover
+   effects already firing at the same time (`hover:scale-[1.02]`,
+   `group-hover:scale-110` on the thumbnail, the bottom hint block's
+   `h-0 group-hover:h-auto` expansion), the corner control read as one more
+   uninvited thing happening at once rather than a deliberate affordance —
+   the root of the "invades" feedback.
+2. **The interactive layer had no background chrome.** `RatingFavoriteControl`
+   renders bare icons with no wrapping pill, while `RatingFavoriteBadge`, the
+   status icon, and the mobile overflow button all share the same
+   `bg-gray-900/80 backdrop-blur-sm rounded-full border border-gray-700/50`
+   treatment. Swapping the badge for the bare control on hover meant the one
+   moment the control was visible, it was also the one element on the card
+   floating directly on the thumbnail with no grounding background — the
+   "layout isn't well distributed" half of the feedback, and a genuine
+   inconsistency against every other overlay on this card, not a stylistic
+   nitpick.
+
+**Revised decision: decouple the control from card-hover entirely, trigger it
+by clicking the badge itself, and stop rendering anything in this corner for
+packages with no rating or favourite yet.**
+
+- **Idle state reverts to phase 2's look, verbatim.** `RatingFavoriteBadge`
+  renders exactly as before — pill with heart/star, **only when
+  `rating || isFavorite`**, nothing otherwise. No hover effect touches this
+  corner anymore.
+- **The badge becomes the click target when present.** Clicking it
+  (`e.stopPropagation()`, same reasoning as before — it's nested in the
+  card's own `onClick`) opens a small floating popover anchored just below
+  it, containing `RatingFavoriteControl` (`layout="compact"`, `size={14}`),
+  wrapped in the *same* pill chrome as the badge
+  (`bg-gray-900/95 backdrop-blur-sm rounded-full border border-gray-700/50
+  px-2 py-1 shadow-lg`) so the closed and open states read as the same
+  object, not an unthemed control replacing a themed one. Close on outside
+  click (the `mousedown`-listener idiom `ContextMenu.tsx` already uses) or
+  `Escape`.
+- **Packages with no rating or favourite get nothing new in this corner.**
+  This is the one real functional trade-off against the original brief
+  ("a never-rated card can be rated directly from the grid"): there is no
+  longer an ambient way to start rating an untouched package from a bare
+  hover. The existing right-click `ContextMenu` (desktop) and long-press/
+  overflow `ActionSheet` (mobile) already carry the full
+  `RatingFavoriteControl` and are both already a direct, on-the-grid action —
+  neither requires opening the details panel or selecting the package first.
+  Routing the *first* rating through one of those instead of a hover reveal
+  removes essentially all of the ambient pop-in for the common case (an
+  unrated library) while keeping "rate without leaving the grid" true in
+  substance — one explicit click (right-click/long-press) instead of an
+  incidental hover.
+- This is a different shape from the alternative rejected in the original
+  spec below ("a passive pill plus a separate always-present editable layer
+  reads as two redundant displays"): the popover is ephemeral and only one
+  state is ever on screen at a time (closed pill, or open popover), not a
+  second permanent layer competing with the first — so that rejection reason
+  doesn't carry over to this design.
+- Transition: `AnimatePresence` + a short scale/opacity entrance
+  (`initial={{ opacity: 0, scale: 0.9 }}` → `animate={{ opacity: 1, scale: 1
+  }}`, ~120ms), matching the `motion.div` idiom the card already uses
+  elsewhere rather than introducing a new transition primitive.
+
+List view: same model. The badge sits in the existing
+`flex items-center gap-1.5 shrink-0` header cluster; clicking it opens the
+same popover (anchored below the cluster, not inline) instead of swapping for
+an inline `RatingFavoriteControl` row on hover. This also fixes a second,
+list-specific issue found while reviewing this feedback: the previous
+`hidden group-hover:block` control sat inline in a fixed-width flex row
+alongside the title, status icon, and (on mobile widths) the overflow
+button — on hover it had to inject a 5-star-plus-heart block into that same
+row, which is exactly the crowding the "layout not well distributed"
+complaint describes, independently of the grid-view issue above. Anchoring
+the control in a floating popover instead of an inline row removes that
+reflow entirely — the header cluster's width is now constant regardless of
+state.
+
+Mobile overflow button (`MoreVertical`, `top-2 right-2`, `md:hidden`): no
+change needed. It never shared a trigger with the rating corner even before
+this revision (`md:hidden` vs. `group-hover`, which doesn't fire on touch),
+so it wasn't contributing to "invades" directly — confirmed by re-reading
+both conditions side by side. It gains an incidental benefit from this
+revision anyway: since the rating control is now click-triggered rather than
+hover-triggered, there's no longer a scenario (e.g. a hover-capable
+touchscreen tablet at ≥768px width) where a hover-revealed rating row and the
+touch-only overflow button could both render at once.
+
+<details>
+<summary>Original spec (superseded by the revision above, kept for context)</summary>
 
 Decision on the brief's open question ("badge becomes interactive, or is
 joined by a separate layer"): **the existing badge slot becomes interactive
@@ -185,6 +282,8 @@ Notes:
 List view: same crossfade, but inline in the existing
 `flex items-center gap-1.5 shrink-0` cluster next to the status icon instead
 of absolutely positioned (more room, no overlay needed).
+
+</details>
 
 ### 3. Mobile overflow entry point (new, on the card)
 
@@ -389,5 +488,8 @@ treatment is broken):
   conditional list construction (mirroring whatever coverage `ContextMenu`
   already has for its conditional rows, if any), `ActionSheet` open/close and
   backdrop-dismiss.
-- `PackageCard` hover-crossfade and mobile-overflow-button rendering per
-  breakpoint (grid + list).
+- `PackageCard` rating badge: renders nothing when unrated/unfavourited,
+  renders the pill when either is set, click opens the popover, outside-click
+  and `Escape` close it, `stopPropagation` prevents the click from also
+  selecting the card (grid + list). Mobile-overflow-button rendering per
+  breakpoint is unaffected by this revision and keeps its existing coverage.

@@ -1,18 +1,21 @@
-import { useRef, useState, useEffect, memo } from 'react';
+import { useRef, useState, useEffect, useLayoutEffect, memo } from 'react';
+import { createPortal } from 'react-dom';
 import { VarPackage } from '../../types';
 import clsx from 'clsx';
 import { AlertCircle, Check, AlertTriangle, Power, Copy, Star, Heart, MoreVertical } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { formatBytes } from '../../utils/format';
 import { RatingFavoriteControl } from '../../components/ui/RatingFavoriteControl';
 import { useLongPress } from '../../hooks/useLongPress';
 
-/** Compact rating/favourite indicator — the only persistent sign of either on the
- * card itself (previously only visible via the context menu that set them, #54). */
-const RatingFavoriteBadge = ({ rating, isFavorite, className }: { rating?: number; isFavorite?: boolean; className?: string }) => {
+/** Passive rating/favourite pill — the only persistent sign of either on the
+ * card itself (previously only visible via the context menu that set them, #54).
+ * Only renders when there's something to show; at rest it is not interactive —
+ * {@link RatingFavoritePopoverBadge} below wraps it with the click-to-edit behavior. */
+const RatingFavoriteBadge = ({ rating, isFavorite }: { rating?: number; isFavorite?: boolean }) => {
     if (!rating && !isFavorite) return null;
     return (
-        <div className={clsx("flex items-center gap-1 bg-gray-900/80 backdrop-blur-sm px-1.5 py-0.5 rounded-full border border-gray-700/50 shrink-0", className)}>
+        <div className="flex items-center gap-1 bg-gray-900/80 backdrop-blur-sm px-1.5 py-0.5 rounded-full border border-gray-700/50 shrink-0">
             {!!isFavorite && <Heart size={11} className="fill-pink-400 text-pink-400" />}
             {!!rating && (
                 <span className="flex items-center gap-0.5 text-[10px] font-semibold text-yellow-400">
@@ -21,6 +24,95 @@ const RatingFavoriteBadge = ({ rating, isFavorite, className }: { rating?: numbe
                 </span>
             )}
         </div>
+    );
+};
+
+/**
+ * Click target for the badge above — opens a small floating popover with the
+ * full `RatingFavoriteControl`, anchored just below it. Decoupled from card
+ * hover entirely (see `docs/design/package-card-rework.md` §2, revised after
+ * live review): hovering the card no longer reveals anything here, and a
+ * package with neither a rating nor a favourite renders nothing in this
+ * corner at all — the right-click `ContextMenu` / long-press `ActionSheet`
+ * remain the only way to rate a never-rated package from the grid.
+ */
+const RatingFavoritePopoverBadge = ({
+    pkg, onRate, onToggleFavorite,
+}: {
+    pkg: VarPackage;
+    onRate: (pkg: VarPackage, rating: number) => void;
+    onToggleFavorite: (pkg: VarPackage, favorite: boolean) => void;
+}) => {
+    const [open, setOpen] = useState(false);
+    const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
+    const popoverRef = useRef<HTMLDivElement>(null);
+
+    useLayoutEffect(() => {
+        if (!open) return;
+        const rect = triggerRef.current?.getBoundingClientRect();
+        if (rect) setPos({ top: rect.bottom + 6, left: rect.left });
+    }, [open]);
+
+    useEffect(() => {
+        if (!open) return;
+        const closeOnOutsideInteraction = (e: Event) => {
+            const target = e.target as Node;
+            if (triggerRef.current?.contains(target) || popoverRef.current?.contains(target)) return;
+            setOpen(false);
+        };
+        const closeOnEscape = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+        document.addEventListener('mousedown', closeOnOutsideInteraction);
+        document.addEventListener('touchstart', closeOnOutsideInteraction);
+        document.addEventListener('keydown', closeOnEscape);
+        window.addEventListener('scroll', closeOnOutsideInteraction, true);
+        return () => {
+            document.removeEventListener('mousedown', closeOnOutsideInteraction);
+            document.removeEventListener('touchstart', closeOnOutsideInteraction);
+            document.removeEventListener('keydown', closeOnEscape);
+            window.removeEventListener('scroll', closeOnOutsideInteraction, true);
+        };
+    }, [open]);
+
+    if (!pkg.rating && !pkg.isFavorite) return null;
+
+    return (
+        <>
+            <button
+                ref={triggerRef}
+                onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
+                className="appearance-none bg-transparent border-0 p-0 m-0 block"
+                title="Rating & favourite"
+            >
+                <RatingFavoriteBadge rating={pkg.rating} isFavorite={pkg.isFavorite} />
+            </button>
+            {createPortal(
+                <AnimatePresence>
+                    {open && pos && (
+                        <motion.div
+                            ref={popoverRef}
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            transition={{ duration: 0.12 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="fixed z-50 bg-gray-900/95 backdrop-blur-sm rounded-full border border-gray-700/50 px-2 py-1 shadow-lg"
+                            style={{ top: pos.top, left: pos.left }}
+                        >
+                            <RatingFavoriteControl
+                                rating={pkg.rating ?? 0}
+                                isFavorite={!!pkg.isFavorite}
+                                onRate={(n) => onRate(pkg, n)}
+                                onToggleFavorite={() => onToggleFavorite(pkg, !pkg.isFavorite)}
+                                layout="compact"
+                                size={14}
+                            />
+                        </motion.div>
+                    )}
+                </AnimatePresence>,
+                document.body,
+            )}
+        </>
     );
 };
 
@@ -221,17 +313,7 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, onRate, onToggleFavori
                             {pkg.meta.packageName || pkg.fileName}
                         </h3>
                         <div className="flex items-center gap-1.5 shrink-0">
-                            <RatingFavoriteBadge rating={pkg.rating} isFavorite={pkg.isFavorite} className="group-hover:hidden" />
-                            <div className="hidden group-hover:block" onClick={(e) => e.stopPropagation()}>
-                                <RatingFavoriteControl
-                                    rating={pkg.rating ?? 0}
-                                    isFavorite={!!pkg.isFavorite}
-                                    onRate={(n) => onRate(pkg, n)}
-                                    onToggleFavorite={() => onToggleFavorite(pkg, !pkg.isFavorite)}
-                                    layout="compact"
-                                    size={14}
-                                />
-                            </div>
+                            <RatingFavoritePopoverBadge pkg={pkg} onRate={onRate} onToggleFavorite={onToggleFavorite} />
                             {statusIcon}
                             <button
                                 onClick={(e) => { e.stopPropagation(); onOpenActionSheet(pkg); }}
@@ -303,34 +385,12 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, onRate, onToggleFavori
                 )}
             </div>
 
-            {/* Rating/Favourite — top-left corner. Both layers occupy the same slot
-                and crossfade via opacity, so there's no layout shift and no second,
-                redundant rating display once a rating exists. The interactive layer
-                renders unconditionally on hover (even unrated), so a never-rated
-                card can be rated directly from the grid. */}
+            {/* Rating/Favourite — top-left corner. Passive pill at rest, only when
+                rated/favourited; a click opens the interactive popover (see
+                RatingFavoritePopoverBadge above). No hover effect touches this
+                corner. */}
             <div className="absolute top-2 left-2 z-10">
-                <div className={clsx(
-                    "transition-opacity duration-150",
-                    "opacity-100 group-hover:opacity-0 group-hover:pointer-events-none"
-                )}>
-                    <RatingFavoriteBadge rating={pkg.rating} isFavorite={pkg.isFavorite} />
-                </div>
-                <div
-                    className={clsx(
-                        "absolute inset-0 transition-opacity duration-150",
-                        "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto"
-                    )}
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    <RatingFavoriteControl
-                        rating={pkg.rating ?? 0}
-                        isFavorite={!!pkg.isFavorite}
-                        onRate={(n) => onRate(pkg, n)}
-                        onToggleFavorite={() => onToggleFavorite(pkg, !pkg.isFavorite)}
-                        layout="compact"
-                        size={14}
-                    />
-                </div>
+                <RatingFavoritePopoverBadge pkg={pkg} onRate={onRate} onToggleFavorite={onToggleFavorite} />
             </div>
 
             {/* Mobile overflow entry point — not hover-gated (touch has no hover);
