@@ -17,6 +17,7 @@ import (
 	"yavam/pkg/services/auth"
 	"yavam/pkg/services/config"
 	"yavam/pkg/services/library"
+	"yavam/pkg/services/remoteaccess"
 	"yavam/pkg/updater"
 	"yavam/pkg/utils"
 
@@ -56,6 +57,8 @@ type App struct {
 	scanMu     sync.Mutex
 	scanCancel context.CancelFunc
 	scanWg     sync.WaitGroup
+
+	remoteAccess *remoteaccess.Service // nil when the auth service failed to start
 }
 
 // NewApp creates a new App application struct
@@ -110,23 +113,16 @@ func (a *App) startup(ctx context.Context) {
 	a.server = server.NewServer(ctx, a.manager, a.auth, subAssets, a.GetAppVersion(), func() {
 		runtime.WindowShow(ctx)
 	})
+	if a.auth != nil {
+		a.remoteAccess = remoteaccess.NewService(a.manager, a.server, a.auth)
+	}
 
 	// Check Server Config
 	cfg := a.manager.GetConfig()
 	if cfg.ServerEnabled {
 		go func() {
-			// Small delay to ensure UI ready? Or just start.
-			// Start on default port 8080 or need config for port?
-			// Defaulting to 8080 for now as it's not in config yet.
-			// Path defaults to active (Vam) path.
-			// Config VamPath might be empty if just setup,
-			// but if ServerEnabled is true, VamPath should be set.
-			port := cfg.ServerPort
-			if port == "" {
-				port = "18888"
-			}
 			// We need to pass the libraries as well
-			if err := a.server.Start(config.ResolveBindHost(cfg.ServerBindAddress), port, cfg.Libraries); err == nil {
+			if err := a.server.Start(config.ResolveBindHost(cfg.ServerBindAddress), cfg.ListenPort(), cfg.Libraries); err == nil {
 				runtime.EventsEmit(a.ctx, "server:status:changed", true)
 			}
 		}()
@@ -287,14 +283,6 @@ func (a *App) Login(username, password string) (string, error) {
 
 	// Simplified Login
 	return a.auth.Login(username, password, "Desktop Client")
-}
-
-// SetPassword updates the admin password
-func (a *App) SetPassword(password string) error {
-	if a.auth == nil {
-		return fmt.Errorf("auth service not initialized")
-	}
-	return a.auth.SetPassword(password)
 }
 
 // GetAppVersion returns the current application version
@@ -800,12 +788,7 @@ func (a *App) SetPrivacyOptions(censor bool, blur int, hidePackageNames bool, hi
 // StartServer manually starts the HTTP Server
 func (a *App) StartServer() error {
 	cfg := a.manager.GetConfig()
-	port := cfg.ServerPort
-	if port == "" {
-		port = "18888"
-	}
-
-	err := a.server.Start(config.ResolveBindHost(cfg.ServerBindAddress), port, cfg.Libraries)
+	err := a.server.Start(config.ResolveBindHost(cfg.ServerBindAddress), cfg.ListenPort(), cfg.Libraries)
 	if err == nil {
 		runtime.EventsEmit(a.ctx, "server:status:changed", true)
 	}

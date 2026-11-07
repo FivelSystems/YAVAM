@@ -42,7 +42,33 @@ type Config struct {
 	HideCreatorNames bool   `json:"hideCreatorNames"`
 }
 
-// ConfigService handles configuration persistence
+// DefaultServerPort is used when no port has been configured.
+const DefaultServerPort = "18888"
+
+// ListenPort is the configured server port, or DefaultServerPort when unset.
+func (c *Config) ListenPort() string {
+	if c.ServerPort == "" {
+		return DefaultServerPort
+	}
+	return c.ServerPort
+}
+
+// Clone returns a copy that shares no slice or map with the original, so it is
+// safe to read while the service keeps mutating its own state.
+func (c *Config) Clone() *Config {
+	clone := *c
+	clone.Libraries = append([]string(nil), c.Libraries...)
+	if c.Keybinds != nil {
+		clone.Keybinds = make(map[string][]string, len(c.Keybinds))
+		for action, keys := range c.Keybinds {
+			clone.Keybinds[action] = append([]string(nil), keys...)
+		}
+	}
+	return &clone
+}
+
+// ConfigService handles configuration persistence. Get and Load return
+// snapshots: mutating one never changes the stored configuration, use Update.
 type ConfigService interface {
 	Load() (*Config, error)
 	Save(cfg *Config) error
@@ -67,7 +93,7 @@ func NewFileConfigService(configDir string) (ConfigService, error) {
 			UseSymlinks:      true,  // Default
 			DeleteToTrash:    true,  // Default
 			PublicAccess:     false, // Default Private
-			ServerPort:       "18888",
+			ServerPort:       DefaultServerPort,
 			AuthPollInterval: 15,
 			UpdateChannel:    "stable", // Default to the safe channel
 
@@ -91,12 +117,12 @@ func (s *fileConfigService) Load() (*Config, error) {
 	data, err := os.ReadFile(s.path)
 	if err != nil {
 		// If not exists, return default (already set)
-		return s.config, err
+		return s.config.Clone(), err
 	}
 
 	err = json.Unmarshal(data, s.config)
 	if err != nil {
-		return s.config, err
+		return s.config.Clone(), err
 	}
 	s.config.ServerBindAddress = normaliseBindAddress(s.config.ServerBindAddress)
 
@@ -109,15 +135,14 @@ func (s *fileConfigService) Load() (*Config, error) {
 		_ = os.WriteFile(s.path, data, 0644) // Best-effort persist; non-fatal if it fails.
 	}
 
-	return s.config, nil
+	return s.config.Clone(), nil
 }
 
 func (s *fileConfigService) Save(cfg *Config) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Update internal state
-	s.config = cfg
+	s.config = cfg.Clone()
 	s.config.ServerBindAddress = normaliseBindAddress(s.config.ServerBindAddress)
 
 	data, err := json.MarshalIndent(s.config, "", "  ")
@@ -131,9 +156,7 @@ func (s *fileConfigService) Save(cfg *Config) error {
 func (s *fileConfigService) Get() *Config {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	// Return copy? Or pointer? Pointer for now to match current behavior,
-	// but careful about concurrency.
-	return s.config
+	return s.config.Clone()
 }
 
 func (s *fileConfigService) IsConfigured() bool {
