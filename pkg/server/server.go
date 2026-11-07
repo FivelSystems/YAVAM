@@ -59,6 +59,7 @@ type Server struct {
 	shutdownGracePeriod time.Duration // zero selects defaultShutdownGracePeriod
 	readHeaderTimeout   time.Duration // zero selects defaultReadHeaderTimeout
 	idleTimeout         time.Duration // zero selects defaultIdleTimeout
+	jsonBodyReadTimeout time.Duration // zero selects defaultJSONBodyReadTimeout
 
 	machineNames   map[string]bool // hostnames this machine answers to, see machineHostNames
 	refusalNotices *refusalNotices
