@@ -1,6 +1,12 @@
 import '@testing-library/jest-dom';
 import { cleanup } from '@testing-library/react';
-import { afterEach } from 'vitest';
+import { afterEach, beforeEach } from 'vitest';
+import { stubMemoryLocalStorage } from './memoryStorage';
+
+// Re-checked before every test: tests that call vi.unstubAllGlobals() would otherwise bring the unusable global back.
+beforeEach(() => {
+    if (typeof globalThis.localStorage?.setItem !== 'function') stubMemoryLocalStorage();
+});
 
 // Runs a cleanup after each test case (e.g. clearing jsdom)
 afterEach(() => {
