@@ -179,10 +179,14 @@ const SettingsDialog = ({
             // @ts-ignore
             window.go.main.App.GetAppVersion().then((v: string) => setAppVersion("v" + v));
         } else {
+            const unknownVersionLabel = "Version unknown (Web)";
             fetch('/api/config')
-                .then(r => r.json())
-                .then(d => setAppVersion(d.version ? "v" + d.version + " (Web)" : "v1.3.11 (Web)"))
-                .catch(() => setAppVersion("v1.3.11 (Web)"));
+                .then(response => {
+                    if (!response.ok) throw new Error(`config request failed: ${response.status}`);
+                    return response.json();
+                })
+                .then(config => setAppVersion(config.version ? "v" + config.version + " (Web)" : unknownVersionLabel))
+                .catch(() => setAppVersion(unknownVersionLabel));
         }
     }, [isOpen]);
 
