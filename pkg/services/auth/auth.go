@@ -167,8 +167,10 @@ func (s *SimpleTokenAuthService) persistState() error {
 	})
 }
 
-// SetPassword changes the admin password only if it could be persisted; on
-// failure the previous password stays in effect.
+// SetPassword changes the admin password and revokes every session in one
+// persisted write. In-memory state is replaced only after the write succeeds,
+// so on failure both the previous password and the existing sessions stay in
+// effect. Open event streams are closed by their next CheckToken recheck.
 func (s *SimpleTokenAuthService) SetPassword(newPassword string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -177,12 +179,14 @@ func (s *SimpleTokenAuthService) SetPassword(newPassword string) error {
 	if err != nil {
 		return err
 	}
-	previousHash := s.adminHash
-	s.adminHash = string(hash)
-	if err := s.persistState(); err != nil {
-		s.adminHash = previousHash
+
+	revokedSessions := make(map[string]*StoredSession)
+	s.lastPersistAttemptAt = s.now()
+	if err := s.store.Save(&AuthConfig{AdminHash: string(hash), Sessions: revokedSessions}); err != nil {
 		return err
 	}
+	s.adminHash = string(hash)
+	s.sessions = revokedSessions
 	return nil
 }
 
