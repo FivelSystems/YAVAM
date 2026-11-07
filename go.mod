@@ -5,8 +5,8 @@ go 1.26.0
 require (
 	github.com/energye/systray v1.0.2
 	github.com/wailsapp/wails/v2 v2.17.1
-	golang.org/x/crypto v0.57.0
-	golang.org/x/text v0.42.0
+	golang.org/x/crypto v0.58.0
+	golang.org/x/text v0.43.0
 	modernc.org/sqlite v1.51.0
 )
 
@@ -39,8 +39,8 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/wailsapp/go-webview2 v1.0.22 // indirect
-	golang.org/x/net v0.60.0 // indirect
-	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/net v0.62.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
 	modernc.org/libc v1.72.3 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
