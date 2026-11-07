@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useLayoutEffect } from 'react';
 import { VarPackage } from '../../types';
 import { getStoredToken } from '../../services/auth';
+import { useAuth } from '../../features/auth/AuthContext';
 import { Power, FolderOpen, Copy, Trash2, FileCode, Scissors, Download, Layers, Sparkles } from 'lucide-react';
 
 interface ContextMenuProps {
@@ -26,6 +27,8 @@ const ContextMenu = ({ x, y, pkg, selectedCount = 0, onClose, onToggle, onOpenFo
     const [position, setPosition] = useState({ top: y, left: x });
     // @ts-ignore
     const isWeb = !window.go;
+    const { isAuthenticated } = useAuth();
+    const canDownloadFile = isWeb && isAuthenticated;
 
     useLayoutEffect(() => {
         if (ref.current) {
@@ -166,7 +169,7 @@ const ContextMenu = ({ x, y, pkg, selectedCount = 0, onClose, onToggle, onOpenFo
                 Install to Library
             </button>
 
-            {isWeb && (
+            {canDownloadFile && (
                 <button
                     onClick={() => {
                         onClose();
