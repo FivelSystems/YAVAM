@@ -647,7 +647,7 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 	})))
 
 	// Version Check Endpoint
-	mux.HandleFunc("/api/version/check", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/version/check", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		info, err := updater.GetLatestVersion(s.version, s.manager.GetConfig().UpdateChannel)
 		if err != nil {
 			s.writeError(w, err.Error(), 500)
@@ -655,7 +655,7 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(info)
-	})
+	})))
 
 	// Upload Endpoint
 	mux.Handle("/api/upload", s.AuthMiddleware(http.HandlerFunc(s.handleUpload)))
