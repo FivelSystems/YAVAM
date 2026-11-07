@@ -21,15 +21,49 @@ const (
 	messagePairingFailed       = "Pairing failed"
 )
 
-// isLoopbackRequest judges the TCP peer only. Forwarding headers are
-// attacker-controlled, so they are deliberately never consulted.
+// forwardingHeaders are set by reverse proxies and tunnels. A loopback peer
+// that carries one is very likely a local forwarder relaying a remote client,
+// so the TCP peer address no longer says who is really asking.
+var forwardingHeaders = []string{
+	"X-Forwarded-For",
+	"X-Forwarded-Host",
+	"X-Forwarded-Proto",
+	"Forwarded",
+	"X-Real-IP",
+	"Via",
+}
+
+// isLoopbackRequest reports whether the request really comes from the person
+// at this machine. It fails closed: the TCP peer must be loopback, no
+// forwarding header may be present, and the Host must be a local name. A local
+// forwarder (tunnel, reverse proxy) connects from loopback but relays remote
+// traffic, usually with a forwarding header or the public Host. Those headers
+// can only make a request more restricted, never less, so an attacker who
+// forges them gains nothing. A local browser opened at the machine's LAN
+// address is treated as remote and signs in by pairing.
 func isLoopbackRequest(r *http.Request) bool {
-	host := r.RemoteAddr
-	if splitHost, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+	if !isLoopbackPeer(r.RemoteAddr) || hasForwardingHeader(r) {
+		return false
+	}
+	return isLocalHostName(hostNameOf(r.Host))
+}
+
+func isLoopbackPeer(remoteAddr string) bool {
+	host := remoteAddr
+	if splitHost, _, err := net.SplitHostPort(remoteAddr); err == nil {
 		host = splitHost
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
+}
+
+func hasForwardingHeader(r *http.Request) bool {
+	for _, name := range forwardingHeaders {
+		if _, present := r.Header[http.CanonicalHeaderKey(name)]; present {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) remotePasswordLoginAllowed() bool {
