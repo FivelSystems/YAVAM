@@ -49,13 +49,8 @@ export const KeybindProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }, []);
 
     const check = (id: string, e: KeyboardEvent): boolean => {
-        // Ignore inputs generally, unless specific allow-list (to be implemented)
         const target = e.target as HTMLElement;
-        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-            // Exceptions: ESC causes blur?
-            if (e.key === 'Escape') return true;
-            return false;
-        }
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return false;
 
         const requiredKeys = getKeys(id);
         if (requiredKeys.length === 0) return false;
