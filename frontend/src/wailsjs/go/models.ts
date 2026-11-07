@@ -7,6 +7,7 @@ export namespace auth {
 	    deviceName: string;
 	    ipAddress: string;
 	    createdAt: string;
+	    isSystem: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new User(source);
@@ -20,6 +21,7 @@ export namespace auth {
 	        this.deviceName = source["deviceName"];
 	        this.ipAddress = source["ipAddress"];
 	        this.createdAt = source["createdAt"];
+	        this.isSystem = source["isSystem"];
 	    }
 	}
 
@@ -42,6 +44,7 @@ export namespace config {
 	    authPollInterval: number;
 	    allowRemotePasswordLogin: boolean;
 	    serverBindAddress: string;
+	    serverAllowedHosts: string[];
 	    lastSeenVersion: string;
 	    updateChannel: string;
 	    privacyMode: boolean;
@@ -74,6 +77,7 @@ export namespace config {
 	        this.authPollInterval = source["authPollInterval"];
 	        this.allowRemotePasswordLogin = source["allowRemotePasswordLogin"];
 	        this.serverBindAddress = source["serverBindAddress"];
+	        this.serverAllowedHosts = source["serverAllowedHosts"];
 	        this.lastSeenVersion = source["lastSeenVersion"];
 	        this.updateChannel = source["updateChannel"];
 	        this.privacyMode = source["privacyMode"];
