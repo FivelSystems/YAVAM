@@ -564,6 +564,7 @@ export const usePackageActions = (
                 } else {
                     const res = await fetchWithAuth('/api/delete', {
                         method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ filePath: d.filePath, libraryPath: activeLibraryPath })
                     }).then(r => r.json());
                     if (!res.success) throw new Error("Web delete failed");

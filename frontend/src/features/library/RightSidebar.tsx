@@ -69,6 +69,7 @@ const RightSidebar = ({ pkg, onClose, activeTab, onResolve, onTabChange, onFilte
                     // Web Mode Logic
                     const res = await fetchWithAuth('/api/contents', {
                         method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ filePath: pkg.filePath })
                     });
                     if (!res.ok) throw new Error("Failed to fetch contents");
