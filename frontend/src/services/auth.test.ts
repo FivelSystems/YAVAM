@@ -7,6 +7,8 @@ import {
     normalizePairingCode,
     formatPairingCodeInput,
     isCompletePairingCode,
+    getDeviceId,
+    DEVICE_ID_KEY,
     AuthError,
 } from './auth';
 
@@ -79,7 +81,8 @@ describe('pairWithCode', () => {
 
         const [url, init] = vi.mocked(globalThis.fetch).mock.calls[0];
         expect(url).toBe('/api/auth/pair');
-        expect(JSON.parse((init as RequestInit).body as string)).toEqual({ code: 'ABCD2345', deviceName: 'phone' });
+        expect(JSON.parse((init as RequestInit).body as string)).toEqual({ code: 'ABCD2345', deviceName: 'phone', deviceId: store.get(DEVICE_ID_KEY) });
+        expect(store.get(DEVICE_ID_KEY)).toMatch(/^[0-9a-f]{32}$/);
     });
 
     it.each([
@@ -88,6 +91,8 @@ describe('pairWithCode', () => {
         [429, 'RATE_LIMIT', /Too many attempts/],
         [503, 'SETUP_REQUIRED', /administrator password must be set from the desktop app/],
         [500, 'SERVER_ERROR', /Pairing failed/],
+        [421, 'HOST_NOT_ALLOWED', /address is not allowed by the server/],
+        [415, 'CLIENT_ERROR', /rejected the request/],
     ])('maps HTTP %i to %s', async (status, code, message) => {
         vi.mocked(globalThis.fetch).mockResolvedValue(respond(status));
 
@@ -95,7 +100,7 @@ describe('pairWithCode', () => {
 
         expect(error.code).toBe(code);
         expect(error.message).toMatch(message);
-        expect(store.size).toBe(0);
+        expect(store.has('yavam_auth_token')).toBe(false);
     });
 
     it('carries Retry-After on 429 and defaults when absent', async () => {
@@ -130,6 +135,8 @@ describe('login refusals', () => {
         [503, 'SETUP_REQUIRED'],
         [401, 'INVALID_CREDENTIALS'],
         [429, 'RATE_LIMIT'],
+        [421, 'HOST_NOT_ALLOWED'],
+        [415, 'CLIENT_ERROR'],
     ])('maps HTTP %i to %s', async (status, code) => {
         vi.mocked(globalThis.fetch).mockResolvedValue(respond(status, {}, { 'Retry-After': '7' }));
 
@@ -137,6 +144,79 @@ describe('login refusals', () => {
 
         expect(error.code).toBe(code);
         if (status === 429) expect(error.retryAfter).toBe(7);
+    });
+});
+
+describe('login request', () => {
+    beforeEach(() => {
+        stubMemoryLocalStorage();
+        globalThis.fetch = vi.fn().mockResolvedValue(respond(200, { token: 't' }));
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+        vi.unstubAllGlobals();
+    });
+
+    it('sends the stable device id with the credentials', async () => {
+        await login('secret');
+        await login('secret');
+
+        const bodies = vi.mocked(globalThis.fetch).mock.calls.map(([, init]) => JSON.parse((init as RequestInit).body as string));
+        expect(bodies[0].deviceId).toMatch(/^[0-9a-f]{32}$/);
+        expect(bodies[1].deviceId).toBe(bodies[0].deviceId);
+        expect(bodies[0].username).toBe('admin');
+    });
+});
+
+describe('getDeviceId', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+        vi.unstubAllGlobals();
+    });
+
+    it('generates the id once and reuses it', () => {
+        const store = stubMemoryLocalStorage();
+        const randomSpy = vi.spyOn(crypto, 'getRandomValues');
+
+        const first = getDeviceId();
+        const second = getDeviceId();
+
+        expect(first).toBe(second);
+        expect(store.get(DEVICE_ID_KEY)).toBe(first);
+        expect(randomSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('replaces a stored value that is not a valid id', () => {
+        const store = stubMemoryLocalStorage();
+        store.set(DEVICE_ID_KEY, 'bad id!');
+
+        const id = getDeviceId();
+
+        expect(id).toMatch(/^[0-9a-f]{32}$/);
+        expect(store.get(DEVICE_ID_KEY)).toBe(id);
+    });
+
+    it('returns no id when storage is unavailable', () => {
+        vi.stubGlobal('localStorage', {
+            getItem: () => { throw new Error('denied'); },
+            setItem: () => { throw new Error('denied'); },
+        });
+
+        expect(getDeviceId()).toBeUndefined();
+    });
+
+    it('omits deviceId from the request body when storage is unavailable', async () => {
+        vi.stubGlobal('localStorage', {
+            getItem: () => { throw new Error('denied'); },
+            setItem: () => { throw new Error('denied'); },
+        });
+        globalThis.fetch = vi.fn().mockResolvedValue(respond(200, { token: 't' }));
+
+        await pairWithCode('ABCD-2345', 'phone').catch(() => undefined);
+
+        const [, init] = vi.mocked(globalThis.fetch).mock.calls[0];
+        expect(JSON.parse((init as RequestInit).body as string)).toEqual({ code: 'ABCD-2345', deviceName: 'phone' });
     });
 });
 
