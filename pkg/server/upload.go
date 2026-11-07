@@ -84,12 +84,12 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		}
 		if err != nil {
 			removeAll(created)
-			s.log(fmt.Sprintf("Upload failed for %s: %v", item.fileName, err))
+			s.log(fmt.Sprintf("Upload failed for %s: %s", utils.SanitizeForLog(item.fileName), utils.SanitizeForLog(err.Error())))
 			s.writeError(w, "Could not save package", http.StatusInternalServerError)
 			return
 		}
 		created = append(created, destination)
-		s.log(fmt.Sprintf("Uploaded: %s (%d bytes)", item.fileName, item.header.Size))
+		s.log(fmt.Sprintf("Uploaded: %s (%d bytes)", utils.SanitizeForLog(item.fileName), item.header.Size))
 	}
 
 	w.WriteHeader(http.StatusOK)

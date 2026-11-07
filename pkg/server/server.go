@@ -138,11 +138,11 @@ func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 			remoteIP = ip
 		}
 
-		s.log(fmt.Sprintf("[Request] %s -> %s %s", remoteIP, r.Method, r.URL.Path))
+		s.log(fmt.Sprintf("[Request] %s -> %s %s", remoteIP, utils.SanitizeForLog(r.Method), utils.SanitizeForLog(r.URL.Path)))
 
 		next.ServeHTTP(w, r)
 
-		s.log(fmt.Sprintf("[Completed] %s %s in %v", r.Method, r.URL.Path, time.Since(start)))
+		s.log(fmt.Sprintf("[Completed] %s %s in %v", utils.SanitizeForLog(r.Method), utils.SanitizeForLog(r.URL.Path), time.Since(start)))
 	})
 }
 
@@ -461,11 +461,11 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 			return
 		}
 
-		s.log(fmt.Sprintf("Client requested packages for: %s", targetPath))
+		s.log(fmt.Sprintf("Client requested packages for: %s", utils.SanitizeForLog(targetPath)))
 
 		// Security: Ensure targetPath is in allowed libraries
 		if err := s.manager.ValidatePath(targetPath); err != nil {
-			s.log(fmt.Sprintf("Access denied. Target: %s. Error: %v", targetPath, err))
+			s.log(fmt.Sprintf("Access denied. Target: %s. Error: %s", utils.SanitizeForLog(targetPath), utils.SanitizeForLog(err.Error())))
 			s.writeError(w, "Access denied to this library path", 403)
 			return
 		}
@@ -691,12 +691,12 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 
 		newPath, err := s.manager.TogglePackage(nil, req.FilePath, req.Enable, targetLib, req.Merge)
 		if err != nil {
-			s.log(fmt.Sprintf("Error toggling package: %v", err))
+			s.log(fmt.Sprintf("Error toggling package: %s", utils.SanitizeForLog(err.Error())))
 			s.writeManagerError(w, err)
 			return
 		}
 
-		s.log(fmt.Sprintf("Toggled package: %s (Enabled: %v)", filepath.Base(req.FilePath), req.Enable))
+		s.log(fmt.Sprintf("Toggled package: %s (Enabled: %v)", utils.SanitizeForLog(filepath.Base(req.FilePath)), req.Enable))
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -739,12 +739,12 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 		}
 
 		if err := s.manager.DeleteToTrash(req.FilePath); err != nil {
-			s.log(fmt.Sprintf("Error deleting package: %v", err))
+			s.log(fmt.Sprintf("Error deleting package: %s", utils.SanitizeForLog(err.Error())))
 			s.writeError(w, err.Error(), 500)
 			return
 		}
 
-		s.log(fmt.Sprintf("Deleted package: %s", filepath.Base(req.FilePath)))
+		s.log(fmt.Sprintf("Deleted package: %s", utils.SanitizeForLog(filepath.Base(req.FilePath))))
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": true,
@@ -773,7 +773,7 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 
 		res, err := s.manager.ResolveConflicts(req.KeepPath, req.Others, req.LibraryPath)
 		if err != nil {
-			s.log(fmt.Sprintf("Error resolving conflicts: %v", err))
+			s.log(fmt.Sprintf("Error resolving conflicts: %s", utils.SanitizeForLog(err.Error())))
 			s.writeManagerError(w, err)
 			return
 		}
@@ -813,7 +813,7 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 			})
 		})
 		if err != nil {
-			s.log(fmt.Sprintf("Error installing packages: %v", err))
+			s.log(fmt.Sprintf("Error installing packages: %s", utils.SanitizeForLog(err.Error())))
 			s.writeManagerError(w, err)
 			return
 		}
@@ -821,7 +821,7 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 		if len(collisions) > 0 {
 			s.log(fmt.Sprintf("Install collisions detected: %d files", len(collisions)))
 		} else {
-			s.log(fmt.Sprintf("Installed %d packages to %s", len(req.FilePaths), filepath.Base(destPath)))
+			s.log(fmt.Sprintf("Installed %d packages to %s", len(req.FilePaths), utils.SanitizeForLog(filepath.Base(destPath))))
 		}
 
 		w.Header().Set("Content-Type", "application/json")
