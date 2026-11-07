@@ -3,6 +3,37 @@ import { VarPackage } from '../types';
 import { ManualPlan } from '../features/settings/OptimizationModal';
 import { fetchWithAuth } from '../services/api';
 
+// Wails rejects with a plain string; the web client throws an Error built from the server's message.
+export function describeBackendError(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
+
+const uniqueReasons = (reasons: string[]) => Array.from(new Set(reasons)).join(' ');
+
+// Resolves to the package's new path; rejects with the backend's own reason when it refuses the rename.
+export async function requestToggle(filePath: string, enable: boolean, libraryPath: string, merge: boolean): Promise<string> {
+    // @ts-ignore
+    if (window.go) {
+        try {
+            // @ts-ignore
+            return await window.go.main.App.TogglePackage(filePath, enable, libraryPath, merge);
+        } catch (error) {
+            throw new Error(describeBackendError(error));
+        }
+    }
+
+    const response = await fetchWithAuth('/api/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePath, enable, merge, libraryPath })
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok || !body.success) {
+        throw new Error(body.message || body.error || `Request failed (HTTP ${response.status})`);
+    }
+    return body.newPath;
+}
+
 export const usePackageActions = (
     packages: VarPackage[],
     setPackages: React.Dispatch<React.SetStateAction<VarPackage[]>>,
@@ -58,42 +89,20 @@ export const usePackageActions = (
 
     const togglePackage = useCallback(async (pkg: VarPackage, merge = false, silent = false) => {
         try {
-            let newPath = "";
-            // @ts-ignore
-            if (window.go) {
-                // @ts-ignore
-                newPath = await window.go.main.App.TogglePackage(pkg.filePath, !pkg.isEnabled, activeLibraryPath, merge);
-            } else {
-                // Web Mode
-                const res = await fetchWithAuth('/api/toggle', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ filePath: pkg.filePath, enable: !pkg.isEnabled, merge: merge, libraryPath: activeLibraryPath })
-                }).then(r => r.json());
-
-                if (!res.success) throw new Error(res.message || res.error || "Unknown error");
-                newPath = res.newPath;
-            }
+            const newPath = await requestToggle(pkg.filePath, !pkg.isEnabled, activeLibraryPath, merge);
 
             if (!silent) addToast(pkg.isEnabled ? "Package disabled" : "Package enabled", 'success');
 
-            // Optimistic update
+            // The list only changes once the backend confirmed the rename.
             setPackages(prev => {
                 const updated = prev.map(p =>
                     p.filePath === pkg.filePath ? { ...p, isEnabled: !p.isEnabled, filePath: newPath } : p
                 );
                 return recalculateDuplicates(updated);
             });
-        } catch (e: any) {
+        } catch (e) {
             console.error(e);
-            const errStr = e.toString();
-            // Check for collision
-            if (errStr.includes("destination file already exists") || errStr.includes("already active") || errStr.includes("already exists")) {
-                setCollisionData({ open: true, pkg });
-                return;
-            }
-
-            addToast("Failed to toggle: " + e, 'error');
+            addToast("Failed to toggle: " + describeBackendError(e), 'error');
         }
     }, [activeLibraryPath, addToast, recalculateDuplicates, setPackages]);
 
@@ -113,20 +122,7 @@ export const usePackageActions = (
                     // Skip packages already in the target state
                     if (p.isEnabled === targetEnabled) return { pkg: p, newPath: p.filePath, targetEnabled };
 
-                    let newPath = p.filePath;
-                    // @ts-ignore
-                    if (window.go) {
-                        // @ts-ignore
-                        newPath = await window.go.main.App.TogglePackage(p.filePath, targetEnabled, activeLibraryPath, false);
-                    } else {
-                        const res = await fetchWithAuth('/api/toggle', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ filePath: p.filePath, enable: targetEnabled, merge: false, libraryPath: activeLibraryPath })
-                        }).then(r => r.json());
-                        if (!res.success) throw new Error(res.message || res.error || 'Unknown error');
-                        newPath = res.newPath;
-                    }
+                    const newPath = await requestToggle(p.filePath, targetEnabled, activeLibraryPath, false);
                     return { pkg: p, newPath, targetEnabled };
                 })
             );
@@ -138,13 +134,7 @@ export const usePackageActions = (
                 if (result.status === 'fulfilled') {
                     succeeded.push(result.value);
                 } else {
-                    const err = (result.reason as Error).toString();
-                    // Collision on one of them — inform but continue
-                    if (err.includes('already exists') || err.includes('already active')) {
-                        failed.push('collision');
-                    } else {
-                        failed.push(err);
-                    }
+                    failed.push(describeBackendError(result.reason));
                 }
             }
 
@@ -161,9 +151,10 @@ export const usePackageActions = (
                     });
                     return recalculateDuplicates(updated);
                 });
-                addToast(`Toggled ${succeeded.length} package(s)${failed.length > 0 ? ` (${failed.length} failed)` : ''}`, succeeded.length > 0 ? 'success' : 'warning');
+                addToast(`Toggled ${succeeded.length} package(s)${failed.length > 0 ? ` (${failed.length} failed)` : ''}`, 'success');
+                if (failed.length > 0) addToast(`Not toggled: ${uniqueReasons(failed)}`, 'warning');
             } else {
-                addToast('All toggles failed', 'error');
+                addToast(`All toggles failed: ${uniqueReasons(failed)}`, 'error');
             }
         } else {
             togglePackage(pkg);
