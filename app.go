@@ -126,7 +126,7 @@ func (a *App) startup(ctx context.Context) {
 				port = "18888"
 			}
 			// We need to pass the libraries as well
-			if err := a.server.Start(port, cfg.Libraries); err == nil {
+			if err := a.server.Start(config.ResolveBindHost(cfg.ServerBindAddress), port, cfg.Libraries); err == nil {
 				runtime.EventsEmit(a.ctx, "server:status:changed", true)
 			}
 		}()
@@ -805,7 +805,7 @@ func (a *App) StartServer() error {
 		port = "18888"
 	}
 
-	err := a.server.Start(port, cfg.Libraries)
+	err := a.server.Start(config.ResolveBindHost(cfg.ServerBindAddress), port, cfg.Libraries)
 	if err == nil {
 		runtime.EventsEmit(a.ctx, "server:status:changed", true)
 	}

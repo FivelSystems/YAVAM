@@ -19,7 +19,7 @@ func startUploadTestServer(t *testing.T, libraryDir string) *Server {
 	mgr := manager.NewManager(nil, nil, &TestServerConfigService{libraries: []string{libraryDir}})
 	s := NewServer(context.Background(), mgr, &MockAuthService{validToken: "valid"}, mockAssets, "1.0.0", func() {})
 	s.SkipEvents = true
-	if err := s.Start("0", []string{libraryDir}); err != nil {
+	if err := s.Start("127.0.0.1", "0", []string{libraryDir}); err != nil {
 		t.Fatalf("Start() failed: %v", err)
 	}
 	t.Cleanup(func() { s.Stop() })
@@ -176,7 +176,7 @@ func TestUpload_DuplicateOnlyCheckedInTargetLibrary(t *testing.T) {
 	mgr := manager.NewManager(nil, nil, &TestServerConfigService{libraries: []string{target, other}})
 	s := NewServer(context.Background(), mgr, &MockAuthService{validToken: "valid"}, mockAssets, "1.0.0", func() {})
 	s.SkipEvents = true
-	if err := s.Start("0", []string{target, other}); err != nil {
+	if err := s.Start("127.0.0.1", "0", []string{target, other}); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { s.Stop() })

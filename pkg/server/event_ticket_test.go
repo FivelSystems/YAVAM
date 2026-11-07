@@ -69,7 +69,7 @@ func newTicketTestServer(t *testing.T, authService auth.AuthService, clock *fake
 	s.SkipEvents = true
 	s.tickets = newEventTicketStore(clock.Now)
 	s.sessionRecheckInterval = 20 * time.Millisecond
-	if err := s.Start("0", []string{"C:/Allowed"}); err != nil {
+	if err := s.Start("127.0.0.1", "0", []string{"C:/Allowed"}); err != nil {
 		t.Fatalf("Start() failed: %v", err)
 	}
 	t.Cleanup(func() { s.Stop() })

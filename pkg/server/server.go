@@ -17,6 +17,7 @@ import (
 	"yavam/pkg/services/config"
 	"yavam/pkg/services/library"
 	"yavam/pkg/updater"
+	"yavam/pkg/utils"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -48,6 +49,9 @@ type Server struct {
 	sessionRecheckInterval time.Duration
 
 	SkipEvents bool // For testing
+
+	logObserver func(message string) // tests capture log lines here
+	boundAddr   string               // actual listener address, set by Start
 }
 
 func NewServer(ctx context.Context, m *manager.Manager, authService auth.AuthService, assets fs.FS, version string, onRestore func()) *Server {
@@ -74,6 +78,9 @@ func (s *Server) GetLibraries() []string {
 func (s *Server) log(message string) {
 	s.logMutex.Lock()
 	defer s.logMutex.Unlock()
+	if s.logObserver != nil {
+		s.logObserver(message)
+	}
 	if s.SkipEvents {
 		return
 	}
@@ -169,7 +176,9 @@ func (s *Server) Broadcast(eventType string, data interface{}) {
 	}
 }
 
-func (s *Server) Start(port string, libraries []string) error {
+// Start listens on bindHost:port. bindHost is the already-resolved host (see
+// config.ResolveBindHost), for example "0.0.0.0" for all interfaces.
+func (s *Server) Start(bindHost, port string, libraries []string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -285,6 +294,14 @@ func (s *Server) Start(port string, libraries []string) error {
 			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		if s.auth == nil {
+			s.writeError(w, "Auth service not initialized", 500)
+			return
+		}
+		if s.rejectPasswordLogin(w, r) {
+			return
+		}
+
 		var req struct {
 			Username   string `json:"username"`
 			Password   string `json:"password"`
@@ -294,19 +311,14 @@ func (s *Server) Start(port string, libraries []string) error {
 			return
 		}
 
-		if s.auth == nil {
-			s.writeError(w, "Auth service not initialized", 500)
-			return
-		}
-
 		token, err := s.auth.Login(req.Username, req.Password, req.DeviceName)
 		if err != nil {
-			s.log(fmt.Sprintf("Login failed for user '%s' from device '%s': %v", req.Username, req.DeviceName, err))
+			s.log(fmt.Sprintf("Login failed for user %s from device %s: %v", utils.SanitizeForLog(req.Username), utils.SanitizeForLog(req.DeviceName), err))
 			// Generic error for security
 			s.writeError(w, "Invalid credentials", 401)
 			return
 		}
-		s.log(fmt.Sprintf("User '%s' logged in successfully from '%s'", req.Username, req.DeviceName))
+		s.log(fmt.Sprintf("User %s logged in successfully from %s", utils.SanitizeForLog(req.Username), utils.SanitizeForLog(req.DeviceName)))
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -314,6 +326,12 @@ func (s *Server) Start(port string, libraries []string) error {
 			"token":   token,
 		})
 	}))
+
+	// Auth: one-time pairing code redemption (unauthenticated, shares the login limiter)
+	mux.HandleFunc("/api/auth/pair", loginLimiter.Middleware(s.handleAuthPair))
+
+	// Auth: pre-login capability status (unauthenticated, booleans only)
+	mux.HandleFunc("/api/auth/status", s.handleAuthStatus)
 
 	// Auth: List Sessions
 	mux.Handle("/api/auth/sessions", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -874,11 +892,8 @@ func (s *Server) Start(port string, libraries []string) error {
 
 	mux.Handle("/", distFs)
 
-	// Bind to all interfaces to allow remote access
-	bindAddr := "0.0.0.0:" + port
-
 	s.httpSrv = &http.Server{
-		Addr:    bindAddr,
+		Addr:    net.JoinHostPort(bindHost, port),
 		Handler: s.corsMiddleware(s.loggingMiddleware(mux)),
 	}
 
@@ -889,8 +904,9 @@ func (s *Server) Start(port string, libraries []string) error {
 	}
 
 	s.running = true
+	s.boundAddr = listener.Addr().String()
 
-	s.log(fmt.Sprintf("Starting server on port %s...", port))
+	s.log(fmt.Sprintf("Starting server on %s...", s.boundAddr))
 	s.log(fmt.Sprintf("Serving %d libraries.", len(libraries)))
 	s.log("Web interface available at root URL.")
 
