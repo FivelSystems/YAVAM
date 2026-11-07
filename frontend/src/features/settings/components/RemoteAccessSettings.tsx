@@ -7,6 +7,7 @@ import { Toggle } from '../../../components/ui/Toggle';
 import { Input } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
 import type { remoteaccess } from '../../../wailsjs/go/models';
+import { describeBackendError as describeError } from '../../../utils/passwordRules';
 
 const COUNTDOWN_TICK_MS = 1000;
 const PAIRING_STATE_POLL_MS = 2000;
@@ -31,11 +32,6 @@ interface RemoteAccessApi {
 function remoteAccessApi(): RemoteAccessApi | null {
     // @ts-ignore
     return window.go?.main?.App ?? null;
-}
-
-function describeError(error: unknown): string {
-    if (error instanceof Error) return error.message;
-    return String(error);
 }
 
 function modeOf(address: string): BindMode {
