@@ -27,7 +27,10 @@ type Config struct {
 	AllowRemotePasswordLogin bool `json:"allowRemotePasswordLogin"`
 	// ServerBindAddress is "" or "all" (every interface), "loopback", or a local interface IP.
 	ServerBindAddress string `json:"serverBindAddress"`
-	LastSeenVersion  string              `json:"lastSeenVersion"`
+	// ServerAllowedHosts lists extra DNS names (no port) clients may use to reach
+	// the server, beyond IP addresses, localhost and this machine's hostname.
+	ServerAllowedHosts []string `json:"serverAllowedHosts"`
+	LastSeenVersion string              `json:"lastSeenVersion"`
 	UpdateChannel    string              `json:"updateChannel"` // "stable" (default) | "unstable"
 	PrivacyMode      bool                `json:"privacyMode"`
 	Keybinds         map[string][]string `json:"keybinds,omitempty"` // ID -> ["CTRL", "F"]
@@ -58,6 +61,7 @@ func (c *Config) ListenPort() string {
 func (c *Config) Clone() *Config {
 	clone := *c
 	clone.Libraries = append([]string(nil), c.Libraries...)
+	clone.ServerAllowedHosts = append([]string(nil), c.ServerAllowedHosts...)
 	if c.Keybinds != nil {
 		clone.Keybinds = make(map[string][]string, len(c.Keybinds))
 		for action, keys := range c.Keybinds {
@@ -125,6 +129,7 @@ func (s *fileConfigService) Load() (*Config, error) {
 		return s.config.Clone(), err
 	}
 	s.config.ServerBindAddress = normaliseBindAddress(s.config.ServerBindAddress)
+	s.config.ServerAllowedHosts = normaliseAllowedHosts(s.config.ServerAllowedHosts)
 
 	// Migration: existing users who configured libraries before the SetupWizard
 	// existed will have setupDone=false. Treat a non-empty library list as implicit proof
@@ -144,6 +149,7 @@ func (s *fileConfigService) Save(cfg *Config) error {
 
 	s.config = cfg.Clone()
 	s.config.ServerBindAddress = normaliseBindAddress(s.config.ServerBindAddress)
+	s.config.ServerAllowedHosts = normaliseAllowedHosts(s.config.ServerAllowedHosts)
 
 	data, err := json.MarshalIndent(s.config, "", "  ")
 	if err != nil {
@@ -183,6 +189,7 @@ func (s *fileConfigService) Update(fn func(*Config)) error {
 
 	fn(s.config)
 	s.config.ServerBindAddress = normaliseBindAddress(s.config.ServerBindAddress)
+	s.config.ServerAllowedHosts = normaliseAllowedHosts(s.config.ServerAllowedHosts)
 
 	data, err := json.MarshalIndent(s.config, "", "  ")
 	if err != nil {

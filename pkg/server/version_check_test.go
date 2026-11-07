@@ -15,7 +15,7 @@ func TestVersionCheckRequiresAuthentication(t *testing.T) {
 	}
 	for name, authorization := range cases {
 		t.Run(name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/api/version/check", nil)
+			req := newTestRequest(http.MethodGet, "/api/version/check", nil)
 			if authorization != "" {
 				req.Header.Set("Authorization", authorization)
 			}

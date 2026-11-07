@@ -57,6 +57,8 @@ type Server struct {
 	loopbackLoginThrottle *LoginThrottle
 
 	shutdownGracePeriod time.Duration // zero selects defaultShutdownGracePeriod
+
+	machineNames map[string]bool // hostnames this machine answers to, see machineHostNames
 }
 
 const defaultShutdownGracePeriod = time.Second
@@ -71,6 +73,8 @@ func NewServer(ctx context.Context, m *manager.Manager, authService auth.AuthSer
 		version:   version,
 		clients:   make(map[chan string]bool),
 		tickets:   newEventTicketStore(time.Now),
+
+		machineNames: machineHostNames(),
 
 		remoteLoginThrottle:   NewLoginThrottle(time.Now, loginThrottleBaseDelay, loginThrottleMaxDelay),
 		loopbackLoginThrottle: NewLoginThrottle(time.Now, loginThrottleBaseDelay, loginThrottleMaxDelay),
@@ -270,7 +274,7 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 	loginLimiter := NewRateLimiter(5, 1*time.Minute)
 
 	// Auth: Challenge Endpoint
-	mux.HandleFunc("/api/auth/challenge", loginLimiter.Middleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/auth/challenge", s.requireJSONContentType(loginLimiter.Middleware(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -300,10 +304,10 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 			"success": true,
 			"nonce":   nonce,
 		})
-	}))
+	})))
 
 	// Auth: Login Endpoint (Simple Password)
-	mux.HandleFunc("/api/auth/login", loginLimiter.Middleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/auth/login", s.requireJSONContentType(loginLimiter.Middleware(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -316,18 +320,20 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 			return
 		}
 
-		throttle := s.throttleFor(r)
-		if admitted, retryAfter := throttle.Admit(); !admitted {
-			s.writeThrottled(w, retryAfter)
-			return
-		}
-
 		var req struct {
 			Username   string `json:"username"`
 			Password   string `json:"password"`
 			DeviceName string `json:"deviceName"`
 		}
 		if !s.decodeJSONBody(w, r, &req) {
+			return
+		}
+
+		// Charged only once the request is a well-formed JSON login, so a
+		// blind cross-site POST cannot advance the lockout.
+		throttle := s.throttleFor(r)
+		if admitted, retryAfter := throttle.Admit(); !admitted {
+			s.writeThrottled(w, retryAfter)
 			return
 		}
 
@@ -346,10 +352,10 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 			"success": true,
 			"token":   token,
 		})
-	}))
+	})))
 
 	// Auth: one-time pairing code redemption (unauthenticated, shares the login limiter)
-	mux.HandleFunc("/api/auth/pair", loginLimiter.Middleware(s.handleAuthPair))
+	mux.HandleFunc("/api/auth/pair", s.requireJSONContentType(loginLimiter.Middleware(s.handleAuthPair)))
 
 	// Auth: pre-login capability status (unauthenticated, booleans only)
 	mux.HandleFunc("/api/auth/status", s.handleAuthStatus)
@@ -921,7 +927,7 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 
 	s.httpSrv = &http.Server{
 		Addr:    net.JoinHostPort(bindHost, port),
-		Handler: s.corsMiddleware(s.loggingMiddleware(mux)),
+		Handler: s.hostGuardMiddleware(s.corsMiddleware(s.loggingMiddleware(mux))),
 	}
 
 	listener, err := net.Listen("tcp", s.httpSrv.Addr)

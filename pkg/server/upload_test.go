@@ -42,7 +42,7 @@ func postUpload(t *testing.T, s *Server, libraryDir string, fileNames ...string)
 	}
 	form.Close()
 
-	req := httptest.NewRequest(http.MethodPost, "/api/upload", &body)
+	req := newTestRequest(http.MethodPost, "/api/upload", &body)
 	req.Header.Set("Content-Type", form.FormDataContentType())
 	req.Header.Set("Authorization", "Bearer valid")
 	w := httptest.NewRecorder()
@@ -242,7 +242,7 @@ func TestUpload_OversizedRequestRejected(t *testing.T) {
 	part.Write(bytes.Repeat([]byte("x"), 4096))
 	form.Close()
 
-	req := httptest.NewRequest(http.MethodPost, "/api/upload", &body)
+	req := newTestRequest(http.MethodPost, "/api/upload", &body)
 	req.Header.Set("Content-Type", form.FormDataContentType())
 	req.Header.Set("Authorization", "Bearer valid")
 	w := httptest.NewRecorder()

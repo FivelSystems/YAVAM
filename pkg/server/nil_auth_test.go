@@ -30,7 +30,7 @@ func assertAuthUnavailable(t *testing.T, rec *httptest.ResponseRecorder) {
 
 func serveWithoutAuth(t *testing.T, handler http.Handler, method, target string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(method, target, strings.NewReader("{}"))
+	req := newTestRequest(method, target, strings.NewReader("{}"))
 	req.Header.Set("Authorization", "Bearer any")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)

@@ -22,7 +22,7 @@ func TestBareServerIssuesAndRedeemsTicket(t *testing.T) {
 func TestBareServerTicketEndpointDoesNotPanic(t *testing.T) {
 	s := &Server{auth: &MockAuthService{validToken: "tok"}}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/events/ticket", nil)
+	req := newTestRequest(http.MethodPost, "/api/events/ticket", nil)
 	req.Header.Set("Authorization", "Bearer tok")
 	rec := httptest.NewRecorder()
 	s.handleEventTicket(rec, req)

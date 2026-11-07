@@ -18,7 +18,7 @@ func postJSON(t *testing.T, s *Server, route string, payload interface{}) int {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodPost, route, bytes.NewReader(body))
+	req := newTestRequest(http.MethodPost, route, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer valid")
 	w := httptest.NewRecorder()
@@ -161,7 +161,7 @@ func TestAPI_ToggleRefusesWhenCounterpartExists(t *testing.T) {
 	writeTestFile(t, disabled, "disabled")
 
 	body, _ := json.Marshal(map[string]interface{}{"filePath": enabled, "enable": false, "libraryPath": libraryDir})
-	req := httptest.NewRequest(http.MethodPost, "/api/toggle", bytes.NewReader(body))
+	req := newTestRequest(http.MethodPost, "/api/toggle", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer valid")
 	w := httptest.NewRecorder()

@@ -22,6 +22,8 @@ const (
 	remotePeer   = "192.0.2.10:40000"
 	loopbackPeer = "127.0.0.1:40000"
 	adminSecret  = "correct-horse-battery"
+
+	testLocalHost = "127.0.0.1:18888"
 )
 
 // scriptedAuth overrides the pieces of MockAuthService the gates depend on.
@@ -72,7 +74,19 @@ func startAuthServer(t *testing.T, authService auth.AuthService, cfg *config.Con
 func do(s *Server, method, path, body, remoteAddr string, headers map[string]string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	req.RemoteAddr = remoteAddr
+	req.Host = testLocalHost
+	if method == http.MethodPost {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	for name, value := range headers {
+		if strings.EqualFold(name, "Host") {
+			req.Host = value
+			continue
+		}
+		if value == "" {
+			req.Header.Del(name)
+			continue
+		}
 		req.Header.Set(name, value)
 	}
 	w := httptest.NewRecorder()
