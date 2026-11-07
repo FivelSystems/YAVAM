@@ -205,7 +205,7 @@ export const DeletePackageModal = ({ isOpen, onClose, onConfirm, packagesToDelet
                             <span>Packages to delete ({filesToDelete.length})</span>
                             <div className="flex items-center gap-2 text-gray-300">
                                 <HardDrive size={14} className="text-violet-400" />
-                                <span className="font-mono">{formatBytes(totalSize)}</span> Liberated
+                                <span className="font-mono">{formatBytes(totalSize)}</span> to Recycle Bin
                             </div>
                         </div>
                         <div className="flex-1 overflow-y-auto p-2 space-y-1">

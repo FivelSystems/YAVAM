@@ -108,3 +108,58 @@ describe('usePackageActions toggle refusals', () => {
         expect(setPackages).not.toHaveBeenCalled();
     });
 });
+
+describe('usePackageActions optimization merge (web mode)', () => {
+    const fetchMock = vi.fn();
+
+    beforeEach(() => {
+        stubMemoryLocalStorage();
+        fetchMock.mockReset();
+        vi.stubGlobal('fetch', fetchMock);
+        vi.spyOn(console, 'error').mockImplementation(() => { });
+    });
+
+    afterEach(() => {
+        delete (window as any).go;
+        vi.unstubAllGlobals();
+        vi.restoreAllMocks();
+    });
+
+    // Regression test for #110: a collision at the destination must never cost
+    // the only surviving copy of the package.
+    it('does not delete the keeper when moving it to the root collides with an existing file', async () => {
+        const keep: VarPackage = {
+            filePath: `${LIBRARY}/sub/A.B.1.var`,
+            fileName: 'A.B.1.var',
+            isEnabled: true,
+            size: 1000,
+            meta: { creator: 'A', packageName: 'B', version: '1' }
+        } as VarPackage;
+
+        fetchMock.mockImplementation(async (url: string) => {
+            if (url === '/api/install') {
+                return jsonResponse(200, { success: true, collisions: ['A.B.1.var'] });
+            }
+            throw new Error(`Unexpected call to ${url}`);
+        });
+
+        const { result } = setup([keep]);
+
+        act(() => {
+            result.current.setOptimizationData({
+                open: true,
+                mergePlan: [{ keep, delete: [] }],
+                resolveGroups: []
+            });
+        });
+
+        await act(async () => {
+            await result.current.handleConfirmOptimization(true, 'none', {});
+        });
+
+        const deleteCalls = fetchMock.mock.calls.filter(([url]) => url === '/api/delete');
+        expect(deleteCalls).toHaveLength(0);
+        expect(result.current.optimizationProgress.spaceSaved).toBe(0);
+        expect(result.current.optimizationProgress.errors.some(e => e.includes('A.B.1.var'))).toBe(true);
+    });
+});

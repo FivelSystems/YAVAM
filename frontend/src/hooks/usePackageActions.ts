@@ -34,6 +34,104 @@ export async function requestToggle(filePath: string, enable: boolean, libraryPa
     return body.newPath;
 }
 
+// Copies a single file to a library's root. Resolves to the list of filenames that
+// already existed there (and were therefore left untouched by the backend).
+async function copyToLibraryRoot(filePath: string, libraryPath: string): Promise<string[]> {
+    // @ts-ignore
+    if (window.go) {
+        // @ts-ignore
+        return await window.go.main.App.CopyPackagesToLibrary([filePath], libraryPath, false);
+    }
+
+    const response = await fetchWithAuth('/api/install', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePaths: [filePath], destLib: libraryPath, overwrite: false })
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok || !body.success) {
+        throw new Error(body.message || body.error || `Request failed (HTTP ${response.status})`);
+    }
+    return body.collisions || [];
+}
+
+type DeleteOutcome =
+    | { outcome: 'deleted' }
+    | { outcome: 'alreadyMissing' }
+    | { outcome: 'unsafeVolume'; message: string }
+    | { outcome: 'error'; message: string };
+
+const UNSAFE_VOLUME_MESSAGE = 'recycle bin unavailable on this volume';
+const ALREADY_MISSING_MESSAGE = 'file not found';
+
+// Sends a single file to the recycle bin, distinguishing a real failure from a
+// file that was already gone (nothing to free) or a volume with no recycle bin
+// (the backend deliberately refused to delete, to avoid an unrecoverable loss).
+export async function deleteFileToRecycleBin(filePath: string, libraryPath: string): Promise<DeleteOutcome> {
+    // @ts-ignore
+    if (window.go) {
+        try {
+            // @ts-ignore
+            await window.go.main.App.DeleteFileToRecycleBin(filePath);
+            return { outcome: 'deleted' };
+        } catch (error) {
+            const message = describeBackendError(error);
+            if (message.includes(ALREADY_MISSING_MESSAGE)) return { outcome: 'alreadyMissing' };
+            if (message.includes(UNSAFE_VOLUME_MESSAGE)) return { outcome: 'unsafeVolume', message };
+            return { outcome: 'error', message };
+        }
+    }
+
+    try {
+        const response = await fetchWithAuth('/api/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filePath, libraryPath })
+        });
+        const body = await response.json().catch(() => ({}));
+        if (response.ok && body.success) return { outcome: 'deleted' };
+        if (body.alreadyMissing) return { outcome: 'alreadyMissing' };
+        if (body.unsafeVolume) return { outcome: 'unsafeVolume', message: body.message || UNSAFE_VOLUME_MESSAGE };
+        return { outcome: 'error', message: body.message || body.error || `Request failed (HTTP ${response.status})` };
+    } catch (error) {
+        return { outcome: 'error', message: describeBackendError(error) };
+    }
+}
+
+const joinLibraryPath = (libraryPath: string, fileName: string) => {
+    const separator = libraryPath.includes('\\') ? '\\' : '/';
+    return `${libraryPath.replace(/[\\/]+$/, '')}${separator}${fileName}`;
+};
+
+type MoveToRootResult =
+    | { status: 'moved'; newPath: string }
+    | { status: 'collision' }
+    | { status: 'error'; message: string };
+
+// Copies `pkg` to the library root and, only if nothing else occupies that
+// filename there, removes the original. Never deletes the original on a
+// collision or on a delete failure — the caller must not lose the only copy.
+async function moveToLibraryRoot(pkg: VarPackage, libraryPath: string): Promise<MoveToRootResult> {
+    let collisions: string[];
+    try {
+        collisions = await copyToLibraryRoot(pkg.filePath, libraryPath);
+    } catch (error) {
+        return { status: 'error', message: describeBackendError(error) };
+    }
+
+    if (collisions.includes(pkg.fileName)) {
+        return { status: 'collision' };
+    }
+
+    const deleteResult = await deleteFileToRecycleBin(pkg.filePath, libraryPath);
+    const newPath = joinLibraryPath(libraryPath, pkg.fileName);
+
+    if (deleteResult.outcome === 'deleted' || deleteResult.outcome === 'alreadyMissing') {
+        return { status: 'moved', newPath };
+    }
+    return { status: 'error', message: `copied to root, but the original could not be removed: ${deleteResult.message}` };
+}
+
 export const usePackageActions = (
     packages: VarPackage[],
     setPackages: React.Dispatch<React.SetStateAction<VarPackage[]>>,
@@ -228,16 +326,22 @@ export const usePackageActions = (
 
                 const succeeded: number = data.succeeded ?? 0;
                 const failed: string[] = data.failed ?? [];
-                const allOk = failed.length === 0;
+                const alreadyMissing: string[] = data.alreadyMissing ?? [];
+                const unsafeVolume: string[] = data.unsafeVolume ?? [];
+                const allOk = failed.length === 0 && unsafeVolume.length === 0;
 
                 if (toastId && completeProgressToast) {
                     // Transition the progress toast to its final state in-place.
-                    const finalMsg = succeeded > 1
-                        ? `Deleted ${succeeded} packages${!allOk ? ` (⚠️ ${failed.length} failed)` : ''}`
+                    let finalMsg = succeeded > 1
+                        ? `Deleted ${succeeded} packages`
                         : succeeded === 1
                             ? 'Package deleted'
-                            : `All ${files.length} deletions failed`;
-                    const finalType = succeeded === 0 ? 'error' : allOk ? 'success' : 'warning';
+                            : alreadyMissing.length > 0 && failed.length === 0 && unsafeVolume.length === 0
+                                ? 'Nothing to delete (already gone)'
+                                : `All ${files.length} deletions failed`;
+                    if (unsafeVolume.length > 0) finalMsg += ` (${unsafeVolume.length} skipped: no Recycle Bin on that volume)`;
+                    if (failed.length > 0) finalMsg += ` (⚠️ ${failed.length} failed)`;
+                    const finalType = succeeded === 0 && alreadyMissing.length === 0 ? 'error' : allOk ? 'success' : 'warning';
                     completeProgressToast(toastId, finalMsg, finalType, 3500);
                 } else {
                     // Fallback if toast APIs not available.
@@ -249,6 +353,10 @@ export const usePackageActions = (
 
                 if (failed.length > 0) {
                     console.error('Failed deletes:', failed);
+                }
+                if (unsafeVolume.length > 0) {
+                    console.error('Deletes refused (no Recycle Bin on volume):', unsafeVolume);
+                    addToast(`${unsafeVolume.length} file(s) were not deleted: their volume has no Recycle Bin (network/removable drive) — YAVAM does not perform permanent deletes automatically.`, 'warning');
                 }
 
                 // Final reconciliation scan.
@@ -286,22 +394,17 @@ export const usePackageActions = (
                 : null;
 
             let successCount = 0;
+            let alreadyMissingCount = 0;
             const failedFiles: string[] = [];
+            const unsafeVolumeFiles: string[] = [];
 
             for (let i = 0; i < files.length; i++) {
                 const filePath = files[i];
-                try {
-                    const res = await fetchWithAuth('/api/delete', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ filePath, libraryPath: activeLibraryPath })
-                    }).then(r => r.json());
-
-                    if (res.success) successCount++;
-                    else failedFiles.push(filePath);
-                } catch {
-                    failedFiles.push(filePath);
-                }
+                const result = await deleteFileToRecycleBin(filePath, activeLibraryPath);
+                if (result.outcome === 'deleted') successCount++;
+                else if (result.outcome === 'alreadyMissing') alreadyMissingCount++;
+                else if (result.outcome === 'unsafeVolume') unsafeVolumeFiles.push(filePath);
+                else failedFiles.push(filePath);
 
                 // Update progress toast after each file.
                 if (toastId && updateToast) {
@@ -309,24 +412,32 @@ export const usePackageActions = (
                 }
             }
 
+            const allOk = failedFiles.length === 0 && unsafeVolumeFiles.length === 0;
+
             // Transition the progress toast to its final state in-place.
             if (toastId && completeProgressToast) {
-                const allOk = failedFiles.length === 0;
-                const finalMsg = successCount > 1
-                    ? `Deleted ${successCount} packages${!allOk ? ` (⚠️ ${failedFiles.length} failed)` : ''}`
+                let finalMsg = successCount > 1
+                    ? `Deleted ${successCount} packages`
                     : successCount === 1
                         ? 'Package deleted'
-                        : `All ${files.length} deletions failed`;
-                const finalType = successCount === 0 ? 'error' : allOk ? 'success' : 'warning';
+                        : alreadyMissingCount > 0 && allOk
+                            ? 'Nothing to delete (already gone)'
+                            : `All ${files.length} deletions failed`;
+                if (unsafeVolumeFiles.length > 0) finalMsg += ` (${unsafeVolumeFiles.length} skipped: no Recycle Bin on that volume)`;
+                if (failedFiles.length > 0) finalMsg += ` (⚠️ ${failedFiles.length} failed)`;
+                const finalType = successCount === 0 && alreadyMissingCount === 0 ? 'error' : allOk ? 'success' : 'warning';
                 completeProgressToast(toastId, finalMsg, finalType, 3500);
             } else {
                 if (toastId && removeToast) removeToast(toastId);
                 if (successCount > 0) addToast(
                     successCount > 1 ? `Deleted ${successCount} packages` : 'Package deleted',
-                    failedFiles.length > 0 ? 'warning' : 'success'
+                    allOk ? 'success' : 'warning'
                 );
                 if (failedFiles.length > 0) {
                     addToast(`${failedFiles.length} file(s) could not be deleted`, 'error');
+                }
+                if (unsafeVolumeFiles.length > 0) {
+                    addToast(`${unsafeVolumeFiles.length} file(s) were not deleted: their volume has no Recycle Bin (network/removable drive) — YAVAM does not perform permanent deletes automatically.`, 'warning');
                 }
             }
 
@@ -557,17 +668,11 @@ export const usePackageActions = (
         if (setLoading) setLoading(true);
         try {
             for (const d of duplicates) {
-                // @ts-ignore
-                if (window.go) {
-                    // @ts-ignore
-                    await window.go.main.App.DeleteFileToRecycleBin(d.filePath);
-                } else {
-                    const res = await fetchWithAuth('/api/delete', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ filePath: d.filePath, libraryPath: activeLibraryPath })
-                    }).then(r => r.json());
-                    if (!res.success) throw new Error("Web delete failed");
+                const result = await deleteFileToRecycleBin(d.filePath, activeLibraryPath);
+                if (result.outcome === 'unsafeVolume' || result.outcome === 'error') {
+                    throw new Error(result.outcome === 'unsafeVolume'
+                        ? `${d.fileName}: the volume has no Recycle Bin (network/removable drive) — YAVAM does not perform permanent deletes automatically.`
+                        : `${d.fileName}: ${result.message}`);
                 }
             }
 
@@ -580,11 +685,14 @@ export const usePackageActions = (
                 if (pkgParent !== libPathClean) {
                     // @ts-ignore
                     if (window.go) {
-                        // @ts-ignore
-                        await window.go.main.App.CopyPackagesToLibrary([pkg.filePath], activeLibraryPath, false);
-                        // @ts-ignore
-                        await window.go.main.App.DeleteFileToRecycleBin(pkg.filePath);
-                        addToast(`Merged ${confirmCount + 1} files to root.`, "success");
+                        const moveResult = await moveToLibraryRoot(pkg, activeLibraryPath);
+                        if (moveResult.status === 'collision') {
+                            addToast(`Merged ${confirmCount} duplicates, but ${pkg.fileName} was NOT moved to root: a different file with that name already exists there. Nothing was deleted for it.`, "warning");
+                        } else if (moveResult.status === 'error') {
+                            addToast(`Merged ${confirmCount} duplicates, but failed to move ${pkg.fileName} to root: ${moveResult.message}`, "warning");
+                        } else {
+                            addToast(`Merged ${confirmCount + 1} files to root.`, "success");
+                        }
                     } else {
                         addToast(`Merged ${confirmCount} duplicates (Move to root skipped in Web Mode).`, "warning");
                     }
@@ -699,6 +807,10 @@ export const usePackageActions = (
 
         const errors: string[] = [];
         const deletedPaths = new Set<string>();
+        // Tracks packages moved to the library root during phase 1, so phase 2's
+        // version resolution (which may reference the same package object) acts
+        // on the new on-disk path instead of the now-stale original one.
+        const movedPaths = new Map<string, string>();
         let savedBytes = 0;
         let processed = 0;
 
@@ -713,59 +825,39 @@ export const usePackageActions = (
                     const keepParent = keepPath.substring(0, Math.max(keepPath.lastIndexOf('/'), keepPath.lastIndexOf('\\')));
                     const inRoot = keepParent === libPathClean;
 
+                    let groupSkipped = false;
+
                     if (!inRoot) {
-                        try {
-                            // Move to root simulated
-                            // @ts-ignore
-                            if (window.go) {
-                                // @ts-ignore
-                                await window.go.main.App.CopyPackagesToLibrary([keep.filePath], activeLibraryPath, false);
-                                // @ts-ignore
-                                await window.go.main.App.DeleteFileToRecycleBin(keep.filePath);
-                            } else {
-                                const res = await fetchWithAuth('/api/install', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                        filePaths: [keep.filePath],
-                                        destLib: activeLibraryPath,
-                                        overwrite: false
-                                    })
-                                });
-                                if (!res.ok) {
-                                    const errData = await res.json();
-                                    throw new Error(errData.error || "Web copy failed");
-                                }
-                                await fetchWithAuth('/api/delete', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ filePath: keep.filePath, libraryPath: activeLibraryPath })
-                                });
-                            }
-                        } catch (e: any) {
-                            errors.push(`Failed to move ${keep.fileName}: ${e.message}`);
+                        const moveResult = await moveToLibraryRoot(keep, activeLibraryPath);
+                        if (moveResult.status === 'collision') {
+                            errors.push(`Skipped merging ${keep.fileName}: a different file with that name already exists in the library root. This group was left untouched.`);
+                            groupSkipped = true;
+                        } else if (moveResult.status === 'error') {
+                            errors.push(`Failed to move ${keep.fileName} to root (${moveResult.message}). This group was left untouched.`);
+                            groupSkipped = true;
+                        } else {
+                            movedPaths.set(keep.filePath, moveResult.newPath);
                         }
+                    }
+
+                    if (groupSkipped) {
+                        processed += toDelete.length;
+                        setOptimizationProgress(prev => ({ ...prev, current: processed }));
+                        continue;
                     }
 
                     for (const d of toDelete) {
                         setOptimizationProgress(prev => ({ ...prev, currentFile: `Deleting ${d.fileName}...` }));
-                        try {
-                            // @ts-ignore
-                            if (window.go) {
-                                // @ts-ignore
-                                await window.go.main.App.DeleteFileToRecycleBin(d.filePath);
-                            } else {
-                                await fetchWithAuth('/api/delete', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ filePath: d.filePath, libraryPath: activeLibraryPath })
-                                });
-                            }
+                        const deleteResult = await deleteFileToRecycleBin(d.filePath, activeLibraryPath);
+                        if (deleteResult.outcome === 'deleted') {
                             savedBytes += d.size;
                             deletedPaths.add(d.filePath);
-                        } catch (err: any) {
-                            console.error("Failed to delete", d.filePath, err);
-                            errors.push(`Failed to delete ${d.fileName}: ${err.message}`);
+                        } else if (deleteResult.outcome === 'alreadyMissing') {
+                            deletedPaths.add(d.filePath);
+                        } else if (deleteResult.outcome === 'unsafeVolume') {
+                            errors.push(`Could not delete ${d.fileName}: the volume has no Recycle Bin (network/removable drive) — YAVAM does not perform permanent deletes automatically.`);
+                        } else {
+                            errors.push(`Failed to delete ${d.fileName}: ${deleteResult.message}`);
                         }
                         processed++;
                         setOptimizationProgress(prev => ({ ...prev, current: processed, spaceSaved: savedBytes }));
@@ -775,7 +867,15 @@ export const usePackageActions = (
 
             // 2. Execute Version Resolution
             if (resolutionStrategy !== 'none' && optimizationData.resolveGroups.length > 0) {
-                for (const group of optimizationData.resolveGroups) {
+                const remapPath = (filePath: string) => movedPaths.get(filePath) ?? filePath;
+                const resolveGroups = movedPaths.size > 0
+                    ? optimizationData.resolveGroups.map(group => ({
+                        ...group,
+                        packages: group.packages.map(p => movedPaths.has(p.filePath) ? { ...p, filePath: remapPath(p.filePath) } : p)
+                    }))
+                    : optimizationData.resolveGroups;
+
+                for (const group of resolveGroups) {
                     const allPkgs = group.packages.filter(p => !deletedPaths.has(p.filePath));
                     if (allPkgs.length < 2) continue;
 
@@ -791,7 +891,7 @@ export const usePackageActions = (
                         targetVersionPath = sorted[0].filePath;
                     } else if (resolutionStrategy === 'manual') {
                         const selection = manualPlan[group.id];
-                        if (selection && selection !== 'none') targetVersionPath = selection;
+                        if (selection && selection !== 'none') targetVersionPath = remapPath(selection);
                     }
 
                     if (targetVersionPath) {
@@ -801,14 +901,14 @@ export const usePackageActions = (
                                     if (!p.isEnabled) await togglePackage(p, true, false);
                                 } else {
                                     if (resolutionStrategy === 'delete-older') {
-                                        // @ts-ignore
-                                        if (window.go) {
-                                            // @ts-ignore
-                                            await window.go.main.App.DeleteFileToRecycleBin(p.filePath);
-                                        } else {
-                                            await fetchWithAuth('/api/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filePath: p.filePath, libraryPath: activeLibraryPath }) });
+                                        const deleteResult = await deleteFileToRecycleBin(p.filePath, activeLibraryPath);
+                                        if (deleteResult.outcome === 'deleted') {
+                                            savedBytes += p.size;
+                                        } else if (deleteResult.outcome === 'unsafeVolume') {
+                                            errors.push(`Could not delete ${p.fileName}: the volume has no Recycle Bin (network/removable drive) — YAVAM does not perform permanent deletes automatically.`);
+                                        } else if (deleteResult.outcome === 'error') {
+                                            errors.push(`Failed to delete ${p.fileName}: ${deleteResult.message}`);
                                         }
-                                        savedBytes += p.size;
                                     } else {
                                         if (p.isEnabled) await togglePackage(p, false, false);
                                     }

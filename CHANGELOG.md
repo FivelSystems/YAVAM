@@ -36,6 +36,7 @@
 
 ### Security
 - Hardened the remote-access server and its authentication. Updating is recommended if you use remote access.
+- **Library Optimization Hardening**: Removed an unused internal endpoint that could permanently delete files without going through the Recycle Bin ([#112](https://github.com/FivelSystems/YAVAM/issues/112)). Deleting to the Recycle Bin during Library Optimization now correctly distinguishes "already gone" from "successfully moved to the Recycle Bin" instead of counting both as freed space, and refuses to delete on network or removable drives (where Windows generally has no Recycle Bin and the delete would otherwise be silently permanent) ([#110](https://github.com/FivelSystems/YAVAM/issues/110), [#111](https://github.com/FivelSystems/YAVAM/issues/111)).
 
 ## [1.3.19] - 2026-05-14
 

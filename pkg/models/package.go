@@ -52,18 +52,20 @@ type ScanResult struct {
 	Tags     []string     `json:"tags"`
 }
 
-// ResolveConflictResult holds statistics about the resolution operation
-type ResolveConflictResult struct {
-	Merged   int    `json:"merged"`
-	Disabled int    `json:"disabled"`
-	NewPath  string `json:"newPath"`
-}
-
 // BulkDeleteResult reports the outcome for a single file in a bulk delete operation.
 type BulkDeleteResult struct {
 	FilePath string `json:"filePath"`
 	Success  bool   `json:"success"`
 	Error    string `json:"error,omitempty"`
+	// AlreadyMissing is true when the file no longer existed on disk (so no
+	// recycle-bin operation happened). Distinct from Success so the caller
+	// doesn't count freed bytes for a file that was never actually deleted.
+	AlreadyMissing bool `json:"alreadyMissing,omitempty"`
+	// UnsafeVolume is true when the file lives on a volume (network/UNC
+	// share, removable media) where Windows does not maintain a recycle
+	// bin. The file was NOT deleted; the caller must get explicit
+	// confirmation before retrying with a permanent-delete path.
+	UnsafeVolume bool `json:"unsafeVolume,omitempty"`
 }
 
 // FileDetail represents basic file information for UI display

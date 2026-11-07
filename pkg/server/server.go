@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+	yavamfs "yavam/pkg/fs"
 	"yavam/pkg/manager"
 	"yavam/pkg/models"
 	"yavam/pkg/services/auth"
@@ -823,8 +824,27 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 		}
 
 		if err := s.manager.DeleteToTrash(req.FilePath); err != nil {
-			s.log(fmt.Sprintf("Error deleting package: %s", utils.SanitizeForLog(err.Error())))
-			s.writeError(w, err.Error(), 500)
+			switch {
+			case errors.Is(err, yavamfs.ErrFileNotFound):
+				s.log(fmt.Sprintf("Delete skipped, file already missing: %s", utils.SanitizeForLog(filepath.Base(req.FilePath))))
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"success":        false,
+					"alreadyMissing": true,
+				})
+			case errors.Is(err, yavamfs.ErrUnsafeRecycleBinVolume):
+				s.log(fmt.Sprintf("Delete refused, unsafe recycle bin volume: %s", utils.SanitizeForLog(filepath.Base(req.FilePath))))
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusConflict)
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"success":      false,
+					"unsafeVolume": true,
+					"message":      "This location has no recycle bin; refusing to delete without explicit confirmation",
+				})
+			default:
+				s.log(fmt.Sprintf("Error deleting package: %s", utils.SanitizeForLog(err.Error())))
+				s.writeError(w, err.Error(), 500)
+			}
 			return
 		}
 
@@ -833,38 +853,6 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": true,
 		})
-	})))
-
-	// Resolve Endpoint
-	mux.Handle("/api/resolve", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		var req struct {
-			KeepPath    string   `json:"keepPath"`
-			Others      []string `json:"others"`
-			LibraryPath string   `json:"libraryPath"`
-		}
-		if !s.decodeJSONBody(w, r, &req) {
-			return
-		}
-
-		if req.LibraryPath == "" {
-			s.writeError(w, "Library path is required", 400)
-			return
-		}
-
-		res, err := s.manager.ResolveConflicts(req.KeepPath, req.Others, req.LibraryPath)
-		if err != nil {
-			s.log(fmt.Sprintf("Error resolving conflicts: %s", utils.SanitizeForLog(err.Error())))
-			s.writeManagerError(w, err)
-			return
-		}
-
-		s.log(fmt.Sprintf("Resolved conflicts. Merged: %d, Disabled: %d", res.Merged, res.Disabled))
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(res)
 	})))
 
 	// Install Endpoint (Copy/Move to Library)

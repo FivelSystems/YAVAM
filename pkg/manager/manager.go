@@ -308,17 +308,6 @@ func (m *Manager) DownloadPackage(pkgPath string, destDir string) error {
 	return err
 }
 
-// ResolveConflicts handles deduplication and cleanup of conflicting packages
-// Delegates to LibraryService. Every path must be inside a configured library;
-// one invalid path rejects the whole call before anything is touched.
-func (m *Manager) ResolveConflicts(keepPath string, others []string, libraryPath string) (*models.ResolveConflictResult, error) {
-	involvedPaths := append([]string{keepPath, libraryPath}, others...)
-	if err := m.ValidatePaths(involvedPaths); err != nil {
-		return nil, err
-	}
-	return m.library.ResolveConflicts(keepPath, others, libraryPath)
-}
-
 // CopyPackagesToLibrary copies a list of package files to a destination library.
 // Sources and destination must all be inside configured libraries.
 // Returns list of collided filenames (if overwrite=false) or error

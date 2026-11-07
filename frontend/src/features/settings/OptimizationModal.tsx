@@ -79,7 +79,7 @@ export const OptimizationModal = ({ isOpen, onClose, onConfirm, mergePlan, resol
         return (
             <div className="bg-gray-900/50 rounded-lg border border-gray-700 max-h-40 overflow-y-auto custom-scrollbar p-2">
                 <p className="text-xs font-bold text-gray-500 uppercase px-2 mb-1 sticky top-0 bg-gray-900/90 backdrop-blur">
-                    {resolutionStrategy === 'delete-older' ? "Versions to be DELETED:" : "Versions to be DISABLED:"}
+                    {resolutionStrategy === 'delete-older' ? "Versions to be sent to the Recycle Bin:" : "Versions to be DISABLED:"}
                 </p>
                 {resolveGroups.map((group, idx) => {
                     const sorted = [...group.packages].sort((a, b) => (parseInt(b.meta.version) || 0) - (parseInt(a.meta.version) || 0));
@@ -92,7 +92,7 @@ export const OptimizationModal = ({ isOpen, onClose, onConfirm, mergePlan, resol
                             <span className="text-white">{group.packages[0].meta.packageName}</span>
                             <span className="text-gray-500 ml-1">keeping v{kept.meta.version},</span>
                             <span className={clsx("ml-1 font-bold", resolutionStrategy === 'delete-older' ? "text-red-400" : "text-yellow-500")}>
-                                {resolutionStrategy === 'delete-older' ? "deleting" : "disabling"} {others.map(p => `v${p.meta.version}`).join(', ')}
+                                {resolutionStrategy === 'delete-older' ? "sending to Recycle Bin" : "disabling"} {others.map(p => `v${p.meta.version}`).join(', ')}
                             </span>
                         </div>
                     );
@@ -191,7 +191,7 @@ export const OptimizationModal = ({ isOpen, onClose, onConfirm, mergePlan, resol
                                     <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Resolution Strategy</label>
                                     <select value={resolutionStrategy} onChange={(e) => setResolutionStrategy(e.target.value as any)} className="w-full bg-gray-800 border border-gray-600 text-white text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block p-2.5 outline-none">
                                         <option value="latest">Keep Latest (Disable Others)</option>
-                                        <option value="delete-older" className="text-red-400 font-bold">Keep Latest (DELETE Others)</option>
+                                        <option value="delete-older" className="text-red-400 font-bold">Keep Latest (Send Others to Recycle Bin)</option>
                                         <option value="manual">Manual Selection</option>
                                         <option value="none">Do Nothing</option>
                                     </select>
@@ -201,7 +201,7 @@ export const OptimizationModal = ({ isOpen, onClose, onConfirm, mergePlan, resol
                                         <AlertTriangle size={16} className="text-purple-400 shrink-0 mt-0.5" />
                                         <div>
                                             {resolutionStrategy === 'latest' && "Older versions will be DISABLED. Only the latest version will remain active."}
-                                            {resolutionStrategy === 'delete-older' && <span className="text-red-200">Older versions will be DELETED permanently to save space. Careful!</span>}
+                                            {resolutionStrategy === 'delete-older' && <span className="text-red-200">Older versions will be sent to the Recycle Bin. You can still restore them from there if this was a mistake, unless the library sits on a network/removable volume with no Recycle Bin.</span>}
                                             {resolutionStrategy === 'manual' && "Manually select which version to keep. Non-selected versions will be disabled."}
                                             {resolutionStrategy === 'none' && "No changes will be made."}
                                         </div>
@@ -263,10 +263,10 @@ export const OptimizationModal = ({ isOpen, onClose, onConfirm, mergePlan, resol
                                     <div className="text-sm text-gray-300 space-y-2">
                                         <p>You are about to:</p>
                                         <ul className="list-disc pl-5 space-y-1">
-                                            <li>{enableMerge ? `Merge and delete ${mergeCount} exact duplicate files.` : "Skip merging exact duplicates."}</li>
+                                            <li>{enableMerge ? `Merge ${mergeCount} exact duplicate files, sending them to the Recycle Bin.` : "Skip merging exact duplicates."}</li>
                                             <li>
                                                 {resolutionStrategy === 'latest' && "Disable older versions, keeping only the latest."}
-                                                {resolutionStrategy === 'delete-older' && <span className="text-red-300 font-bold">PERMANENTLY DELETE older versions, keeping only the latest.</span>}
+                                                {resolutionStrategy === 'delete-older' && <span className="text-red-300 font-bold">Send older versions to the Recycle Bin, keeping only the latest.</span>}
                                                 {resolutionStrategy === 'manual' && "Apply manual version selections."}
                                                 {resolutionStrategy === 'none' && "Skip version conflict resolution."}
                                             </li>
