@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { getStoredToken, logout as serviceLogout } from '../../services/auth';
 import { fetchWithAuth } from '../../services/api';
 
@@ -19,6 +19,8 @@ interface AuthContextType {
     checkAuth: () => Promise<void>;
 }
 
+const SESSION_REVOKED_EVENT = 'auth:revoked';
+
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -26,7 +28,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [isGuest, setIsGuest] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
 
-    const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+    const [isLoginModalOpen, setLoginModalOpenState] = useState(false);
+    // Mirrors the state so handlers registered once on mount still see whether the modal is open.
+    const isLoginModalOpenRef = useRef(false);
+    const setIsLoginModalOpen = (open: boolean) => {
+        isLoginModalOpenRef.current = open;
+        setLoginModalOpenState(open);
+    };
     const [isLoginForced, setIsLoginForced] = useState(false);
     const [loginMessage, setLoginMessage] = useState<string | undefined>(undefined);
 
@@ -55,8 +63,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     setIsLoginModalOpen(false);
                     setIsLoginForced(false);
                 } else if (res.status === 401) {
-                    // Token invalid/expired/revoked
-                    serviceLogout(); // Clear from storage
+                    // Token invalid/expired/revoked. fetchWithAuth normally cleared it already.
+                    if (getStoredToken()) serviceLogout();
                     setIsAuthenticated(false);
                     setIsGuest(false);
                     // If we have a token but it failed, it might be revoked. Open modal.
@@ -138,6 +146,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
     }, []);
 
+    // The server broadcasts revocations to every connected client without saying which
+    // session ended, so each client re-verifies its own token instead of logging out blindly.
+    useEffect(() => {
+        if (window.go) return;
+
+        const handleSessionRevoked = () => {
+            if (getStoredToken()) checkAuth();
+        };
+        window.runtime?.EventsOn?.(SESSION_REVOKED_EVENT, handleSessionRevoked);
+
+        return () => {
+            window.runtime?.EventsOff?.(SESSION_REVOKED_EVENT, handleSessionRevoked);
+        };
+    }, []);
+
     // 2. Polling for Revocation (Only when active)
     useEffect(() => {
         if (!isAuthenticated && !isGuest) return;
@@ -150,7 +173,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, [isAuthenticated, isGuest, pollInterval]);
 
     const openLoginModal = (force = false, message?: string) => {
-        if (isLoginModalOpen) return;
+        if (isLoginModalOpenRef.current) {
+            if (message) setLoginMessage(message);
+            return;
+        }
         setIsLoginForced(force);
         setLoginMessage(message);
         setIsLoginModalOpen(true);
