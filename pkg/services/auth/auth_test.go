@@ -14,7 +14,7 @@ func TestLoginFlow(t *testing.T) {
 		t.Fatalf("Failed to create auth service: %v", err)
 	}
 
-	password := "secret"
+	password := testPassword
 	svc.SetPassword(password)
 
 	// 1. Direct Login
@@ -41,7 +41,7 @@ func TestInvalidCredentials(t *testing.T) {
 	configPath := filepath.Join(tempDir, "auth.json")
 
 	svc, _ := NewSimpleAuthService(configPath)
-	password := "secret"
+	password := testPassword
 	svc.SetPassword(password)
 
 	// Invalid Pass
@@ -75,8 +75,8 @@ func TestPersistence(t *testing.T) {
 
 	// 1. Create Service & Login
 	svc1, _ := NewSimpleAuthService(configPath)
-	svc1.SetPassword("secret")
-	token, _ := svc1.Login("admin", "secret", "persist-device")
+	svc1.SetPassword(testPassword)
+	token, _ := svc1.Login("admin", testPassword, "persist-device")
 
 	// 2. Re-create Service (Simulate Restart)
 	svc2, err := NewSimpleAuthService(configPath)
@@ -102,10 +102,10 @@ func TestRevocationPersistence(t *testing.T) {
 	configPath := filepath.Join(tempDir, "auth.json")
 
 	svc1, _ := NewSimpleAuthService(configPath)
-	svc1.SetPassword("secret")
+	svc1.SetPassword(testPassword)
 
 	// Login
-	token, _ := svc1.Login("admin", "secret", "revoke-device")
+	token, _ := svc1.Login("admin", testPassword, "revoke-device")
 
 	// Revoke
 	svc1.RevokeToken(token)

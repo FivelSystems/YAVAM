@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+var testStart = time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+
 type fakeClock struct{ current time.Time }
 
 func (c *fakeClock) Now() time.Time          { return c.current }
@@ -22,7 +24,7 @@ func newClockedService(t *testing.T) (*SimpleTokenAuthService, *fakeClock, strin
 	if err != nil {
 		t.Fatalf("create service: %v", err)
 	}
-	if err := svc.SetPassword("secret"); err != nil {
+	if err := svc.SetPassword(testPassword); err != nil {
 		t.Fatalf("set password: %v", err)
 	}
 	return svc, clock, path
@@ -30,7 +32,7 @@ func newClockedService(t *testing.T) (*SimpleTokenAuthService, *fakeClock, strin
 
 func loginToken(t *testing.T, svc *SimpleTokenAuthService, device string) string {
 	t.Helper()
-	token, err := svc.Login("admin", "secret", device)
+	token, err := svc.Login("admin", testPassword, device)
 	if err != nil {
 		t.Fatalf("login: %v", err)
 	}
