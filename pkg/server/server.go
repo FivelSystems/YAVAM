@@ -57,11 +57,23 @@ type Server struct {
 	loopbackLoginThrottle *LoginThrottle
 
 	shutdownGracePeriod time.Duration // zero selects defaultShutdownGracePeriod
+	readHeaderTimeout   time.Duration // zero selects defaultReadHeaderTimeout
+	idleTimeout         time.Duration // zero selects defaultIdleTimeout
 
 	machineNames map[string]bool // hostnames this machine answers to, see machineHostNames
 }
 
-const defaultShutdownGracePeriod = time.Second
+const (
+	defaultShutdownGracePeriod = time.Second
+
+	// defaultReadHeaderTimeout and defaultIdleTimeout bound connections that
+	// never finish a request or sit unused. There is deliberately no overall
+	// read or write timeout: event streams, multi-gigabyte uploads and large
+	// downloads legitimately keep a connection busy for a long time.
+	defaultReadHeaderTimeout = 10 * time.Second
+	defaultIdleTimeout       = 2 * time.Minute
+	maxRequestHeaderBytes    = 64 << 10
+)
 
 func NewServer(ctx context.Context, m *manager.Manager, authService auth.AuthService, assets fs.FS, version string, onRestore func()) *Server {
 	return &Server{
@@ -929,6 +941,10 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 	s.httpSrv = &http.Server{
 		Addr:    net.JoinHostPort(bindHost, port),
 		Handler: s.hostGuardMiddleware(s.corsMiddleware(s.loggingMiddleware(mux))),
+
+		ReadHeaderTimeout: durationOrDefault(s.readHeaderTimeout, defaultReadHeaderTimeout),
+		IdleTimeout:       durationOrDefault(s.idleTimeout, defaultIdleTimeout),
+		MaxHeaderBytes:    maxRequestHeaderBytes,
 	}
 
 	listener, err := net.Listen("tcp", s.httpSrv.Addr)
@@ -955,6 +971,13 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 
 	s.log(fmt.Sprintf("Server active at http://%s:%s", s.GetOutboundIP(), port))
 	return nil
+}
+
+func durationOrDefault(configured, fallback time.Duration) time.Duration {
+	if configured <= 0 {
+		return fallback
+	}
+	return configured
 }
 
 func (s *Server) Stop() error {
