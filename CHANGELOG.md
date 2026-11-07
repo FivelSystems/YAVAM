@@ -6,6 +6,17 @@
 
 # Changelog
 
+## [1.3.23] - 2026-11-07
+
+### Fixed
+- **Library Optimization — Safer Deduplication**: Consolidating duplicate packages could, in a specific collision case, send the copy you meant to keep to the Recycle Bin without any warning, if another file already occupied its destination name. This no longer happens — the conflicting group is now skipped with a clear error instead of losing content.
+- **Library Optimization — Accurate "Space Saved"**: The reported space saved after optimizing or deleting packages no longer counts files that had already been removed, or files whose deletion actually failed. The optimization screen now also clearly reports when it finished with errors.
+- **Package Deletion — No More Misleading "Permanent"/"Liberated" Wording**: Deleting packages — whether through the normal Delete dialog or Library Optimization — always moves files to the Recycle Bin rather than deleting them outright. Wording that implied otherwise, or that space was freed immediately, has been corrected: space is only truly freed once you empty the Recycle Bin yourself.
+
+### Security
+- **Library Optimization — Unsafe Drive Protection**: YAVAM no longer attempts to send files to the Recycle Bin on network or removable drives, where Windows generally has no Recycle Bin and the operation would otherwise silently become a permanent, unrecoverable delete.
+- Removed an unused internal endpoint that could permanently delete files without using the Recycle Bin at all. It required an authenticated session and was never called by any client, so this is hardening rather than a disclosed vulnerability.
+
 ## [Unreleased]
 
 ### Added
