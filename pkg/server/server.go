@@ -119,6 +119,10 @@ func (s *Server) writeManagerError(w http.ResponseWriter, err error) {
 		s.writeError(w, "Security violation: path not allowed", http.StatusForbidden)
 		return
 	}
+	if errors.Is(err, library.ErrCounterpartExists) {
+		s.writeError(w, library.ErrCounterpartExists.Error(), http.StatusConflict)
+		return
+	}
 	s.writeError(w, err.Error(), http.StatusInternalServerError)
 }
 

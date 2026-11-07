@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"yavam/pkg/services/library"
 )
 
 func postJSON(t *testing.T, s *Server, route string, payload interface{}) int {
@@ -147,5 +149,40 @@ func TestAPI_InstallValidatesSourcesAndDestination(t *testing.T) {
 	}
 	if !fileExists(filepath.Join(subLibrary, "a.var")) {
 		t.Fatal("valid install should copy the package")
+	}
+}
+
+func TestAPI_ToggleRefusesWhenCounterpartExists(t *testing.T) {
+	libraryDir, _ := newLibraryAndOutsideDirs(t)
+	s := startUploadTestServer(t, libraryDir)
+	enabled := filepath.Join(libraryDir, "a.var")
+	disabled := enabled + ".disabled"
+	writeTestFile(t, enabled, "enabled")
+	writeTestFile(t, disabled, "disabled")
+
+	body, _ := json.Marshal(map[string]interface{}{"filePath": enabled, "enable": false, "libraryPath": libraryDir})
+	req := httptest.NewRequest(http.MethodPost, "/api/toggle", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer valid")
+	w := httptest.NewRecorder()
+	s.httpSrv.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d", w.Code)
+	}
+	var resp struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Success || resp.Message != library.ErrCounterpartExists.Error() {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+	for path, want := range map[string]string{enabled: "enabled", disabled: "disabled"} {
+		if got, _ := os.ReadFile(path); string(got) != want {
+			t.Fatalf("%s was modified", path)
+		}
 	}
 }
