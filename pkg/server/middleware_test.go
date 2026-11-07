@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 	"yavam/pkg/manager"
 	"yavam/pkg/services/auth"
 	"yavam/pkg/services/config"
@@ -43,6 +44,16 @@ func (m *MockAuthService) SetPassword(newPassword string) error {
 }
 
 func (m *MockAuthService) HasCustomPassword() bool { return true }
+
+func (m *MockAuthService) CreatePairingCode(ttl time.Duration) (auth.PairingCode, error) {
+	return auth.PairingCode{}, nil
+}
+
+func (m *MockAuthService) RedeemPairingCode(code, deviceName string) (string, error) {
+	return "", auth.ErrInvalidPairingCode
+}
+
+func (m *MockAuthService) PairingStatus() auth.PairingStatus { return auth.PairingStatus{} }
 
 func (m *MockAuthService) ListSessions() ([]auth.User, error) {
 	return []auth.User{}, nil

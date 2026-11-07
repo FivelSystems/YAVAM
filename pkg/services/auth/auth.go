@@ -47,6 +47,7 @@ type SimpleTokenAuthService struct {
 	adminHash string                    // Bcrypt hash of password
 	store     authStore
 	now       func() time.Time
+	pairing   *pairingState // outstanding one-time pairing code, memory only
 
 	// lastPersistAttemptAt advances on failed writes too, so a failing disk is
 	// retried (and logged) once per persistRetryInterval, not on every request.
@@ -198,6 +199,7 @@ func (s *SimpleTokenAuthService) SetPassword(newPassword string) error {
 	}
 	s.adminHash = string(hash)
 	s.sessions = revokedSessions
+	s.pairing = nil
 	return nil
 }
 
