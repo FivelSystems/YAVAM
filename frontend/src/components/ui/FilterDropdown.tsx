@@ -175,7 +175,7 @@ export const FilterDropdown = ({
                                     <button
                                         key={opt.value}
                                         onClick={() => onToggle(opt.value)}
-                                        onContextMenu={onOptionContextMenu ? (e) => { onOptionContextMenu(opt.value, e); setOpen(false); } : undefined}
+                                        onContextMenu={onOptionContextMenu ? (e) => onOptionContextMenu(opt.value, e) : undefined}
                                         title={opt.title}
                                         className={clsx(
                                             'w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-sm transition-colors',

@@ -108,4 +108,17 @@ describe('FilterDropdown (#55 — mobile virtual-keyboard self-close)', () => {
 
         expect(screen.queryByPlaceholderText('Filter…')).not.toBeInTheDocument();
     });
+
+    it('stays open when right-clicking an option to open its group-action menu', () => {
+        setMatchMedia(true);
+        const onOptionContextMenu = vi.fn();
+        setup({ onOptionContextMenu });
+        fireEvent.click(screen.getByText('Status'));
+        expect(screen.getByPlaceholderText('Filter…')).toBeInTheDocument();
+
+        fireEvent.contextMenu(screen.getByText('Alpha'));
+
+        expect(onOptionContextMenu).toHaveBeenCalledWith('a', expect.anything());
+        expect(screen.getByPlaceholderText('Filter…')).toBeInTheDocument();
+    });
 });
