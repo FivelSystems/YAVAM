@@ -60,6 +60,33 @@ Everything is already merged into `main`. Then:
 nothing — a version publishes exactly once. To ship a fix, bump to `1.4.1` and
 cut `release/v1.4.1`.
 
+## ⚠️ Cutting a patch release *behind* `main`'s current target
+
+The steps above assume you're releasing exactly what `main` currently is. That
+is **not** true once a feature branch (e.g. the next minor's work) has merged
+into `main` — from that point on, `main` *is* the next version's code, and
+**branching a patch release from `main`'s tip would ship that entire
+in-progress feature set under a lower, patch-looking version number** (this
+happened in practice: a `1.3.x` hotfix was accidentally cut from `main` after
+it already contained all of a `1.4.0` feature branch's work, and had to be
+deleted and redone).
+
+If `wails.json`'s `productVersion` on `main` is already ahead of the patch line
+you need to fix (e.g. `main` says `1.4.0` but you need to ship `1.3.24`):
+
+1. **Never branch from `main`'s tip.** Branch from the last tag in that patch
+   line instead: `git checkout -b release/v1.3.24 v1.3.23`.
+2. **Cherry-pick only the specific fix commit(s)** onto that branch — not a
+   merge, not a rebase onto `main`. Find them by their hash on `main` (or on
+   whatever branch they were authored on) and `git cherry-pick <hash>`.
+3. Before pushing, sanity-check the diff is actually small:
+   `git diff --stat vX.Y.(Z-1) HEAD` — it should list only the files the fix
+   touched. If it lists dozens of unrelated files, you branched from the wrong
+   place.
+4. Bump `wails.json` and add the `## [X.Y.Z]` changelog section on *this*
+   branch, same as any other release — then also commit that changelog
+   section back to `main` per the rule above.
+
 ## Publishing an Unstable build
 
 Usually automatic (weekly, from `main`). To publish one on demand, run the
