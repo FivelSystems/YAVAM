@@ -6,6 +6,7 @@ import { useToasts } from '../../context/ToastContext';
 import { InstallResultView } from '../packages/InstallResultView';
 import { fetchWithAuth } from '../../services/api';
 import { formatBytes } from '../../utils/format';
+import { UploadRejectedError, HTTP_UNAUTHORIZED, describeUploadFailure, readServerMessage } from './uploadFailure';
 
 interface UploadModalProps {
     isOpen: boolean;
@@ -301,6 +302,7 @@ export const UploadModal = ({ isOpen, onClose, initialFiles, onAppendFiles, libr
             }
         } else {
             // Web Mode: Sequential Uploads
+            let sessionEnded = false;
             for (let i = 0; i < toInstall.length; i++) {
                 const f = toInstall[i];
 
@@ -319,10 +321,10 @@ export const UploadModal = ({ isOpen, onClose, initialFiles, onAppendFiles, libr
 
                     // Upload
                     const res = await fetchWithAuth("/api/upload", { method: 'POST', body: formData });
-                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    if (!res.ok) throw new UploadRejectedError(res.status, await readServerMessage(res));
 
                     const data = await res.json();
-                    if (!data.success) throw new Error(data.error || "Unknown error");
+                    if (!data.success) throw new UploadRejectedError(res.status, data.message || '');
 
                     successCount++;
                     setQueue(prev => prev.map(q => q.id === f.id ? { ...q, status: 'done' } : q));
@@ -330,12 +332,23 @@ export const UploadModal = ({ isOpen, onClose, initialFiles, onAppendFiles, libr
                 } catch (e: any) {
                     console.error(`Failed to upload ${f.name}:`, e);
                     failCount++;
-                    failDetails.push(`${f.name}: ${e.message}`);
+                    const reason = describeUploadFailure(f.name, e);
+                    failDetails.push(reason);
                     setQueue(prev => prev.map(q => q.id === f.id ? { ...q, status: 'error' } : q));
+
+                    // An expired session returns to the sign-in modal; further files would only be refused too.
+                    if (e instanceof UploadRejectedError && e.status === HTTP_UNAUTHORIZED) {
+                        sessionEnded = true;
+                        break;
+                    }
+                    addToast(reason, "error");
                 }
 
                 // Update Progress Bar
                 setInstallProgress({ current: i + 1, total: toInstall.length });
+            }
+            if (toInstall.length > 1 && successCount === 0 && !sessionEnded) {
+                addToast("None of the files were uploaded.", "error");
             }
             setLoading(false);
         }
