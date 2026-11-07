@@ -29,6 +29,10 @@
 - **Smoother Scanning**: The grid no longer flickers or feels sluggish while a scan runs. Cards only update when their data actually changes, so you can browse uninterrupted as content fills in the background.
 - **Test Isolation**: Automated tests no longer write fixture libraries (e.g. `C:\Allowed`) into the real application database.
 - **No More Console Flash on Copy**: Copying a package (`CTRL+C` or the context menu) no longer briefly pops up a console window. File copying now uses the native Windows clipboard directly instead of launching PowerShell in the background.
+- **Web Client Version**: The web client no longer shows a made-up version number when the server's version cannot be read; it now says the version is unknown.
+
+### Security
+- Hardened the remote-access server and its authentication. Updating is recommended if you use remote access.
 
 ## [1.3.19] - 2026-05-14
 
