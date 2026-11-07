@@ -26,7 +26,7 @@ func assertContent(t *testing.T, path, want string) {
 }
 
 func TestToggleRefusesWhenCounterpartExists(t *testing.T) {
-	lib := NewLibraryService(&MockSystemService{}, nil, nil)
+	lib := NewLibraryService(&MockSystemService{}, nil)
 	dir := t.TempDir()
 	enabled := filepath.Join(dir, "A.B.1.var")
 	disabled := enabled + ".disabled"
@@ -47,7 +47,7 @@ func TestToggleRefusesWhenCounterpartExists(t *testing.T) {
 }
 
 func TestDisableOldVersionsContinuesAfterFailure(t *testing.T) {
-	lib := NewLibraryService(&MockSystemService{}, nil, nil)
+	lib := NewLibraryService(&MockSystemService{}, nil)
 	dir := t.TempDir()
 	newest := filepath.Join(dir, "A.B.3.var")
 	blocked := filepath.Join(dir, "A.B.2.var")
