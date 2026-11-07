@@ -170,3 +170,67 @@ func TestSetPasswordRollsBackWhenPersistFails(t *testing.T) {
 		t.Fatal("new password must not be active after failed change")
 	}
 }
+
+func TestSetPasswordKeepsSessionsWhenPersistFails(t *testing.T) {
+	store := newStoreWithAdmin(t)
+	svc, _ := newServiceOnStore(t, store)
+	token, err := svc.Login("admin", failureTestPassword, "dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.failSaves = true
+
+	if err := svc.SetPassword("new-password"); err == nil {
+		t.Fatal("expected SetPassword to return the persist error")
+	}
+
+	if _, err := svc.ValidateToken(token); err != nil {
+		t.Fatalf("session must survive a failed password change: %v", err)
+	}
+	if _, err := svc.CheckToken(token); err != nil {
+		t.Fatalf("session must survive a failed password change: %v", err)
+	}
+}
+
+func TestSetPasswordRevokesAllSessions(t *testing.T) {
+	svc, clock, path := newClockedService(t)
+	phoneToken := loginToken(t, svc, "phone")
+	tabletToken := loginToken(t, svc, "tablet")
+
+	if err := svc.SetPassword("new-password"); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, token := range []string{phoneToken, tabletToken} {
+		if _, err := svc.ValidateToken(token); err != ErrInvalidToken {
+			t.Fatalf("ValidateToken after password change: got %v, want ErrInvalidToken", err)
+		}
+		if _, err := svc.CheckToken(token); err != ErrInvalidToken {
+			t.Fatalf("CheckToken after password change: got %v, want ErrInvalidToken", err)
+		}
+	}
+
+	reloaded, err := NewSimpleAuthServiceWithClock(path, clock.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sessions, _ := reloaded.ListSessions(); len(sessions) != 0 {
+		t.Fatalf("expected no persisted sessions, got %d", len(sessions))
+	}
+	for _, token := range []string{phoneToken, tabletToken} {
+		if _, err := reloaded.ValidateToken(token); err != ErrInvalidToken {
+			t.Fatalf("revoked token valid after reload: %v", err)
+		}
+	}
+
+	if _, err := svc.Login("admin", "secret", "phone"); err == nil {
+		t.Fatal("old password must be rejected")
+	}
+	freshToken, err := svc.Login("admin", "new-password", "phone")
+	if err != nil {
+		t.Fatalf("login with new password: %v", err)
+	}
+	if _, err := svc.ValidateToken(freshToken); err != nil {
+		t.Fatalf("fresh session should be valid: %v", err)
+	}
+}
