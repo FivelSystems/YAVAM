@@ -40,18 +40,21 @@ describe('ContextMenu file download', () => {
         delete window.go;
     });
 
+    // AnchoredMenu gives every action row an explicit `role="menuitem"` (not
+    // the button's implicit `role="button"`), per the ARIA menu/menuitem
+    // contract the anchored-menu primitive adds.
     it('hides Download File from guest web clients', () => {
         Object.assign(authState, { isAuthenticated: false, isGuest: true });
         renderMenu();
 
-        expect(screen.queryByRole('button', { name: /download file/i })).toBeNull();
+        expect(screen.queryByRole('menuitem', { name: /download file/i })).toBeNull();
     });
 
     it('shows Download File to authenticated web clients', () => {
         Object.assign(authState, { isAuthenticated: true, isGuest: false });
         renderMenu();
 
-        expect(screen.getByRole('button', { name: /download file/i })).toBeInTheDocument();
+        expect(screen.getByRole('menuitem', { name: /download file/i })).toBeInTheDocument();
     });
 
     it('never offers Download File in the desktop webview', () => {
@@ -60,6 +63,6 @@ describe('ContextMenu file download', () => {
         Object.assign(authState, { isAuthenticated: true, isGuest: false });
         renderMenu();
 
-        expect(screen.queryByRole('button', { name: /download file/i })).toBeNull();
+        expect(screen.queryByRole('menuitem', { name: /download file/i })).toBeNull();
     });
 });
