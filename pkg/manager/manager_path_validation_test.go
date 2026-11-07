@@ -50,52 +50,6 @@ func TestTogglePackageValidatesPath(t *testing.T) {
 	assertMissing(t, outside+".disabled")
 }
 
-func TestResolveConflictsValidatesEveryPath(t *testing.T) {
-	m, _, libraryDir, outsideDir := newManagerWithLibrary(t)
-	keep := filepath.Join(libraryDir, "keep.var")
-	duplicate := filepath.Join(libraryDir, "dup.var")
-	differing := filepath.Join(libraryDir, "other.var")
-	foreign := filepath.Join(outsideDir, "foreign.var")
-	writeFile(t, keep, "same")
-	writeFile(t, duplicate, "same")
-	writeFile(t, differing, "different-size")
-	writeFile(t, foreign, "same")
-
-	rejectedCalls := []struct {
-		name    string
-		keep    string
-		others  []string
-		library string
-	}{
-		{"one other outside", keep, []string{duplicate, foreign, differing}, libraryDir},
-		{"keep outside", foreign, []string{duplicate}, libraryDir},
-		{"library outside", keep, []string{duplicate}, outsideDir},
-	}
-	for _, call := range rejectedCalls {
-		t.Run(call.name, func(t *testing.T) {
-			_, err := m.ResolveConflicts(call.keep, call.others, call.library)
-			if !errors.Is(err, ErrPathNotAllowed) {
-				t.Fatalf("expected ErrPathNotAllowed, got %v", err)
-			}
-			for _, path := range []string{keep, duplicate, differing, foreign} {
-				assertExists(t, path)
-			}
-			assertMissing(t, differing+".disabled")
-		})
-	}
-
-	result, err := m.ResolveConflicts(keep, []string{duplicate, differing}, libraryDir)
-	if err != nil {
-		t.Fatalf("valid resolve failed: %v", err)
-	}
-	if result.Merged != 1 || result.Disabled != 1 {
-		t.Fatalf("unexpected result: %+v", result)
-	}
-	assertExists(t, keep)
-	assertMissing(t, duplicate)
-	assertExists(t, differing+".disabled")
-}
-
 func TestCopyPackagesToLibraryValidatesSourcesAndDestination(t *testing.T) {
 	m, _, libraryDir, outsideDir := newManagerWithLibrary(t)
 	secondLibrary := filepath.Join(filepath.Dir(libraryDir), "library2")

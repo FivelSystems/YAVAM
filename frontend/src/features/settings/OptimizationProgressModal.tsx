@@ -39,12 +39,18 @@ export const OptimizationProgressModal = ({
                 <div className="p-6 flex flex-col items-center text-center">
                     {completed ? (
                         <>
-                            <div className="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mb-4">
-                                <CheckCircle size={32} className="text-green-500" />
+                            <div className={clsx("w-16 h-16 rounded-full flex items-center justify-center mb-4", errors.length > 0 ? "bg-yellow-500/10" : "bg-green-500/10")}>
+                                {errors.length > 0
+                                    ? <AlertCircle size={32} className="text-yellow-500" />
+                                    : <CheckCircle size={32} className="text-green-500" />}
                             </div>
-                            <h2 className="text-2xl font-bold text-white mb-2">Optimization Complete</h2>
+                            <h2 className="text-2xl font-bold text-white mb-2">
+                                {errors.length > 0 ? "Completed with Errors" : "Optimization Complete"}
+                            </h2>
                             <p className="text-gray-400 mb-6">
-                                The optimization process finished successfully.
+                                {errors.length > 0
+                                    ? "Some files could not be processed — check the error log below before assuming nothing was skipped."
+                                    : "Files were sent to the Recycle Bin and version conflicts were resolved as requested."}
                             </p>
                         </>
                     ) : (
@@ -82,7 +88,7 @@ export const OptimizationProgressModal = ({
                             <div className="bg-gray-700/50 rounded-lg p-4 flex flex-col items-center">
                                 <HardDrive size={24} className="text-blue-400 mb-2" />
                                 <span className="text-2xl font-bold text-white">{formatBytes(spaceSaved)}</span>
-                                <span className="text-xs text-gray-400 uppercase tracking-wider">Disk Cleaned</span>
+                                <span className="text-xs text-gray-400 uppercase tracking-wider">Sent to Recycle Bin</span>
                             </div>
                             <div className="bg-gray-700/50 rounded-lg p-4 flex flex-col items-center">
                                 <AlertCircle size={24} className={errors.length > 0 ? "text-red-400 mb-2" : "text-gray-500 mb-2"} />

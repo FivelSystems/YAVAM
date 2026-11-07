@@ -2,8 +2,6 @@ package library
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"yavam/pkg/models"
 )
@@ -267,64 +265,4 @@ func (s *defaultLibraryService) CheckDependencies(pkgs []models.VarPackage) []mo
 		}
 	}
 	return pkgs
-}
-
-// ResolveConflicts handles deduplication and cleanup of conflicting packages
-func (s *defaultLibraryService) ResolveConflicts(keepPath string, others []string, libraryPath string) (*models.ResolveConflictResult, error) {
-	keepInfo, err := os.Stat(keepPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to stat keep file: %v", err)
-	}
-
-	result := &models.ResolveConflictResult{
-		Merged:  0,
-		Disabled: 0,
-		NewPath: keepPath,
-	}
-
-	for _, otherPath := range others {
-		if otherPath == keepPath {
-			continue
-		}
-		otherInfo, err := os.Stat(otherPath)
-		if os.IsNotExist(err) {
-			continue
-		}
-		if otherInfo.Size() == keepInfo.Size() {
-			if err := os.Remove(otherPath); err == nil {
-				result.Merged++
-			}
-		} else {
-			if !strings.HasSuffix(otherPath, ".disabled") {
-				disabledPath := otherPath + ".disabled"
-				if err := os.Rename(otherPath, disabledPath); err == nil {
-					result.Disabled++
-				}
-			}
-		}
-	}
-
-	baseName := filepath.Base(keepPath)
-	targetPath := filepath.Join(libraryPath, baseName)
-
-	if filepath.Clean(keepPath) != filepath.Clean(targetPath) {
-		if _, err := os.Stat(targetPath); err == nil {
-			if filepath.Clean(keepPath) != filepath.Clean(targetPath) {
-				destInfo, _ := os.Stat(targetPath)
-				if destInfo.Size() == keepInfo.Size() {
-					os.Remove(keepPath)
-					result.NewPath = targetPath
-					result.Merged++
-					return result, nil
-				}
-				return result, fmt.Errorf("target file already exists and is different: %s", targetPath)
-			}
-		}
-		if err := os.Rename(keepPath, targetPath); err != nil {
-			return result, err
-		}
-		result.NewPath = targetPath
-	}
-
-	return result, nil
 }

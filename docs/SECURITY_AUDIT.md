@@ -113,3 +113,20 @@ Audited the new "Release Workflow" and "Thumbnail Parser" logic for vulnerabilit
     -   **Remediation:** Implementation modified to use `io.LimitReader` (Limits: Meta=5MB, Thumbnail=20MB).
 3.  **Path Traversal:**
     -   Parser logic is strictly Read-Only (Memory). No file writes occur during parsing. **SAFE**.
+
+### 7. Library Optimization: orphaned permanent-delete endpoint removed (Nov 2026) -> **HARDENING**
+**Description:**
+An architecture review of the "Optimize Library" deduplication flow found a second, unrelated deletion path (`ResolveConflicts`, exposed as `/api/resolve`) that called `os.Remove` directly instead of going through the Recycle Bin, unlike every other deletion path in the app. It required an authenticated session and validated every path, so it is not treated as a reportable vulnerability — no UI called it (confirmed by exhaustive grep of the frontend), so there was no live exposure, but an authenticated client could still have invoked it directly.
+
+**Remediation Applied:**
+-   Removed `ResolveConflicts` end-to-end: `pkg/services/library/analysis.go`, `pkg/manager/manager.go`, `app.go`, the `/api/resolve` handler in `pkg/server/server.go`, the `ResolveConflictResult` model, and its dedicated tests. Regenerated Wails bindings.
+-   Tracked as [#112](https://github.com/FivelSystems/YAVAM/issues/112).
+
+### 8. Library Optimization: Recycle Bin outcome confusion and unsafe volumes (Nov 2026) -> **HARDENING**
+**Description:**
+`DeleteToTrash` (`pkg/fs/filesystem.go`) returned `nil` both when a file was successfully sent to the Recycle Bin and when the file no longer existed, so callers could not tell the two apart — the "Optimize Library" flow counted both as freed disk space. Separately, `SHFileOperationW` was called with `FOF_ALLOWUNDO` regardless of volume type; on network (UNC) or removable drives, Windows generally has no Recycle Bin for that volume, so the same call silently performs a permanent, unrecoverable delete.
+
+**Remediation Applied:**
+-   `DeleteToTrash` now returns distinct sentinel errors (`ErrFileNotFound`, `ErrUnsafeRecycleBinVolume`) that callers can check with `errors.Is`, instead of `nil` for both outcomes.
+-   The volume type is checked (`GetDriveTypeW`) before attempting a Recycle Bin delete; network and removable volumes are refused rather than silently permanently deleted. The frontend is responsible for surfacing this to the user and offering an explicit, separate confirmation if a true permanent delete is ever wanted.
+-   Tracked as [#110](https://github.com/FivelSystems/YAVAM/issues/110) and [#111](https://github.com/FivelSystems/YAVAM/issues/111).

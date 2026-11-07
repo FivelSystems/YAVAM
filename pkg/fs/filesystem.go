@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,7 +13,11 @@ import (
 
 // FileSystem interface allows us to mock OS interactions for testing
 type FileSystem interface {
-	// DeleteToTrash moves a file to the system trash/recycle bin
+	// DeleteToTrash moves a file to the system trash/recycle bin.
+	// Returns ErrFileNotFound (check with errors.Is) if the file no longer
+	// exists at the given path, and ErrUnsafeRecycleBinVolume if the path is
+	// on a volume where Windows does not maintain a recycle bin (deleting
+	// there would be permanent, silently, if attempted anyway).
 	DeleteToTrash(path string) error
 	// OpenFolder opens the file explorer at the given path
 	OpenFolder(path string) error
@@ -28,6 +33,9 @@ type WindowsFileSystem struct{}
 var (
 	modShell32           = syscall.NewLazyDLL("shell32.dll")
 	procSHFileOperationW = modShell32.NewProc("SHFileOperationW")
+
+	modKernel32       = syscall.NewLazyDLL("kernel32.dll")
+	procGetDriveTypeW = modKernel32.NewProc("GetDriveTypeW")
 )
 
 const (
@@ -37,6 +45,29 @@ const (
 	FOF_SILENT         = 0x0004 // Don't show progress dialog
 	FOF_NOERRORUI      = 0x0400 // Don't show error UI
 )
+
+// GetDriveTypeW return values (winbase.h)
+const (
+	DRIVE_UNKNOWN     = 0
+	DRIVE_NO_ROOT_DIR = 1
+	DRIVE_REMOVABLE   = 2
+	DRIVE_FIXED       = 3
+	DRIVE_REMOTE      = 4
+	DRIVE_CDROM       = 5
+	DRIVE_RAMDISK     = 6
+)
+
+// ErrFileNotFound is returned by DeleteToTrash when the target file (and, for
+// .var packages, its .var.disabled counterpart) no longer exists on disk.
+// Callers must not count this as a successful trash operation.
+var ErrFileNotFound = errors.New("file not found")
+
+// ErrUnsafeRecycleBinVolume is returned by DeleteToTrash when the target path
+// lives on a volume (network/UNC share or removable media) where Windows
+// does not maintain a recycle bin. Forcing SHFileOperationW with
+// FOF_ALLOWUNDO there deletes the file permanently without any warning, so
+// DeleteToTrash refuses rather than attempting the operation.
+var ErrUnsafeRecycleBinVolume = errors.New("recycle bin unavailable on this volume")
 
 // SHFILEOPSTRUCT for SHFileOperationW
 // IMPORTANT: Fields must align with C struct on x64 (8-byte alignment)
@@ -61,6 +92,10 @@ func (w *WindowsFileSystem) DeleteToTrash(path string) error {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return fmt.Errorf("failed to get absolute path: %v", err)
+	}
+
+	if isUnsafeRecycleBinDriveType(getDriveType(absPath)) {
+		return fmt.Errorf("%w: %s", ErrUnsafeRecycleBinVolume, absPath)
 	}
 
 	// Double-null termination logic for SHFileOperation
@@ -96,8 +131,9 @@ func (w *WindowsFileSystem) DeleteToTrash(path string) error {
 					return w.DeleteToTrash(altPath)
 				}
 			}
-			// Neither path exists — treat as already deleted (idempotent).
-			return nil
+			// Neither path exists — the caller must not count this as a
+			// trash operation that actually freed space.
+			return fmt.Errorf("%w: %s", ErrFileNotFound, absPath)
 		}
 		return fmt.Errorf("SHFileOperationW failed with error code: %d", ret)
 	}
@@ -116,6 +152,34 @@ func toggledPath(path string) string {
 		return path[:len(path)-len(".disabled")]
 	}
 	return ""
+}
+
+// getDriveType resolves the Windows drive type (DRIVE_FIXED, DRIVE_REMOTE,
+// etc.) of the volume containing path. Returns DRIVE_UNKNOWN if the volume
+// cannot be determined, so callers should not treat DRIVE_UNKNOWN as unsafe.
+func getDriveType(path string) uint32 {
+	root := filepath.VolumeName(path)
+	if root == "" {
+		return DRIVE_UNKNOWN
+	}
+	if !strings.HasSuffix(root, `\`) {
+		root += `\`
+	}
+
+	rootPtr, err := syscall.UTF16PtrFromString(root)
+	if err != nil {
+		return DRIVE_UNKNOWN
+	}
+
+	ret, _, _ := procGetDriveTypeW.Call(uintptr(unsafe.Pointer(rootPtr)))
+	return uint32(ret)
+}
+
+// isUnsafeRecycleBinDriveType reports whether driveType identifies a volume
+// where Windows does not maintain a recycle bin: network shares (DRIVE_REMOTE)
+// and removable media (DRIVE_REMOVABLE, e.g. USB drives, SD cards).
+func isUnsafeRecycleBinDriveType(driveType uint32) bool {
+	return driveType == DRIVE_REMOTE || driveType == DRIVE_REMOVABLE
 }
 
 func (w *WindowsFileSystem) OpenFolder(path string) error {

@@ -121,6 +121,8 @@ export namespace models {
 	    filePath: string;
 	    success: boolean;
 	    error?: string;
+	    alreadyMissing?: boolean;
+	    unsafeVolume?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new BulkDeleteResult(source);
@@ -131,6 +133,8 @@ export namespace models {
 	        this.filePath = source["filePath"];
 	        this.success = source["success"];
 	        this.error = source["error"];
+	        this.alreadyMissing = source["alreadyMissing"];
+	        this.unsafeVolume = source["unsafeVolume"];
 	    }
 	}
 	export class FileDetail {
@@ -197,22 +201,6 @@ export namespace models {
 	        this.type = source["type"];
 	        this.thumbnailBase64 = source["thumbnailBase64"];
 	        this.size = source["size"];
-	    }
-	}
-	export class ResolveConflictResult {
-	    merged: number;
-	    disabled: number;
-	    newPath: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new ResolveConflictResult(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.merged = source["merged"];
-	        this.disabled = source["disabled"];
-	        this.newPath = source["newPath"];
 	    }
 	}
 	export class VarPackage {
