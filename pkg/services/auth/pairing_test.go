@@ -339,7 +339,7 @@ func TestPairingStatusHidesTheCode(t *testing.T) {
 }
 
 func TestPairedDeviceNameIsSanitised(t *testing.T) {
-	longName := strings.Repeat("x", maxPairedDeviceNameLength+30)
+	longName := strings.Repeat("x", maxDeviceNameLength+30)
 	cases := []struct {
 		name  string
 		input string
@@ -347,8 +347,8 @@ func TestPairedDeviceNameIsSanitised(t *testing.T) {
 	}{
 		{"trimmed", "  Tablet  ", "Tablet"},
 		{"control characters stripped", "Pa\x00ir\x1b[31med\r\n", "Pair[31med"},
-		{"capped", longName, strings.Repeat("x", maxPairedDeviceNameLength)},
-		{"empty falls back", " \t ", defaultPairedDeviceName},
+		{"capped", longName, strings.Repeat("x", maxDeviceNameLength)},
+		{"empty falls back", " \t ", pairedDeviceName},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
