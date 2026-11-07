@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"yavam/pkg/utils"
 )
@@ -13,6 +14,11 @@ import (
 const (
 	hostRefusalPrefix   = "host:"
 	originRefusalPrefix = "origin:"
+
+	forbiddenHostCharacters = `@%/\`
+	maxPortDigits           = 5
+	minPort                 = 1
+	maxPort                 = 65535
 
 	localhostName = "localhost"
 	mDNSSuffix    = ".local"
@@ -22,13 +28,68 @@ const (
 
 // hostNameOf reduces a Host header or host:port to its lowercase bare name, so
 // "Localhost:8080", "[::1]:8080" and "[::1]" compare as "localhost" and "::1".
+// The parser is strict: anything that is not exactly host, host:port or a
+// bracketed IPv6 literal with an optional port yields "", which no allow-list
+// accepts and the loopback check treats as non-local.
 func hostNameOf(hostPort string) string {
-	host := hostPort
-	if splitHost, _, err := net.SplitHostPort(hostPort); err == nil {
-		host = splitHost
+	if hostPort == "" || strings.ContainsFunc(hostPort, isForbiddenHostRune) {
+		return ""
 	}
-	host = strings.Trim(strings.TrimSpace(host), "[]")
-	return strings.TrimSuffix(strings.ToLower(host), ".")
+	host, ok := splitHostAndPort(hostPort)
+	if !ok {
+		return ""
+	}
+	host = strings.TrimSuffix(strings.ToLower(host), ".")
+	if host == "" {
+		return ""
+	}
+	return host
+}
+
+func isForbiddenHostRune(character rune) bool {
+	return character <= ' ' || character == 0x7f || strings.ContainsRune(forbiddenHostCharacters, character)
+}
+
+// splitHostAndPort separates the name from an optional numeric port. A
+// bracketed host must be an IPv6 literal; an unbracketed one may not contain
+// brackets or colons.
+func splitHostAndPort(hostPort string) (host string, ok bool) {
+	if strings.HasPrefix(hostPort, "[") {
+		closing := strings.IndexByte(hostPort, ']')
+		if closing < 0 {
+			return "", false
+		}
+		host, remainder := hostPort[1:closing], hostPort[closing+1:]
+		if ip := net.ParseIP(host); ip == nil || !strings.Contains(host, ":") {
+			return "", false
+		}
+		if remainder == "" {
+			return host, true
+		}
+		return host, strings.HasPrefix(remainder, ":") && isValidPort(remainder[1:])
+	}
+
+	if strings.ContainsAny(hostPort, "[]") || strings.Count(hostPort, ":") > 1 {
+		return "", false
+	}
+	host, port, hasPort := strings.Cut(hostPort, ":")
+	if hasPort && !isValidPort(port) {
+		return "", false
+	}
+	return host, true
+}
+
+func isValidPort(port string) bool {
+	if port == "" || len(port) > maxPortDigits {
+		return false
+	}
+	for _, digit := range port {
+		if digit < '0' || digit > '9' {
+			return false
+		}
+	}
+	number, err := strconv.Atoi(port)
+	return err == nil && number >= minPort && number <= maxPort
 }
 
 func isLocalHostName(host string) bool {
