@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"time"
 )
 
 var (
@@ -56,4 +57,13 @@ type AuthService interface {
 
 	// HasCustomPassword reports whether the admin password differs from the seeded default
 	HasCustomPassword() bool
+
+	// CreatePairingCode issues the single outstanding one-time pairing code
+	CreatePairingCode(ttl time.Duration) (PairingCode, error)
+
+	// RedeemPairingCode consumes a pairing code and returns a session token
+	RedeemPairingCode(code, deviceName string) (string, error)
+
+	// PairingStatus reports whether a pairing code is outstanding, never the code itself
+	PairingStatus() PairingStatus
 }
