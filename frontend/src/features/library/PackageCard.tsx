@@ -4,6 +4,7 @@ import clsx from 'clsx';
 import { AlertCircle, Check, AlertTriangle, Power, Copy } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { formatBytes } from '../../utils/format';
+import { getStoredToken } from '../../services/auth';
 
 interface PackageCardProps {
     pkg: VarPackage;
@@ -49,7 +50,7 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, isSelected, isAnchor, 
         if (!window.go) {
             // Web Mode: Use API URL directly
             if (pkg.hasThumbnail && !pkg.thumbnailBase64) {
-                const token = localStorage.getItem('yavam_auth_token');
+                const token = getStoredToken();
                 setAsyncThumb(`/api/thumbnail?filePath=${encodeURIComponent(pkg.filePath)}&token=${token || ''}`);
             }
             return;

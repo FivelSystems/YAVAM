@@ -1,6 +1,7 @@
 
 import { useState, useEffect } from 'react';
 import { VarPackage } from '../types';
+import { getStoredToken } from '../services/auth';
 
 export const useThumbnail = (pkg: VarPackage | null) => {
     const [thumbSrc, setThumbSrc] = useState<string | undefined>(undefined);
@@ -23,7 +24,7 @@ export const useThumbnail = (pkg: VarPackage | null) => {
                     .catch((e: any) => console.error(e));
             } else {
                 // Web Mode Fallback
-                const token = localStorage.getItem('yavam_auth_token');
+                const token = getStoredToken();
                 setThumbSrc(`/api/thumbnail?filePath=${encodeURIComponent(pkg.filePath)}&token=${token || ''}`);
             }
         } else {
