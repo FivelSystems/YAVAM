@@ -107,6 +107,7 @@ func (s *Server) handleAuthPair(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Code       string `json:"code"`
 		DeviceName string `json:"deviceName"`
+		DeviceID   string `json:"deviceId"`
 	}
 	if !s.decodeJSONBody(w, r, &req) {
 		return
@@ -117,7 +118,7 @@ func (s *Server) handleAuthPair(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := s.auth.RedeemPairingCode(req.Code, req.DeviceName)
+	token, err := s.auth.RedeemPairingCode(req.Code, req.DeviceName, req.DeviceID)
 	switch {
 	case err == nil:
 		s.log(fmt.Sprintf("Device %s paired successfully", utils.SanitizeForLog(req.DeviceName)))

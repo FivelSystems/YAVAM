@@ -36,7 +36,7 @@ type scriptedAuth struct {
 
 func (a *scriptedAuth) HasCustomPassword() bool { return a.passwordSet }
 
-func (a *scriptedAuth) RedeemPairingCode(code, deviceName string) (string, error) {
+func (a *scriptedAuth) RedeemPairingCode(code, deviceName, deviceID string) (string, error) {
 	return a.redeemToken, a.redeemErr
 }
 

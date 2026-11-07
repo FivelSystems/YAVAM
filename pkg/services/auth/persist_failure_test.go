@@ -61,7 +61,7 @@ func captureLog(t *testing.T) *bytes.Buffer {
 func TestFailingDiskIsRetriedOncePerInterval(t *testing.T) {
 	store := newStoreWithAdmin(t)
 	svc, clock := newServiceOnStore(t, store)
-	token, err := svc.Login("admin", failureTestPassword, "dev")
+	token, err := svc.Login("admin", failureTestPassword, "dev", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,10 +163,10 @@ func TestSetPasswordRollsBackWhenPersistFails(t *testing.T) {
 	}
 
 	store.failSaves = false
-	if _, err := svc.Login("admin", failureTestPassword, "dev"); err != nil {
+	if _, err := svc.Login("admin", failureTestPassword, "dev", ""); err != nil {
 		t.Fatalf("old password should still work after failed change: %v", err)
 	}
-	if _, err := svc.Login("admin", "new-password", "dev2"); err == nil {
+	if _, err := svc.Login("admin", "new-password", "dev2", ""); err == nil {
 		t.Fatal("new password must not be active after failed change")
 	}
 }
@@ -174,7 +174,7 @@ func TestSetPasswordRollsBackWhenPersistFails(t *testing.T) {
 func TestSetPasswordKeepsSessionsWhenPersistFails(t *testing.T) {
 	store := newStoreWithAdmin(t)
 	svc, _ := newServiceOnStore(t, store)
-	token, err := svc.Login("admin", failureTestPassword, "dev")
+	token, err := svc.Login("admin", failureTestPassword, "dev", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,10 +223,10 @@ func TestSetPasswordRevokesAllSessions(t *testing.T) {
 		}
 	}
 
-	if _, err := svc.Login("admin", testPassword, "phone"); err == nil {
+	if _, err := svc.Login("admin", testPassword, "phone", ""); err == nil {
 		t.Fatal("old password must be rejected")
 	}
-	freshToken, err := svc.Login("admin", "new-password", "phone")
+	freshToken, err := svc.Login("admin", "new-password", "phone", "")
 	if err != nil {
 		t.Fatalf("login with new password: %v", err)
 	}
