@@ -412,12 +412,95 @@ func TestIsLoopbackRequest(t *testing.T) {
 		"":                     false,
 	}
 	for remoteAddr, want := range cases {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := newTestRequest(http.MethodGet, "/", nil)
 		req.RemoteAddr = remoteAddr
 		if got := isLoopbackRequest(req); got != want {
 			t.Errorf("isLoopbackRequest(%q) = %v, want %v", remoteAddr, got, want)
 		}
 	}
+}
+
+func TestIsLoopbackRequest_ForwardingHeadersMakeItRemote(t *testing.T) {
+	for _, header := range forwardingHeaders {
+		req := newTestRequest(http.MethodGet, "/", nil)
+		req.RemoteAddr = loopbackPeer
+		if !isLoopbackRequest(req) {
+			t.Fatal("plain loopback request must stay loopback")
+		}
+		req.Header.Set(header, "203.0.113.7")
+		if isLoopbackRequest(req) {
+			t.Errorf("%s over a loopback peer must be treated as remote", header)
+		}
+	}
+}
+
+func TestIsLoopbackRequest_EmptyForwardingHeaderStillCounts(t *testing.T) {
+	req := newTestRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = loopbackPeer
+	req.Header["X-Forwarded-For"] = []string{""}
+	if isLoopbackRequest(req) {
+		t.Error("a present but empty forwarding header must still fail closed")
+	}
+}
+
+func TestIsLoopbackRequest_HostMustBeLocal(t *testing.T) {
+	cases := map[string]bool{
+		"localhost":          true,
+		"LOCALHOST:18888":    true,
+		"127.0.0.1:18888":    true,
+		"[::1]:18888":        true,
+		"192.168.1.10:18888": false,
+		"studio-rig":         false,
+		"studio-rig.local":   false,
+		"public.example":     false,
+		"":                   false,
+	}
+	for host, want := range cases {
+		req := newTestRequest(http.MethodGet, "/", nil)
+		req.RemoteAddr = loopbackPeer
+		req.Host = host
+		if got := isLoopbackRequest(req); got != want {
+			t.Errorf("Host %q over loopback: got %v, want %v", host, got, want)
+		}
+	}
+}
+
+func TestLoopbackForwarderIsGatedAsRemote(t *testing.T) {
+	s, _ := startAuthServer(t, &scriptedAuth{MockAuthService: MockAuthService{validToken: "t"}, passwordSet: true}, &config.Config{ServerAllowedHosts: []string{"tunnel.example"}})
+
+	cases := map[string]map[string]string{
+		"forwarded for":  {"X-Forwarded-For": "203.0.113.7"},
+		"forwarded host": {"X-Forwarded-Host": "tunnel.example"},
+		"public host":    {"Host": "tunnel.example"},
+		"via":            {"Via": "1.1 proxy"},
+	}
+	for name, headers := range cases {
+		t.Run(name, func(t *testing.T) {
+			if w := do(s, http.MethodPost, "/api/auth/login", loginBody, loopbackPeer, headers); w.Code != http.StatusForbidden {
+				t.Errorf("login: expected 403, got %d", w.Code)
+			}
+			status := do(s, http.MethodGet, "/api/auth/status", "", loopbackPeer, headers)
+			if decodeBody(t, status)["passwordLoginAllowed"] != false {
+				t.Error("status must report password login as unavailable")
+			}
+		})
+	}
+
+	if s.throttleFor(newForwardedLoopbackRequest()) != s.remoteLoginThrottle {
+		t.Error("a forwarded loopback request must use the remote throttle")
+	}
+	plain := newTestRequest(http.MethodPost, "/api/auth/login", nil)
+	plain.RemoteAddr = loopbackPeer
+	if s.throttleFor(plain) != s.loopbackLoginThrottle {
+		t.Error("a plain loopback request must keep the loopback throttle")
+	}
+}
+
+func newForwardedLoopbackRequest() *http.Request {
+	req := newTestRequest(http.MethodPost, "/api/auth/login", nil)
+	req.RemoteAddr = loopbackPeer
+	req.Header.Set("X-Forwarded-For", "203.0.113.7")
+	return req
 }
 
 type serverTestClock struct {
