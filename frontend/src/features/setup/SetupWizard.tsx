@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Folder, Check, KeyRound, Globe, ArrowRight, ArrowLeft, X } from 'lucide-react';
 import clsx from 'clsx';
+import { validateAdminPassword, describeBackendError } from '../../utils/passwordRules';
 
 interface SetupWizardProps {
     onComplete: (libraryPath?: string) => void;
@@ -20,6 +21,13 @@ const SetupWizard = ({ onComplete }: SetupWizardProps) => {
     const [serverPort, setServerPort] = useState("18888");
 
     const [loading, setLoading] = useState(false);
+    const [backendPasswordError, setBackendPasswordError] = useState<string | null>(null);
+    const [finishError, setFinishError] = useState<string | null>(null);
+
+    const passwordRuleError = password ? validateAdminPassword(password) : null;
+    const passwordsMatch = password === confirmPassword;
+    const passwordReady = !!password && !passwordRuleError && passwordsMatch;
+    const passwordError = passwordRuleError ?? backendPasswordError;
 
     const handleSelectLibrary = async () => {
         // @ts-ignore
@@ -36,13 +44,21 @@ const SetupWizard = ({ onComplete }: SetupWizardProps) => {
 
     const handleFinish = async () => {
         setLoading(true);
+        setFinishError(null);
+        setBackendPasswordError(null);
         try {
             // @ts-ignore
             if (window.go && window.go.main && window.go.main.App) {
-                // Save Password if set
                 if (password) {
-                    // @ts-ignore
-                    await window.go.main.App.UpdatePassword(password);
+                    try {
+                        // @ts-ignore
+                        await window.go.main.App.SetPassword(password);
+                    } catch (e) {
+                        setBackendPasswordError(describeBackendError(e));
+                        setStep(2);
+                        setLoading(false);
+                        return;
+                    }
                 }
 
                 // Save Server Config
@@ -73,7 +89,7 @@ const SetupWizard = ({ onComplete }: SetupWizardProps) => {
                 onComplete(libraryPath);
                 return;
             }
-            alert("Failed to complete setup: " + e);
+            setFinishError("Failed to complete setup: " + describeBackendError(e));
         }
         setLoading(false);
     };
@@ -168,7 +184,7 @@ const SetupWizard = ({ onComplete }: SetupWizardProps) => {
                                     </div>
                                     <p className="text-gray-400 text-sm leading-relaxed">
                                         Set a password to protect your library and remote connections.
-                                        <br /><span className="text-xs text-red-400 font-medium">(Required)</span>
+                                        <br /><span className="text-xs text-orange-300 font-medium">If you skip this step, remote access stays disabled until you set a password in Settings.</span>
                                     </p>
                                 </div>
 
@@ -178,15 +194,22 @@ const SetupWizard = ({ onComplete }: SetupWizardProps) => {
                                         <input
                                             type="password"
                                             value={password}
-                                            onChange={(e) => setPassword(e.target.value)}
+                                            onChange={(e) => { setPassword(e.target.value); setBackendPasswordError(null); }}
                                             onKeyDown={(e) => {
-                                                if (e.key === 'Enter' && password && password === confirmPassword) {
+                                                if (e.key === 'Enter' && passwordReady) {
                                                     setStep(3);
                                                 }
                                             }}
-                                            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors"
+                                            aria-label="Administrator Password"
+                                            className={clsx(
+                                                "w-full bg-gray-900 border rounded-lg px-4 py-3 text-sm text-white focus:outline-none transition-colors",
+                                                passwordError ? "border-red-500 focus:border-red-500" : "border-gray-700 focus:border-blue-500"
+                                            )}
                                             placeholder="Enter password"
                                         />
+                                        {passwordError && (
+                                            <p role="alert" className="text-xs text-red-500 mt-1 font-medium">{passwordError}</p>
+                                        )}
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-xs font-bold text-gray-500 uppercase">Confirm Password</label>
@@ -196,10 +219,11 @@ const SetupWizard = ({ onComplete }: SetupWizardProps) => {
                                                 value={confirmPassword}
                                                 onChange={(e) => setConfirmPassword(e.target.value)}
                                                 onKeyDown={(e) => {
-                                                    if (e.key === 'Enter' && password && password === confirmPassword) {
+                                                    if (e.key === 'Enter' && passwordReady) {
                                                         setStep(3);
                                                     }
                                                 }}
+                                                aria-label="Confirm Password"
                                                 className={clsx(
                                                     "w-full bg-gray-900 border rounded-lg px-4 py-3 text-sm text-white focus:outline-none transition-colors",
                                                     !confirmPassword ? "border-gray-700 focus:border-blue-500" :
@@ -230,13 +254,21 @@ const SetupWizard = ({ onComplete }: SetupWizardProps) => {
                                     >
                                         <ArrowLeft size={16} /> Back
                                     </button>
-                                    <button
-                                        onClick={() => setStep(3)}
-                                        disabled={!password || password !== confirmPassword}
-                                        className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 flex items-center gap-2 transition-all"
-                                    >
-                                        Next <ArrowRight size={18} />
-                                    </button>
+                                    <div className="flex items-center gap-4">
+                                        <button
+                                            onClick={() => { setPassword(""); setConfirmPassword(""); setBackendPasswordError(null); setStep(3); }}
+                                            className="text-gray-500 hover:text-white text-sm font-medium transition-colors"
+                                        >
+                                            Skip for now
+                                        </button>
+                                        <button
+                                            onClick={() => setStep(3)}
+                                            disabled={!passwordReady}
+                                            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 flex items-center gap-2 transition-all"
+                                        >
+                                            Next <ArrowRight size={18} />
+                                        </button>
+                                    </div>
                                 </div>
                             </motion.div>
                         )}
@@ -308,6 +340,13 @@ const SetupWizard = ({ onComplete }: SetupWizardProps) => {
                                         </div>
                                     )}
                                 </div>
+
+                                {!password && (
+                                    <p className="text-xs text-orange-300">
+                                        No password is set, so remote access stays disabled. Set one in Settings &gt; Security to enable the web server.
+                                    </p>
+                                )}
+                                {finishError && <p role="alert" className="text-xs text-red-500 font-medium">{finishError}</p>}
 
                                 <div className="flex justify-between pt-4">
                                     <button
