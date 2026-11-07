@@ -19,6 +19,14 @@ func TestSanitizeForLogStripsControlCharactersAndQuotes(t *testing.T) {
 	}
 }
 
+func TestSanitizeForLogStripsFormatCharacters(t *testing.T) {
+	zeroWidthSpace, bidiOverride, wordJoiner := string(rune(0x200B)), string(rune(0x202E)), string(rune(0x2060))
+	got := SanitizeForLog("ad" + zeroWidthSpace + "min" + bidiOverride + "gnp" + wordJoiner)
+	if got != `"admingnp"` {
+		t.Errorf("format characters must be dropped, got %s", got)
+	}
+}
+
 func TestSanitizeForLogEscapesQuotes(t *testing.T) {
 	got := SanitizeForLog(`a" injected="1`)
 	inner := strings.ReplaceAll(got[1:len(got)-1], `\"`, "")
