@@ -6,6 +6,29 @@
 
 # Changelog
 
+## [1.3.22] - 2026-11-07
+
+### Added
+- **Device Pairing**: Sign in a phone or tablet with a one-time code shown in the desktop app under `Settings → Network`. The code expires after a few minutes and works once.
+- **Remote Access Settings**: Choose which network address the web server listens on, and whether other devices may sign in with the password (off by default).
+
+### Changed
+- **Remote Sign-in**: Other devices now sign in by pairing. Password sign-in from other devices is off by default, so devices that used the password before need to pair once after updating. The web sign-in screen explains which option is available.
+- **Administrator Password**: It must be at least 8 characters long and cannot be `admin`. Until a password is set from the desktop app, the web interface stays disabled. Changing the password signs out every device.
+- **Setup**: The password step can now be skipped; remote access stays disabled until a password is set in Settings.
+- **Custom Network Names**: If you open YAVAM through your own DNS name instead of an IP address or the computer name, add that name to `serverAllowedHosts` in `config.json`.
+- **Guest Mode**: Guests can no longer download raw files.
+- **Enable / Disable**: A package is no longer overwritten or deleted when a copy already exists; the action is refused with a clear message instead.
+
+### Fixed
+- **Revoked Sessions**: A device whose session is revoked returns to the sign-in screen right away.
+- **Notifications**: Toasts now appear above dialogs, and rejected uploads explain why.
+- **Library Counts**: Per-library package counts now load in the web client.
+- **Release Tags**: Stable releases are now tagged on the commit that was built.
+
+### Security
+- Hardened the remote-access server: request validation, sign-in rate limiting and session handling. Updating is recommended if you use remote access.
+
 ## [1.3.21] - 2026-11-06
 
 ### Changed
