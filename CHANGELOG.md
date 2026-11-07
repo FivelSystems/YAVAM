@@ -6,6 +6,11 @@
 
 # Changelog
 
+## [1.3.24] - 2026-11-07
+
+### Fixed
+- **"What's New" No Longer Shows Unreleased Features**: The in-app changelog dialog shown after an update previously displayed the entire changelog file, including notes for work still in progress on a future version. It now only shows notes for versions you've actually received — everything since the last version you saw, never anything not yet released.
+
 ## [1.3.23] - 2026-11-07
 
 ### Fixed
