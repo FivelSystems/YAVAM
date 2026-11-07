@@ -49,6 +49,11 @@ type SimpleTokenAuthService struct {
 	now       func() time.Time
 	pairing   *pairingState // outstanding one-time pairing code, memory only
 
+	// hasCustomPassword caches the bcrypt comparison against the seeded default,
+	// so unauthenticated endpoints that consult it cost nothing per request.
+	// It changes only where adminHash changes: construction and SetPassword.
+	hasCustomPassword bool
+
 	// lastPersistAttemptAt advances on failed writes too, so a failing disk is
 	// retried (and logged) once per persistRetryInterval, not on every request.
 	lastPersistAttemptAt time.Time
@@ -85,10 +90,11 @@ func newSimpleAuthServiceWithStore(store authStore, now func() time.Time) (*Simp
 	}
 
 	s := &SimpleTokenAuthService{
-		sessions:  make(map[string]*StoredSession),
-		adminHash: hashStr,
-		store:     store,
-		now:       now,
+		sessions:          make(map[string]*StoredSession),
+		adminHash:         hashStr,
+		hasCustomPassword: differsFromDefaultPassword(hashStr),
+		store:             store,
+		now:               now,
 	}
 
 	needsPersist, migratedHashes := s.loadSessions(config)
@@ -198,6 +204,7 @@ func (s *SimpleTokenAuthService) SetPassword(newPassword string) error {
 		return err
 	}
 	s.adminHash = string(hash)
+	s.hasCustomPassword = differsFromDefaultPassword(s.adminHash)
 	s.sessions = revokedSessions
 	s.pairing = nil
 	return nil
@@ -213,14 +220,16 @@ func validateNewPassword(password string) error {
 	return nil
 }
 
+func differsFromDefaultPassword(hash string) bool {
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(defaultAdminPassword)) != nil
+}
+
 // HasCustomPassword reports whether the stored hash no longer matches the
-// seeded default. The bcrypt comparison runs outside the lock, like Login.
+// seeded default. The answer is cached, so this is a cheap read.
 func (s *SimpleTokenAuthService) HasCustomPassword() bool {
 	s.mu.RLock()
-	currentHash := s.adminHash
-	s.mu.RUnlock()
-
-	return bcrypt.CompareHashAndPassword([]byte(currentHash), []byte(defaultAdminPassword)) != nil
+	defer s.mu.RUnlock()
+	return s.hasCustomPassword
 }
 
 // InitiateLogin is deprecated/noop in bcrypt flow but kept for interface/api compatibility if strictly needed,
