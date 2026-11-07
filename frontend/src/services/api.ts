@@ -15,7 +15,8 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}): Pro
 
     const response = await fetch(url, config);
 
-    if (response.status === 401) {
+    // A 401 for a token that was already cleared is a late answer to a dead session; reacting again would pile up logout events.
+    if (response.status === 401 && getStoredToken() === token) {
         console.warn(`[API] 401 Unauthorized from: ${url}`);
         // Token expired or invalid
         logout();

@@ -3,6 +3,7 @@ import { SettingGroup } from '../components/SettingGroup';
 import { Input } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
 import { Download, Upload, FolderOpen, Trash2, AlertTriangle, ExternalLink } from 'lucide-react';
+import { validateAdminPassword, describeBackendError } from '../../../utils/passwordRules';
 
 interface SecurityTabProps {
     handleClearData: () => void;
@@ -14,7 +15,12 @@ const SecurityTab = ({ handleClearData, addToast }: SecurityTabProps) => {
     const [confirmPassword, setConfirmPassword] = useState("");
     const [showPasswordUI, setShowPasswordUI] = useState(false);
 
+    const [backendPasswordError, setBackendPasswordError] = useState<string | null>(null);
+    const passwordRuleError = newPassword ? validateAdminPassword(newPassword) : null;
+    const passwordError = passwordRuleError ?? backendPasswordError;
+
     const handleUpdatePassword = async () => {
+        setBackendPasswordError(null);
         try {
             // @ts-ignore
             if (window.go) {
@@ -28,7 +34,7 @@ const SecurityTab = ({ handleClearData, addToast }: SecurityTabProps) => {
                 addToast("Password change only available in Desktop mode for now.", "warning");
             }
         } catch (e: any) {
-            addToast("Failed to update password: " + (e.message || e), "error");
+            setBackendPasswordError(describeBackendError(e));
         }
     };
 
@@ -81,8 +87,9 @@ const SecurityTab = ({ handleClearData, addToast }: SecurityTabProps) => {
                                         label="New Password"
                                         type="password"
                                         value={newPassword}
-                                        onChange={(e) => setNewPassword(e.target.value)}
+                                        onChange={(e) => { setNewPassword(e.target.value); setBackendPasswordError(null); }}
                                         placeholder="Enter new password"
+                                        error={passwordError ?? undefined}
                                         className="w-full"
                                     />
                                     <Input
@@ -96,7 +103,7 @@ const SecurityTab = ({ handleClearData, addToast }: SecurityTabProps) => {
                                 </div>
                                 <div className="flex justify-end">
                                     <button
-                                        disabled={!newPassword || newPassword !== confirmPassword}
+                                        disabled={!newPassword || !!passwordRuleError || newPassword !== confirmPassword}
                                         onClick={handleUpdatePassword}
                                         className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
                                     >

@@ -7,7 +7,7 @@ Default: `http://<Local_IP>:<Port>` (e.g., `http://192.168.1.10:18888`)
 
 ## Authentication
 > [!IMPORTANT]
-> All endpoints (except `/api/auth/*` and `/api/events`) require valid authentication.
+> All endpoints (except `/api/auth/*`) require valid authentication.
 
 1.  **Challenge-Response**: Request a nonce from `/api/auth/challenge`.
 2.  **Proof**: Calculate `SHA256(SHA256(password) + nonce)`.
@@ -81,7 +81,17 @@ Retrieves the list of packages for a specific library path.
 Real-time events stream for scan progress, logs, and updates.
 -   **URL**: `/api/events`
 -   **Method**: `GET`
+-   **Authentication**: Either a Bearer header or a one-time `ticket` query parameter obtained from `/api/events/ticket`. The session token is not accepted in the query string on this endpoint. An invalid, expired, or already-used ticket returns `401`.
+-   **Lifetime**: The stream ends when its session is revoked or expires. Clients fetch a fresh ticket before every (re)connection.
 -   **Events**:
     -   `scan:progress`: `{"current": 10, "total": 50}`
     -   `package:scanned`: `VarPackage` object (incremental updates)
     -   `server:log`: Log messages.
+
+#### Event Ticket
+Issues a one-time ticket for opening the event stream from clients that cannot set request headers (such as the browser `EventSource`).
+-   **URL**: `/api/events/ticket`
+-   **Method**: `POST`
+-   **Headers**: `Authorization: Bearer <token>` (the query-string token is not accepted here)
+-   **Response**: `{"ticket": "<64 hex characters>"}`. A ticket is valid for 30 seconds and can be used once.
+-   **Errors**: `401` missing or invalid token, `405` wrong method, `429` too many pending tickets.

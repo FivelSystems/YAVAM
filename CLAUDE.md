@@ -21,6 +21,10 @@ pure-Go, no CGO for the DB).
 - **Constructive pushback over compliance.** If a request is insecure,
   non-performant, or wrong, stop and explain why, then offer a better path. Don't
   ship "working but messy" code.
+- **Private security disclosure.** Never publish a vulnerability (public issue,
+  PR text, audit doc on a pushed branch) while a released build is affected.
+  Report it to the maintainer for a private GitHub Security Advisory; keep
+  `CHANGELOG.md` Security entries terse.
 - **Security first.** This app runs a local web server and touches the user's
   filesystem. Never expose full filesystem access; validate every path.
 - **Portable.** The app runs without installation — no registry keys, no fixed

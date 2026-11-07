@@ -6,6 +6,7 @@ import { VarPackage } from '../../types';
 import { RatingFavoriteControl } from './RatingFavoriteControl';
 import { useLiveRatingFavorite } from '../../hooks/useLiveRatingFavorite';
 import { usePackageActionItems, actionIconClassName } from '../../hooks/usePackageActionItems';
+import { useAuth } from '../../features/auth/AuthContext';
 
 interface ActionSheetProps {
     /** Null closes the sheet (and plays its exit animation) rather than unmounting it. */
@@ -45,6 +46,9 @@ export const ActionSheet = ({
     // @ts-ignore
     const isWeb = !window.go;
     const isOpen = !!pkg;
+    const { isAuthenticated } = useAuth();
+    // Guests (unauthenticated web sessions) must not get raw file downloads.
+    const canDownloadFile = isWeb && isAuthenticated;
 
     useEffect(() => {
         if (isOpen) {
@@ -68,7 +72,7 @@ export const ActionSheet = ({
     const { rating, isFavorite, rate, toggleFavorite } = useLiveRatingFavorite(pkg, onSetRating, onSetFavorite);
 
     const items = usePackageActionItems({
-        pkg, selectedCount, isWeb,
+        pkg, selectedCount, isWeb, canDownloadFile,
         onToggle, onOpenFolder, onDownload, onCopyPath, onCopyFiles, onCutFile, onDelete, onMerge, onMergeInPlace, onResolve,
     }).filter(item => !item.hidden);
 

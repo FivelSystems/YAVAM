@@ -5,9 +5,49 @@ import (
 	"strings"
 )
 
-// AuthMiddleware protects routes requiring authentication
+const messageAuthUnavailable = "Authentication is temporarily unavailable"
+
+// AuthMiddleware protects routes requiring authentication and extends the
+// session's idle window on each accepted request.
 func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
+	return s.authenticate(next, s.sessionTokenValidator(true))
+}
+
+// NonSlidingAuthMiddleware applies the same rules as AuthMiddleware for routes
+// that are bookkeeping around a session (such as event-ticket issuance) and
+// must not keep it alive.
+func (s *Server) NonSlidingAuthMiddleware(next http.Handler) http.Handler {
+	return s.authenticate(next, s.sessionTokenValidator(false))
+}
+
+func (s *Server) sessionTokenValidator(slideIdleWindow bool) func(token string) error {
+	return func(token string) error {
+		var err error
+		if slideIdleWindow {
+			_, err = s.auth.ValidateToken(token)
+		} else {
+			_, err = s.auth.CheckToken(token)
+		}
+		return err
+	}
+}
+
+// requireAuthService fails the request closed when the auth service did not
+// initialise, instead of dereferencing it.
+func (s *Server) requireAuthService(w http.ResponseWriter) bool {
+	if s.auth != nil {
+		return true
+	}
+	s.writeError(w, messageAuthUnavailable, http.StatusServiceUnavailable)
+	return false
+}
+
+func (s *Server) authenticate(next http.Handler, validateToken func(token string) error) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !s.requireAuthService(w) {
+			return
+		}
+
 		// 1. Get Token from Header or Query
 		token := ""
 		authHeader := r.Header.Get("Authorization")
@@ -24,8 +64,7 @@ func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 
 		// 2. Validate Token
 		if token != "" {
-			_, err := s.auth.ValidateToken(token)
-			if err == nil {
+			if err := validateToken(token); err == nil {
 				// Token Valid -> Admin Access
 				next.ServeHTTP(w, r)
 				return
@@ -65,10 +104,8 @@ func (s *Server) isGuestAllowed(r *http.Request) bool {
 			// "/api/events": // Secured. Logs should not be public.
 			return true
 		}
-
-		if strings.HasPrefix(path, "/files/") {
-			return true
-		}
+		// /files/ is deliberately absent: it serves whole package files, which
+		// guests may browse but never download.
 	}
 
 	// 2. Special POST Requests (Read-Only)

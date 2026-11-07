@@ -1,5 +1,6 @@
 import { Power, FolderOpen, Copy, Trash2, FileCode, Scissors, Download, Layers, Sparkles, LucideIcon } from 'lucide-react';
 import { VarPackage } from '../types';
+import { getStoredToken } from '../services/auth';
 
 export interface PackageActionItem {
     key: string;
@@ -17,6 +18,8 @@ interface UsePackageActionItemsParams {
     pkg: VarPackage | null;
     selectedCount: number;
     isWeb: boolean;
+    /** Web + authenticated (not a guest session) — guests must not get raw file downloads. */
+    canDownloadFile: boolean;
     onToggle: (pkg: VarPackage) => void;
     onOpenFolder: (pkg: VarPackage) => void;
     onDownload: (pkg: VarPackage) => void;
@@ -52,16 +55,17 @@ export const actionIconClassName = (key: string, pkg: VarPackage | null): string
  * the same data. Mirrors the conditionals `ContextMenu.tsx` already had:
  * merge actions only on an exact duplicate, resolve only on a (non-exact)
  * duplicate, folder/copy-file/cut-file hidden on web, a direct-download row
- * shown only on web (desktop uses the install flow instead).
+ * shown only on web *and* authenticated (desktop uses the install flow
+ * instead; guest/unauthenticated web sessions must not get raw file downloads).
  */
 export const usePackageActionItems = ({
-    pkg, selectedCount, isWeb,
+    pkg, selectedCount, isWeb, canDownloadFile,
     onToggle, onOpenFolder, onDownload, onCopyPath, onCopyFiles, onCutFile, onDelete, onMerge, onMergeInPlace, onResolve,
 }: UsePackageActionItemsParams): PackageActionItem[] => {
     if (!pkg) return [];
 
     const downloadFileDirect = () => {
-        const token = localStorage.getItem('yavam_auth_token');
+        const token = getStoredToken();
         const url = `/files/?path=${encodeURIComponent(pkg.filePath)}&token=${token || ''}`;
         const a = document.createElement('a');
         a.href = url;
@@ -136,7 +140,7 @@ export const usePackageActionItems = ({
             key: 'download-file',
             icon: Download,
             label: 'Download File',
-            hidden: !isWeb,
+            hidden: !canDownloadFile,
             onClick: downloadFileDirect,
         },
         {

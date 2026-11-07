@@ -7,6 +7,7 @@ export namespace auth {
 	    deviceName: string;
 	    ipAddress: string;
 	    createdAt: string;
+	    isSystem: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new User(source);
@@ -20,6 +21,7 @@ export namespace auth {
 	        this.deviceName = source["deviceName"];
 	        this.ipAddress = source["ipAddress"];
 	        this.createdAt = source["createdAt"];
+	        this.isSystem = source["isSystem"];
 	    }
 	}
 
@@ -40,6 +42,9 @@ export namespace config {
 	    serverEnabled: boolean;
 	    serverPort: string;
 	    authPollInterval: number;
+	    allowRemotePasswordLogin: boolean;
+	    serverBindAddress: string;
+	    serverAllowedHosts: string[];
 	    lastSeenVersion: string;
 	    updateChannel: string;
 	    privacyMode: boolean;
@@ -70,6 +75,9 @@ export namespace config {
 	        this.serverEnabled = source["serverEnabled"];
 	        this.serverPort = source["serverPort"];
 	        this.authPollInterval = source["authPollInterval"];
+	        this.allowRemotePasswordLogin = source["allowRemotePasswordLogin"];
+	        this.serverBindAddress = source["serverBindAddress"];
+	        this.serverAllowedHosts = source["serverAllowedHosts"];
 	        this.lastSeenVersion = source["lastSeenVersion"];
 	        this.updateChannel = source["updateChannel"];
 	        this.privacyMode = source["privacyMode"];
@@ -261,6 +269,75 @@ export namespace models {
 	        this.tags = source["tags"];
 	        this.creationDate = source["creationDate"];
 	        this.isCorrupt = source["isCorrupt"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
+export namespace remoteaccess {
+	
+	export class PairingGrant {
+	    code: string;
+	    expiresAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PairingGrant(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.code = source["code"];
+	        this.expiresAt = source["expiresAt"];
+	    }
+	}
+	export class PairingState {
+	    active: boolean;
+	    expiresAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PairingState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.active = source["active"];
+	        this.expiresAt = source["expiresAt"];
+	    }
+	}
+	export class State {
+	    hasCustomPassword: boolean;
+	    allowRemotePasswordLogin: boolean;
+	    serverBindAddress: string;
+	    pairing: PairingState;
+	
+	    static createFrom(source: any = {}) {
+	        return new State(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.hasCustomPassword = source["hasCustomPassword"];
+	        this.allowRemotePasswordLogin = source["allowRemotePasswordLogin"];
+	        this.serverBindAddress = source["serverBindAddress"];
+	        this.pairing = this.convertValues(source["pairing"], PairingState);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

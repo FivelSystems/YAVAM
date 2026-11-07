@@ -12,9 +12,6 @@ describe('Auth Login Event (Regression Test)', () => {
 
         // Spy on Dispatch Event
         vi.spyOn(window, 'dispatchEvent');
-
-        // Mock LocalStorage
-        vi.spyOn(Storage.prototype, 'setItem');
     });
 
     afterEach(() => {
@@ -25,7 +22,7 @@ describe('Auth Login Event (Regression Test)', () => {
         await login('password');
 
         // Verify Token Stored
-        expect(localStorage.setItem).toHaveBeenCalledWith('yavam_auth_token', 'mock-token');
+        expect(localStorage.getItem('yavam_auth_token')).toBe('mock-token');
 
         // Verify Event Dispatched
         const calls = (window.dispatchEvent as any).mock.calls;

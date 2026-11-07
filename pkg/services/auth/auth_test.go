@@ -14,11 +14,11 @@ func TestLoginFlow(t *testing.T) {
 		t.Fatalf("Failed to create auth service: %v", err)
 	}
 
-	password := "secret"
+	password := testPassword
 	svc.SetPassword(password)
 
 	// 1. Direct Login
-	token, err := svc.Login("admin", password, "test-device")
+	token, err := svc.Login("admin", password, "test-device", "")
 	if err != nil {
 		t.Fatalf("Login failed: %v", err)
 	}
@@ -41,17 +41,17 @@ func TestInvalidCredentials(t *testing.T) {
 	configPath := filepath.Join(tempDir, "auth.json")
 
 	svc, _ := NewSimpleAuthService(configPath)
-	password := "secret"
+	password := testPassword
 	svc.SetPassword(password)
 
 	// Invalid Pass
-	_, err := svc.Login("admin", "wrongpasswd", "test-device")
+	_, err := svc.Login("admin", "wrongpasswd", "test-device", "")
 	if err == nil {
 		t.Fatal("Expected error on invalid password, got nil")
 	}
 
 	// Valid Pass
-	_, err = svc.Login("admin", password, "test-device")
+	_, err = svc.Login("admin", password, "test-device", "")
 	if err != nil {
 		t.Fatalf("Login failed with valid pass: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestUnknownUser(t *testing.T) {
 
 	svc, _ := NewSimpleAuthService(configPath)
 	// Try login with non-admin
-	_, err := svc.Login("hacker", "whatever", "dev")
+	_, err := svc.Login("hacker", "whatever", "dev", "")
 	if err == nil {
 		t.Fatal("Expected error for unknown user")
 	}
@@ -75,8 +75,8 @@ func TestPersistence(t *testing.T) {
 
 	// 1. Create Service & Login
 	svc1, _ := NewSimpleAuthService(configPath)
-	svc1.SetPassword("secret")
-	token, _ := svc1.Login("admin", "secret", "persist-device")
+	svc1.SetPassword(testPassword)
+	token, _ := svc1.Login("admin", testPassword, "persist-device", "")
 
 	// 2. Re-create Service (Simulate Restart)
 	svc2, err := NewSimpleAuthService(configPath)
@@ -102,10 +102,10 @@ func TestRevocationPersistence(t *testing.T) {
 	configPath := filepath.Join(tempDir, "auth.json")
 
 	svc1, _ := NewSimpleAuthService(configPath)
-	svc1.SetPassword("secret")
+	svc1.SetPassword(testPassword)
 
 	// Login
-	token, _ := svc1.Login("admin", "secret", "revoke-device")
+	token, _ := svc1.Login("admin", testPassword, "revoke-device", "")
 
 	// Revoke
 	svc1.RevokeToken(token)

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 	"yavam/pkg/manager"
 	"yavam/pkg/services/auth"
 	"yavam/pkg/services/config"
@@ -28,6 +29,10 @@ func (m *MockAuthService) ValidateToken(token string) (*auth.User, error) {
 	return nil, auth.ErrInvalidToken
 }
 
+func (m *MockAuthService) CheckToken(token string) (*auth.User, error) {
+	return m.ValidateToken(token)
+}
+
 func (m *MockAuthService) GenerateToken() (string, error) {
 	return "new-token", nil
 }
@@ -38,6 +43,18 @@ func (m *MockAuthService) SetPassword(newPassword string) error {
 	return nil
 }
 
+func (m *MockAuthService) HasCustomPassword() bool { return true }
+
+func (m *MockAuthService) CreatePairingCode(ttl time.Duration) (auth.PairingCode, error) {
+	return auth.PairingCode{}, nil
+}
+
+func (m *MockAuthService) RedeemPairingCode(code, deviceName, deviceID string) (string, error) {
+	return "", auth.ErrInvalidPairingCode
+}
+
+func (m *MockAuthService) PairingStatus() auth.PairingStatus { return auth.PairingStatus{} }
+
 func (m *MockAuthService) ListSessions() ([]auth.User, error) {
 	return []auth.User{}, nil
 }
@@ -46,7 +63,7 @@ func (m *MockAuthService) RevokeSession(id string) error {
 	return nil
 }
 
-func (m *MockAuthService) Login(username, password, deviceName string) (string, error) {
+func (m *MockAuthService) Login(username, password, deviceName, deviceID string) (string, error) {
 	if username == "admin" && password == "password" {
 		return m.validToken, nil
 	}

@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -159,18 +160,36 @@ func (m *Manager) SetPackageFavorite(family string, favorite bool) error {
 // DisableOldVersions disables all versions of a package except the latest
 // DisableOldVersions delegates to LibraryService
 func (m *Manager) DisableOldVersions(pkgs []models.VarPackage, creator string, packageName string, vamPath string) error {
+	if err := m.ValidatePath(vamPath); err != nil {
+		return err
+	}
+	if !isPlainPackageNamePart(creator) || !isPlainPackageNamePart(packageName) {
+		return fmt.Errorf("invalid package identifier")
+	}
 	return m.library.DisableOldVersions(creator, packageName, vamPath)
+}
+
+// isPlainPackageNamePart rejects identifiers that could alter the file pattern
+// built from them (separators, wildcards, parent references).
+func isPlainPackageNamePart(part string) bool {
+	return part != "" && !strings.ContainsAny(part, `/\*?[]`) && !strings.Contains(part, "..")
 }
 
 // TogglePackage delegates to LibraryService to rename packages between .var and .var.disabled
 func (m *Manager) TogglePackage(pkgs []models.VarPackage, pkgID string, enable bool, vamPath string, merge bool) (string, error) {
-	// Note: LibraryService.Toggle doesn't support 'merge' or 'vamPath' currently.
-	// We might need to update the service or just pass pkgID (which is path).
+	if err := m.ValidatePath(pkgID); err != nil {
+		return "", err
+	}
 	return m.library.Toggle(pkgID, enable)
 }
 
-// InstallPackage delegates to LibraryService to copy files to the library. Overwrite is forced.
+// InstallPackage copies files into the library at vamPath, which must be a configured
+// library. Sources are not validated: they come from drag-and-drop or file pickers.
+// Overwrite is forced.
 func (m *Manager) InstallPackage(files []string, vamPath string, onProgress func(current, total int)) ([]string, error) {
+	if err := m.ValidatePath(vamPath); err != nil {
+		return nil, err
+	}
 	return m.library.Install(files, vamPath, true, func(c, t int, f string) {
 		if onProgress != nil {
 			onProgress(c, t)
@@ -181,6 +200,9 @@ func (m *Manager) InstallPackage(files []string, vamPath string, onProgress func
 func (m *Manager) checkDependencies(pkgs []models.VarPackage) []models.VarPackage {
 	return m.library.CheckDependencies(pkgs)
 }
+
+// ErrPathNotAllowed is returned when a path is outside every configured library.
+var ErrPathNotAllowed = errors.New("access denied: path not in allowed libraries")
 
 // ValidatePath checks if the given path is within any of the configured library roots
 // This is the global security check for file access
@@ -205,29 +227,19 @@ func (m *Manager) ValidatePath(path string) error {
 	}
 
 	if !allowed {
-		return fmt.Errorf("access denied: path not in allowed libraries")
+		return ErrPathNotAllowed
 	}
 	return nil
 }
 
-// validatePath ensures the path is within the allowed root
-func (m *Manager) validatePath(path string, root string) bool {
-	// Basic check: resolve absolute paths and ensure prefix matches
-	rel, err := filepath.Rel(root, path)
-	if err != nil {
-		return false
+// ValidatePaths applies ValidatePath to every entry and fails on the first rejection.
+func (m *Manager) ValidatePaths(paths []string) error {
+	for _, path := range paths {
+		if err := m.ValidatePath(path); err != nil {
+			return err
+		}
 	}
-	if strings.HasPrefix(rel, "..") {
-		return false
-	}
-
-	// Check extension
-	lowerPath := strings.ToLower(path)
-	if !strings.HasSuffix(lowerPath, ".var") && !strings.HasSuffix(lowerPath, ".var.disabled") {
-		return false
-	}
-
-	return true
+	return nil
 }
 
 // User Configuration Methods
@@ -241,23 +253,35 @@ func (m *Manager) OpenFolder(path string) error {
 }
 
 func (m *Manager) DeleteToTrash(path string) error {
+	if err := m.ValidatePath(path); err != nil {
+		return err
+	}
 	return m.system.DeleteToTrash(path)
 }
 
 // CopyFilesToClipboard copies the file objects to the clipboard (so they can be pasted in Explorer)
 func (m *Manager) CopyFilesToClipboard(paths []string) error {
+	if err := m.ValidatePaths(paths); err != nil {
+		return err
+	}
 	return m.system.CopyFilesToClipboard(paths)
 }
 
 // CutFileToClipboard copies the file to clipboard with "Move" effect (Cut)
-// CutFileToClipboard copies the file to clipboard with "Move" effect (Cut)
 func (m *Manager) CutFileToClipboard(path string) error {
+	if err := m.ValidatePath(path); err != nil {
+		return err
+	}
 	return m.system.CutFileToClipboard(path)
 }
 
-// DownloadPackage copies the package to the destination folder
+// DownloadPackage copies a library package to destDir. Only the source is
+// validated: the destination is a user-chosen export folder (or the default
+// Downloads folder) and is intentionally outside the configured libraries.
 func (m *Manager) DownloadPackage(pkgPath string, destDir string) error {
-	// Check source
+	if err := m.ValidatePath(pkgPath); err != nil {
+		return err
+	}
 	sourceFile, err := os.Open(pkgPath)
 	if err != nil {
 		return err
@@ -285,15 +309,27 @@ func (m *Manager) DownloadPackage(pkgPath string, destDir string) error {
 }
 
 // ResolveConflicts handles deduplication and cleanup of conflicting packages
-// Delegates to LibraryService
+// Delegates to LibraryService. Every path must be inside a configured library;
+// one invalid path rejects the whole call before anything is touched.
 func (m *Manager) ResolveConflicts(keepPath string, others []string, libraryPath string) (*models.ResolveConflictResult, error) {
+	involvedPaths := append([]string{keepPath, libraryPath}, others...)
+	if err := m.ValidatePaths(involvedPaths); err != nil {
+		return nil, err
+	}
 	return m.library.ResolveConflicts(keepPath, others, libraryPath)
 }
 
-// CopyPackagesToLibrary copies a list of package files to a destination library
+// CopyPackagesToLibrary copies a list of package files to a destination library.
+// Sources and destination must all be inside configured libraries.
 // Returns list of collided filenames (if overwrite=false) or error
 func (m *Manager) CopyPackagesToLibrary(filePaths []string, destLibPath string, overwrite bool, onProgress func(current, total int, filename string, status string)) ([]string, error) {
-	fmt.Printf("[Manager] CopyPackagesToLibrary called. Dest: %s, Overwrite: %v, Count: %d\n", destLibPath, overwrite, len(filePaths))
+	if err := m.ValidatePath(destLibPath); err != nil {
+		return nil, err
+	}
+	if err := m.ValidatePaths(filePaths); err != nil {
+		return nil, err
+	}
+	fmt.Printf("[Manager] CopyPackagesToLibrary called. Overwrite: %v, Count: %d\n", overwrite, len(filePaths))
 
 	var collisions []string
 	filesToInstall := filePaths
@@ -395,6 +431,9 @@ func (m *Manager) GetDiskSpace(path string) (DiskSpaceInfo, error) {
 // CheckCollisions checks if files already exist in the destination library without copying
 // CheckCollisions delegates to LibraryService
 func (m *Manager) CheckCollisions(filePaths []string, destLibPath string) ([]string, error) {
+	if err := m.ValidatePath(destLibPath); err != nil {
+		return nil, err
+	}
 	return m.library.CheckCollisions(filePaths, destLibPath)
 }
 

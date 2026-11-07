@@ -153,6 +153,9 @@ jobs:
           draft: false
           prerelease: false
           tag_name: ${{ needs.check.outputs.tag }}
+          # Without an explicit target the tag is created on the default branch,
+          # not on the commit that was built from the release branch.
+          target_commitish: ${{ github.sha }}
           name: ${{ format('YAVAM {0}', needs.check.outputs.tag) }}
           body_path: RELEASE_NOTES.md
         env:

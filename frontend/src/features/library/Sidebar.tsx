@@ -12,7 +12,7 @@ import { hasToken, toggleToken, getRating, setRating } from '../../utils/search'
 import { FilterDropdown, FilterOption, badgeTone } from '../../components/ui/FilterDropdown';
 import { Toggle } from '../../components/ui/Toggle';
 import { RatingStars } from '../../components/ui/RatingStars';
-
+import { getStoredToken } from '../../services/auth';
 
 // Simple Library Item Component
 const SidebarLibraryItem = ({ lib, isActive, count, onSelect, onRemove }: { lib: string, isActive: boolean, count?: number, onSelect: () => void, onRemove?: (lib: string) => void }) => {
@@ -102,7 +102,7 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
+                            'Authorization': `Bearer ${getStoredToken() || ''}`
                         },
                         body: JSON.stringify({ libraries })
                     });

@@ -5,8 +5,112 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"yavam/pkg/models"
 	"yavam/pkg/services/config"
+	"yavam/pkg/services/system"
 )
+
+type recordingSystemService struct {
+	clipboardCopies int
+	clipboardCuts   int
+}
+
+func (s *recordingSystemService) GetDiskSpace(string) (system.DiskSpaceInfo, error) {
+	return system.DiskSpaceInfo{Free: 1 << 40, Total: 1 << 40, TotalFree: 1 << 40}, nil
+}
+func (s *recordingSystemService) OpenFolder(string) error      { return nil }
+func (s *recordingSystemService) DeleteToTrash(string) error   { return nil }
+func (s *recordingSystemService) GetFileDetails([]string) ([]models.FileDetail, error) {
+	return nil, nil
+}
+func (s *recordingSystemService) CopyFilesToClipboard([]string) error {
+	s.clipboardCopies++
+	return nil
+}
+func (s *recordingSystemService) CutFileToClipboard(string) error {
+	s.clipboardCuts++
+	return nil
+}
+
+func newManagerWithLibrary(t *testing.T) (*Manager, *recordingSystemService, string, string) {
+	t.Helper()
+	root := t.TempDir()
+	libraryDir := filepath.Join(root, "library")
+	outsideDir := filepath.Join(root, "outside")
+	for _, dir := range []string{libraryDir, outsideDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+	}
+	sys := &recordingSystemService{}
+	cfgService := &MockConfigService{cfg: &config.Config{Libraries: []string{libraryDir}}}
+	return NewManager(sys, nil, cfgService), sys, libraryDir, outsideDir
+}
+
+func TestCopyFilesToClipboardValidatesEveryPath(t *testing.T) {
+	m, sys, libraryDir, outsideDir := newManagerWithLibrary(t)
+	inside := filepath.Join(libraryDir, "a.var")
+	outside := filepath.Join(outsideDir, "b.var")
+
+	if err := m.CopyFilesToClipboard([]string{inside}); err != nil {
+		t.Fatalf("valid path rejected: %v", err)
+	}
+	if sys.clipboardCopies != 1 {
+		t.Fatalf("expected system service call, got %d", sys.clipboardCopies)
+	}
+
+	if err := m.CopyFilesToClipboard([]string{inside, outside}); err == nil {
+		t.Fatal("expected rejection when one path is outside libraries")
+	}
+	if sys.clipboardCopies != 1 {
+		t.Fatalf("system service called despite rejection: %d", sys.clipboardCopies)
+	}
+}
+
+func TestCutFileToClipboardValidatesPath(t *testing.T) {
+	m, sys, libraryDir, outsideDir := newManagerWithLibrary(t)
+
+	if err := m.CutFileToClipboard(filepath.Join(libraryDir, "a.var")); err != nil {
+		t.Fatalf("valid path rejected: %v", err)
+	}
+	if sys.clipboardCuts != 1 {
+		t.Fatalf("expected system service call, got %d", sys.clipboardCuts)
+	}
+
+	if err := m.CutFileToClipboard(filepath.Join(outsideDir, "b.var")); err == nil {
+		t.Fatal("expected rejection for path outside libraries")
+	}
+	if sys.clipboardCuts != 1 {
+		t.Fatalf("system service called despite rejection: %d", sys.clipboardCuts)
+	}
+}
+
+func TestDownloadPackageValidatesSourceOnly(t *testing.T) {
+	m, _, libraryDir, outsideDir := newManagerWithLibrary(t)
+	source := filepath.Join(libraryDir, "a.var")
+	if err := os.WriteFile(source, []byte("payload"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	foreign := filepath.Join(outsideDir, "b.var")
+	if err := os.WriteFile(foreign, []byte("payload"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	exportDir := t.TempDir()
+
+	if err := m.DownloadPackage(source, exportDir); err != nil {
+		t.Fatalf("library package to external destination failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(exportDir, "a.var")); err != nil {
+		t.Fatalf("expected copied file: %v", err)
+	}
+
+	if err := m.DownloadPackage(foreign, exportDir); err == nil {
+		t.Fatal("expected rejection for source outside libraries")
+	}
+	if _, err := os.Stat(filepath.Join(exportDir, "b.var")); !os.IsNotExist(err) {
+		t.Fatal("rejected source must not be copied")
+	}
+}
 
 func TestValidatePath(t *testing.T) {
 	wd, _ := os.Getwd()

@@ -1,6 +1,9 @@
-
+﻿
 // This polyfill provides Wails-compatible Runtime API for Web Mode
 // It connects to Server-Sent Events (SSE) and dispatches them as Wails Events.
+
+import { getStoredToken, logout } from './auth';
+import { TicketedEventStream } from './ticketedEventStream';
 
 declare global {
     interface Window {
@@ -10,61 +13,40 @@ declare global {
 }
 
 const listeners = new Map<string, ((data: any) => void)[]>();
-let eventSource: EventSource | null = null;
-let reconnectTimer: any = null;
 let isRevoked = false; // Prevent reconnect loop if logged out
 
-function disconnectSSE() {
-    if (eventSource) {
-        eventSource.close();
-        eventSource = null;
-    }
-    if (reconnectTimer) {
-        clearTimeout(reconnectTimer);
-        reconnectTimer = null;
+function dispatchServerEvent(event: MessageEvent) {
+    try {
+        if (event.data === ": keep-alive") return;
+
+        const msg = JSON.parse(event.data);
+        if (msg && msg.event) {
+            const callbacks = listeners.get(msg.event);
+            if (callbacks) {
+                callbacks.forEach(cb => cb(msg.data));
+            }
+        }
+    } catch (e) {
+        console.error("[Polyfill] Failed to parse SSE message:", e);
     }
 }
 
+const eventStream = new TicketedEventStream({
+    fetch: (...args) => window.fetch(...args),
+    EventSource: class { constructor(url: string) { return new window.EventSource(url); } } as unknown as typeof EventSource,
+    getToken: getStoredToken,
+    onSessionEnded: logout,
+    onMessage: dispatchServerEvent,
+});
+
+function disconnectSSE() {
+    eventStream.stop();
+}
+
 function connectSSE() {
-    if (eventSource || isRevoked) return; // Stop if already connected or revoked
-
+    if (isRevoked) return;
     console.log("[Polyfill] Connecting to SSE...");
-    const token = localStorage.getItem('yavam_auth_token');
-    const url = token ? `/api/events?token=${encodeURIComponent(token)}` : '/api/events';
-    eventSource = new EventSource(url);
-
-    eventSource.onmessage = (event) => {
-        try {
-            // Keep-alive check
-            if (event.data === ": keep-alive") return;
-
-            const msg = JSON.parse(event.data);
-            if (msg && msg.event) {
-                const callbacks = listeners.get(msg.event);
-                if (callbacks) {
-                    callbacks.forEach(cb => cb(msg.data));
-                }
-            }
-        } catch (e) {
-            console.error("[Polyfill] Failed to parse SSE message:", e);
-        }
-    };
-
-    eventSource.onerror = (_err) => {
-        // console.error("[Polyfill] SSE Error:", err);
-        if (eventSource) {
-            eventSource.close();
-            eventSource = null;
-        }
-
-        // Retry logic - only if not revoked
-        if (!reconnectTimer && !isRevoked) {
-            reconnectTimer = setTimeout(() => {
-                reconnectTimer = null;
-                connectSSE();
-            }, 5000);
-        }
-    };
+    eventStream.start();
 }
 
 // Logic to handle Auth State Changes

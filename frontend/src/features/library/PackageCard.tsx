@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { formatBytes } from '../../utils/format';
 import { RatingFavoriteControl } from '../../components/ui/RatingFavoriteControl';
 import { useLongPress } from '../../hooks/useLongPress';
+import { getStoredToken } from '../../services/auth';
 
 /** Passive rating/favourite pill — the only persistent sign of either on the
  * card itself (previously only visible via the context menu that set them, #54).
@@ -167,7 +168,7 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, onRate, onToggleFavori
         if (!window.go) {
             // Web Mode: Use API URL directly
             if (pkg.hasThumbnail && !pkg.thumbnailBase64) {
-                const token = localStorage.getItem('yavam_auth_token');
+                const token = getStoredToken();
                 setAsyncThumb(`/api/thumbnail?filePath=${encodeURIComponent(pkg.filePath)}&token=${token || ''}`);
             }
             return;

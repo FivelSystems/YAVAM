@@ -3,6 +3,10 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { ActionSheet } from './ActionSheet';
 import { VarPackage } from '../../types';
 
+vi.mock('../../features/auth/AuthContext', () => ({
+    useAuth: () => ({ isAuthenticated: true, isGuest: false }),
+}));
+
 const pkg = {
     filePath: 'C:/lib/Creator.Pkg.1.var',
     fileName: 'Creator.Pkg.1.var',

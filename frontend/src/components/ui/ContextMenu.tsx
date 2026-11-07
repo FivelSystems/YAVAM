@@ -3,6 +3,7 @@ import { VarPackage } from '../../types';
 import { RatingFavoriteControl } from './RatingFavoriteControl';
 import { useLiveRatingFavorite } from '../../hooks/useLiveRatingFavorite';
 import { usePackageActionItems, actionIconClassName } from '../../hooks/usePackageActionItems';
+import { useAuth } from '../../features/auth/AuthContext';
 
 interface ContextMenuProps {
     x: number;
@@ -29,6 +30,9 @@ const ContextMenu = ({ x, y, pkg, selectedCount = 0, onClose, onToggle, onOpenFo
     const [position, setPosition] = useState({ top: y, left: x });
     // @ts-ignore
     const isWeb = !window.go;
+    const { isAuthenticated } = useAuth();
+    // Guests (unauthenticated web sessions) must not get raw file downloads.
+    const canDownloadFile = isWeb && isAuthenticated;
 
     // Live rating/favourite, independent of the (possibly stale) `pkg` prop
     // snapshot — `contextMenu.pkg` is captured once at right-click time, so it
@@ -37,7 +41,7 @@ const ContextMenu = ({ x, y, pkg, selectedCount = 0, onClose, onToggle, onOpenFo
     const { rating, isFavorite, rate, toggleFavorite } = useLiveRatingFavorite(pkg, onSetRating, onSetFavorite);
 
     const items = usePackageActionItems({
-        pkg, selectedCount, isWeb,
+        pkg, selectedCount, isWeb, canDownloadFile,
         onToggle, onOpenFolder, onDownload, onCopyPath, onCopyFiles, onCutFile, onDelete, onMerge, onMergeInPlace, onResolve,
     }).filter(item => !item.hidden);
     const regularItems = items.filter(item => item.tone !== 'danger');

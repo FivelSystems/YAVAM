@@ -3,12 +3,11 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"net"
 	"net/http"
-	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -18,6 +17,7 @@ import (
 	"yavam/pkg/services/config"
 	"yavam/pkg/services/library"
 	"yavam/pkg/updater"
+	"yavam/pkg/utils"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -44,8 +44,38 @@ type Server struct {
 
 	scanWg sync.WaitGroup
 
+	tickets                *eventTicketStore
+	ticketsInit            sync.Once
+	sessionRecheckInterval time.Duration
+
 	SkipEvents bool // For testing
+
+	logObserver func(message string) // tests capture log lines here
+	boundAddr   string               // actual listener address, set by Start
+
+	remoteLoginThrottle   *LoginThrottle
+	loopbackLoginThrottle *LoginThrottle
+
+	shutdownGracePeriod time.Duration // zero selects defaultShutdownGracePeriod
+	readHeaderTimeout   time.Duration // zero selects defaultReadHeaderTimeout
+	idleTimeout         time.Duration // zero selects defaultIdleTimeout
+	jsonBodyReadTimeout time.Duration // zero selects defaultJSONBodyReadTimeout
+
+	machineNames   map[string]bool // hostnames this machine answers to, see machineHostNames
+	refusalNotices *refusalNotices
 }
+
+const (
+	defaultShutdownGracePeriod = time.Second
+
+	// defaultReadHeaderTimeout and defaultIdleTimeout bound connections that
+	// never finish a request or sit unused. There is deliberately no overall
+	// read or write timeout: event streams, multi-gigabyte uploads and large
+	// downloads legitimately keep a connection busy for a long time.
+	defaultReadHeaderTimeout = 10 * time.Second
+	defaultIdleTimeout       = 2 * time.Minute
+	maxRequestHeaderBytes    = 64 << 10
+)
 
 func NewServer(ctx context.Context, m *manager.Manager, authService auth.AuthService, assets fs.FS, version string, onRestore func()) *Server {
 	return &Server{
@@ -56,6 +86,13 @@ func NewServer(ctx context.Context, m *manager.Manager, authService auth.AuthSer
 		assets:    assets,
 		version:   version,
 		clients:   make(map[chan string]bool),
+		tickets:   newEventTicketStore(time.Now),
+
+		machineNames:   machineHostNames(),
+		refusalNotices: newRefusalNotices(time.Now, refusalNoticeInterval, refusalNoticeMaxTracked),
+
+		remoteLoginThrottle:   NewLoginThrottle(time.Now, loginThrottleBaseDelay, loginThrottleMaxDelay),
+		loopbackLoginThrottle: NewLoginThrottle(time.Now, loginThrottleBaseDelay, loginThrottleMaxDelay),
 	}
 }
 
@@ -70,6 +107,9 @@ func (s *Server) GetLibraries() []string {
 func (s *Server) log(message string) {
 	s.logMutex.Lock()
 	defer s.logMutex.Unlock()
+	if s.logObserver != nil {
+		s.logObserver(message)
+	}
 	if s.SkipEvents {
 		return
 	}
@@ -92,6 +132,19 @@ func (s *Server) writeError(w http.ResponseWriter, message string, code int) {
 	})
 }
 
+// writeManagerError reports a manager failure, mapping a rejected path to 403.
+func (s *Server) writeManagerError(w http.ResponseWriter, err error) {
+	if errors.Is(err, manager.ErrPathNotAllowed) {
+		s.writeError(w, "Security violation: path not allowed", http.StatusForbidden)
+		return
+	}
+	if errors.Is(err, library.ErrCounterpartExists) {
+		s.writeError(w, library.ErrCounterpartExists.Error(), http.StatusConflict)
+		return
+	}
+	s.writeError(w, err.Error(), http.StatusInternalServerError)
+}
+
 func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -100,22 +153,25 @@ func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 			remoteIP = ip
 		}
 
-		s.log(fmt.Sprintf("[Request] %s -> %s %s", remoteIP, r.Method, r.URL.Path))
+		s.log(fmt.Sprintf("[Request] %s -> %s %s", remoteIP, utils.SanitizeForLog(r.Method), utils.SanitizeForLog(r.URL.Path)))
 
 		next.ServeHTTP(w, r)
 
-		s.log(fmt.Sprintf("[Completed] %s %s in %v", r.Method, r.URL.Path, time.Since(start)))
+		s.log(fmt.Sprintf("[Completed] %s %s in %v", utils.SanitizeForLog(r.Method), utils.SanitizeForLog(r.URL.Path), time.Since(start)))
 	})
 }
 
-// corsMiddleware allows all CORS requests
+// corsMiddleware applies the same-origin CORS policy to every route, including
+// the event stream. Preflights from other origins are rejected.
 func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept, Origin")
+		originAccepted := applyCORSHeaders(w, r)
 
-		if r.Method == "OPTIONS" {
+		if r.Method == http.MethodOptions {
+			if r.Header.Get(headerOrigin) != "" && !originAccepted {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -153,7 +209,9 @@ func (s *Server) Broadcast(eventType string, data interface{}) {
 	}
 }
 
-func (s *Server) Start(port string, libraries []string) error {
+// Start listens on bindHost:port. bindHost is the already-resolved host (see
+// config.ResolveBindHost), for example "0.0.0.0" for all interfaces.
+func (s *Server) Start(bindHost, port string, libraries []string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -164,11 +222,13 @@ func (s *Server) Start(port string, libraries []string) error {
 	mux := http.NewServeMux()
 
 	// SSE Endpoint (Secured)
-	mux.Handle("/api/events", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/events/ticket", s.NonSlidingAuthMiddleware(http.HandlerFunc(s.handleEventTicket)))
+
+	mux.Handle("/api/events", s.eventsAuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sessionToken, _ := r.Context().Value(sessionTokenContextKey{}).(string)
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
 
 		clientChan := make(chan string, 1000) // Increase buffer
 		s.clientsMu.Lock()
@@ -185,11 +245,17 @@ func (s *Server) Start(port string, libraries []string) error {
 		notify := r.Context().Done()
 		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
+		sessionRecheck := time.NewTicker(s.recheckInterval())
+		defer sessionRecheck.Stop()
 
 		for {
 			select {
 			case <-notify:
 				return
+			case <-sessionRecheck.C:
+				if !s.sessionIsValid(sessionToken) {
+					return
+				}
 			case msg := <-clientChan:
 				fmt.Fprint(w, msg)
 				if flusher, ok := w.(http.Flusher); ok {
@@ -206,7 +272,7 @@ func (s *Server) Start(port string, libraries []string) error {
 	})))
 
 	// Scan Cancel Endpoint
-	mux.HandleFunc("/api/scan/cancel", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/scan/cancel", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.scanMu.Lock()
 		if s.scanCancel != nil {
 			s.scanCancel()
@@ -217,13 +283,13 @@ func (s *Server) Start(port string, libraries []string) error {
 		s.scanWg.Wait()
 
 		json.NewEncoder(w).Encode(map[string]bool{"success": true})
-	})
+	})))
 
 	// Rate Limiter for Login: 5 attempts per minute
 	loginLimiter := NewRateLimiter(5, 1*time.Minute)
 
 	// Auth: Challenge Endpoint
-	mux.HandleFunc("/api/auth/challenge", loginLimiter.Middleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/auth/challenge", s.requireJSONContentType(loginLimiter.Middleware(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -231,8 +297,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		var req struct {
 			Username string `json:"username"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.writeError(w, "Invalid request body", 400)
+		if !s.decodeJSONBody(w, r, &req) {
 			return
 		}
 
@@ -254,47 +319,68 @@ func (s *Server) Start(port string, libraries []string) error {
 			"success": true,
 			"nonce":   nonce,
 		})
-	}))
+	})))
 
 	// Auth: Login Endpoint (Simple Password)
-	mux.HandleFunc("/api/auth/login", loginLimiter.Middleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/auth/login", s.requireJSONContentType(loginLimiter.Middleware(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		var req struct {
-			Username   string `json:"username"`
-			Password   string `json:"password"`
-			DeviceName string `json:"deviceName"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.writeError(w, "Invalid request body", 400)
-			return
-		}
-
 		if s.auth == nil {
 			s.writeError(w, "Auth service not initialized", 500)
 			return
 		}
+		if s.rejectPasswordLogin(w, r) {
+			return
+		}
 
-		token, err := s.auth.Login(req.Username, req.Password, req.DeviceName)
+		var req struct {
+			Username   string `json:"username"`
+			Password   string `json:"password"`
+			DeviceName string `json:"deviceName"`
+			DeviceID   string `json:"deviceId"`
+		}
+		if !s.decodeJSONBody(w, r, &req) {
+			return
+		}
+
+		// Charged only once the request is a well-formed JSON login, so a
+		// blind cross-site POST cannot advance the lockout.
+		throttle := s.throttleFor(r)
+		if admitted, retryAfter := throttle.Admit(); !admitted {
+			s.writeThrottled(w, retryAfter)
+			return
+		}
+
+		token, err := s.auth.Login(req.Username, req.Password, req.DeviceName, req.DeviceID)
 		if err != nil {
-			s.log(fmt.Sprintf("Login failed for user '%s' from device '%s': %v", req.Username, req.DeviceName, err))
+			s.log(fmt.Sprintf("Login failed for user %s from device %s: %v", utils.SanitizeForLog(req.Username), utils.SanitizeForLog(req.DeviceName), err))
 			// Generic error for security
 			s.writeError(w, "Invalid credentials", 401)
 			return
 		}
-		s.log(fmt.Sprintf("User '%s' logged in successfully from '%s'", req.Username, req.DeviceName))
+		throttle.Succeeded()
+		s.log(fmt.Sprintf("User %s logged in successfully from %s",utils.SanitizeForLog(req.Username), utils.SanitizeForLog(req.DeviceName)))
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": true,
 			"token":   token,
 		})
-	}))
+	})))
+
+	// Auth: one-time pairing code redemption (unauthenticated, shares the login limiter)
+	mux.HandleFunc("/api/auth/pair", s.requireJSONContentType(loginLimiter.Middleware(s.handleAuthPair)))
+
+	// Auth: pre-login capability status (unauthenticated, booleans only)
+	mux.HandleFunc("/api/auth/status", s.handleAuthStatus)
 
 	// Auth: List Sessions
 	mux.Handle("/api/auth/sessions", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !s.requireAuthService(w) {
+			return
+		}
 		sessions, err := s.auth.ListSessions()
 		if err != nil {
 			s.writeError(w, err.Error(), 500)
@@ -315,8 +401,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		var req struct {
 			Libraries []string `json:"libraries"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.writeError(w, "Invalid request body", 400)
+		if !s.decodeJSONBody(w, r, &req) {
 			return
 		}
 
@@ -354,11 +439,13 @@ func (s *Server) Start(port string, libraries []string) error {
 		var req struct {
 			ID string `json:"id"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.writeError(w, "Invalid request body", 400)
+		if !s.decodeJSONBody(w, r, &req) {
 			return
 		}
 
+		if !s.requireAuthService(w) {
+			return
+		}
 		if err := s.auth.RevokeSession(req.ID); err != nil {
 			s.writeError(w, err.Error(), 500)
 			return
@@ -389,11 +476,11 @@ func (s *Server) Start(port string, libraries []string) error {
 			return
 		}
 
-		s.log(fmt.Sprintf("Client requested packages for: %s", targetPath))
+		s.log(fmt.Sprintf("Client requested packages for: %s", utils.SanitizeForLog(targetPath)))
 
 		// Security: Ensure targetPath is in allowed libraries
 		if err := s.manager.ValidatePath(targetPath); err != nil {
-			s.log(fmt.Sprintf("Access denied. Target: %s. Error: %v", targetPath, err))
+			s.log(fmt.Sprintf("Access denied. Target: %s. Error: %s", utils.SanitizeForLog(targetPath), utils.SanitizeForLog(err.Error())))
 			s.writeError(w, "Access denied to this library path", 403)
 			return
 		}
@@ -521,8 +608,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		var req struct {
 			FilePath string `json:"filePath"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.writeError(w, err.Error(), 400)
+		if !s.decodeJSONBody(w, r, &req) {
 			return
 		}
 
@@ -547,8 +633,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		if r.Method == "POST" {
 			// Update Config
 			var req map[string]interface{}
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				s.writeError(w, err.Error(), 400)
+			if !s.decodeJSONBody(w, r, &req) {
 				return
 			}
 
@@ -587,7 +672,7 @@ func (s *Server) Start(port string, libraries []string) error {
 	})))
 
 	// Version Check Endpoint
-	mux.HandleFunc("/api/version/check", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/version/check", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		info, err := updater.GetLatestVersion(s.version, s.manager.GetConfig().UpdateChannel)
 		if err != nil {
 			s.writeError(w, err.Error(), 500)
@@ -595,76 +680,10 @@ func (s *Server) Start(port string, libraries []string) error {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(info)
-	})
+	})))
 
 	// Upload Endpoint
-	mux.Handle("/api/upload", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		// 500MB max limit
-		if err := r.ParseMultipartForm(500 << 20); err != nil {
-			s.writeError(w, "File too large", http.StatusBadRequest)
-			return
-		}
-
-		files := r.MultipartForm.File["file"]
-		// User requested path (or default to active)
-		targetPath := r.FormValue("path")
-		if targetPath == "" {
-			s.writeError(w, "Target path is required", 400)
-			return
-		}
-
-		// Security Check
-		if err := s.manager.ValidatePath(targetPath); err != nil {
-			s.writeError(w, "Access denied: Invalid library path", 403)
-			return
-		}
-
-		downloadDir := targetPath
-
-		// Calculate potential progress
-		// We can't easily know byte progress without reading all files first, which wastes memory.
-		// We track file count progress instead, matching Desktop behavior.
-		totalFiles := len(files)
-		count := 0
-
-		for i, fileHeader := range files {
-			// Broadcast Progress
-			current := i + 1 // 1-based index
-			s.Broadcast("scan:progress", map[string]int{
-				"current": current,
-				"total":   totalFiles,
-			})
-
-			file, err := fileHeader.Open()
-			if err != nil {
-				continue
-			}
-			defer file.Close()
-
-			dstPath := filepath.Join(downloadDir, filepath.Base(fileHeader.Filename))
-			dst, err := os.Create(dstPath)
-			if err != nil {
-				continue
-			}
-			defer dst.Close()
-
-			if _, err := io.Copy(dst, file); err == nil {
-				count++
-				s.log(fmt.Sprintf("Uploaded: %s (%d bytes)", fileHeader.Filename, fileHeader.Size))
-			}
-		}
-
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"success": true,
-			"count":   count,
-		})
-	})))
+	mux.Handle("/api/upload", s.AuthMiddleware(http.HandlerFunc(s.handleUpload)))
 
 	// Toggle Endpoint
 	mux.Handle("/api/toggle", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -678,8 +697,7 @@ func (s *Server) Start(port string, libraries []string) error {
 			Merge       bool   `json:"merge"`
 			LibraryPath string `json:"libraryPath"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.writeError(w, err.Error(), 400)
+		if !s.decodeJSONBody(w, r, &req) {
 			return
 		}
 
@@ -691,12 +709,12 @@ func (s *Server) Start(port string, libraries []string) error {
 
 		newPath, err := s.manager.TogglePackage(nil, req.FilePath, req.Enable, targetLib, req.Merge)
 		if err != nil {
-			s.log(fmt.Sprintf("Error toggling package: %v", err))
-			s.writeError(w, err.Error(), 500)
+			s.log(fmt.Sprintf("Error toggling package: %s", utils.SanitizeForLog(err.Error())))
+			s.writeManagerError(w, err)
 			return
 		}
 
-		s.log(fmt.Sprintf("Toggled package: %s (Enabled: %v)", filepath.Base(req.FilePath), req.Enable))
+		s.log(fmt.Sprintf("Toggled package: %s (Enabled: %v)", utils.SanitizeForLog(filepath.Base(req.FilePath)), req.Enable))
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -781,8 +799,7 @@ func (s *Server) Start(port string, libraries []string) error {
 			FilePath    string `json:"filePath"`
 			LibraryPath string `json:"libraryPath"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.writeError(w, err.Error(), 400)
+		if !s.decodeJSONBody(w, r, &req) {
 			return
 		}
 
@@ -806,12 +823,12 @@ func (s *Server) Start(port string, libraries []string) error {
 		}
 
 		if err := s.manager.DeleteToTrash(req.FilePath); err != nil {
-			s.log(fmt.Sprintf("Error deleting package: %v", err))
+			s.log(fmt.Sprintf("Error deleting package: %s", utils.SanitizeForLog(err.Error())))
 			s.writeError(w, err.Error(), 500)
 			return
 		}
 
-		s.log(fmt.Sprintf("Deleted package: %s", filepath.Base(req.FilePath)))
+		s.log(fmt.Sprintf("Deleted package: %s", utils.SanitizeForLog(filepath.Base(req.FilePath))))
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": true,
@@ -829,25 +846,19 @@ func (s *Server) Start(port string, libraries []string) error {
 			Others      []string `json:"others"`
 			LibraryPath string   `json:"libraryPath"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.writeError(w, err.Error(), 400)
+		if !s.decodeJSONBody(w, r, &req) {
 			return
 		}
 
-		// Security Check: Ensure all paths are somewhat valid?
-		// Manager usually handles exact validation, but ensuring containment is good practice.
-		// But LibraryPath might be dynamic.
-		// For now, assume Manager logic is robust or add basic check:
 		if req.LibraryPath == "" {
 			s.writeError(w, "Library path is required", 400)
 			return
 		}
 
-		// Call Manager
 		res, err := s.manager.ResolveConflicts(req.KeepPath, req.Others, req.LibraryPath)
 		if err != nil {
-			s.log(fmt.Sprintf("Error resolving conflicts: %v", err))
-			s.writeError(w, err.Error(), 500)
+			s.log(fmt.Sprintf("Error resolving conflicts: %s", utils.SanitizeForLog(err.Error())))
+			s.writeManagerError(w, err)
 			return
 		}
 
@@ -867,8 +878,7 @@ func (s *Server) Start(port string, libraries []string) error {
 			DestLib   string   `json:"destLib"`
 			Overwrite bool     `json:"overwrite"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.writeError(w, err.Error(), 400)
+		if !s.decodeJSONBody(w, r, &req) {
 			return
 		}
 
@@ -876,16 +886,6 @@ func (s *Server) Start(port string, libraries []string) error {
 		if destPath == "" {
 			s.writeError(w, "Destination path is required", 400)
 			return
-		}
-
-		// Security check: ensure source files are in allowed libraries?
-		// CopyPackagesToLibrary reads from src.
-		// We should validate sources are in s.libraries OR activePath.
-		for _, src := range req.FilePaths {
-			if err := s.manager.ValidatePath(src); err != nil {
-				s.writeError(w, fmt.Sprintf("Access denied: Source file %s not in allowed libraries", src), 403)
-				return
-			}
 		}
 
 		collisions, err := s.manager.CopyPackagesToLibrary(req.FilePaths, destPath, req.Overwrite, func(current, total int, filename string, status string) {
@@ -897,15 +897,15 @@ func (s *Server) Start(port string, libraries []string) error {
 			})
 		})
 		if err != nil {
-			s.log(fmt.Sprintf("Error installing packages: %v", err))
-			s.writeError(w, err.Error(), 500)
+			s.log(fmt.Sprintf("Error installing packages: %s", utils.SanitizeForLog(err.Error())))
+			s.writeManagerError(w, err)
 			return
 		}
 
 		if len(collisions) > 0 {
 			s.log(fmt.Sprintf("Install collisions detected: %d files", len(collisions)))
 		} else {
-			s.log(fmt.Sprintf("Installed %d packages to %s", len(req.FilePaths), filepath.Base(destPath)))
+			s.log(fmt.Sprintf("Installed %d packages to %s", len(req.FilePaths), utils.SanitizeForLog(filepath.Base(destPath))))
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -925,8 +925,7 @@ func (s *Server) Start(port string, libraries []string) error {
 			Files []string `json:"files"`
 			Path  string   `json:"path"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			s.writeError(w, err.Error(), 400)
+		if !s.decodeJSONBody(w, r, &req) {
 			return
 		}
 
@@ -956,7 +955,7 @@ func (s *Server) Start(port string, libraries []string) error {
 	})))
 
 	// Restore Endpoint
-	mux.HandleFunc("/api/restore", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/api/restore", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -971,7 +970,7 @@ func (s *Server) Start(port string, libraries []string) error {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": true,
 		})
-	})
+	})))
 
 	// Serve Frontend (Dist)
 	// Use embedded assets
@@ -1011,12 +1010,13 @@ func (s *Server) Start(port string, libraries []string) error {
 
 	mux.Handle("/", distFs)
 
-	// Bind to all interfaces to allow remote access
-	bindAddr := "0.0.0.0:" + port
-
 	s.httpSrv = &http.Server{
-		Addr:    bindAddr,
-		Handler: s.corsMiddleware(s.loggingMiddleware(mux)),
+		Addr:    net.JoinHostPort(bindHost, port),
+		Handler: s.hostGuardMiddleware(s.corsMiddleware(s.loggingMiddleware(mux))),
+
+		ReadHeaderTimeout: durationOrDefault(s.readHeaderTimeout, defaultReadHeaderTimeout),
+		IdleTimeout:       durationOrDefault(s.idleTimeout, defaultIdleTimeout),
+		MaxHeaderBytes:    maxRequestHeaderBytes,
 	}
 
 	listener, err := net.Listen("tcp", s.httpSrv.Addr)
@@ -1026,8 +1026,9 @@ func (s *Server) Start(port string, libraries []string) error {
 	}
 
 	s.running = true
+	s.boundAddr = listener.Addr().String()
 
-	s.log(fmt.Sprintf("Starting server on port %s...", port))
+	s.log(fmt.Sprintf("Starting server on %s...", s.boundAddr))
 	s.log(fmt.Sprintf("Serving %d libraries.", len(libraries)))
 	s.log("Web interface available at root URL.")
 
@@ -1044,6 +1045,13 @@ func (s *Server) Start(port string, libraries []string) error {
 	return nil
 }
 
+func durationOrDefault(configured, fallback time.Duration) time.Duration {
+	if configured <= 0 {
+		return fallback
+	}
+	return configured
+}
+
 func (s *Server) Stop() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1053,12 +1061,19 @@ func (s *Server) Stop() error {
 	}
 
 	s.log("Stopping server...")
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	grace := s.shutdownGracePeriod
+	if grace <= 0 {
+		grace = defaultShutdownGracePeriod
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), grace)
 	defer cancel()
 
 	err := s.httpSrv.Shutdown(ctx)
 	if err != nil {
-		s.log(fmt.Sprintf("Error during shutdown: %v", err))
+		// Streams that outlive the grace period would otherwise keep being
+		// served on an address the caller believes is closed.
+		s.log(fmt.Sprintf("Graceful shutdown timed out, closing remaining connections: %v", err))
+		err = s.httpSrv.Close()
 	}
 
 	s.running = false
