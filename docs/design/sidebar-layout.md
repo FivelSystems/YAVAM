@@ -276,6 +276,80 @@ implementation, not treated as a frozen spec themselves:
   gated by `isWeb`) still holds, it just needs to be checked through the new
   location.
 
+## Sidebar visibility: navigation state, not a persisted display preference
+
+> **Status of this section:** decided during a post-implementation review;
+> not yet implemented. Scope: `frontend/src/hooks/useLayoutSettings.ts`'s
+> `isSidebarOpen` only. Everything above this section (the filter panel's
+> contents) is unaffected and stays implemented as specced.
+
+`useLayoutSettings.ts` currently treats `isSidebarOpen` the same way it treats
+`gridSize`, `viewMode`, and `sortMode`: a per-device value read from
+`localStorage` on mount and written back on every explicit toggle, so a
+desktop session remembers whatever open/closed state it was left in the
+previous launch. A live review of this pattern raised a reasonable objection:
+the sidebar isn't a display setting like the others, it's the application's
+only access point to the library switcher — `Dashboard.tsx` wraps the entire
+`<Sidebar>` (switcher header *and* filter panel together) inside
+`SidebarContainer`, so collapsing it hides both, not just the filter panel
+this document otherwise covers.
+
+**Decision: drop persistence for this value. On desktop (`≥768px`),
+`isSidebarOpen` always initializes to `true` on load, regardless of what was
+stored on a previous visit.** The in-session toggle (the open/close button in
+`FilterToolbar.tsx`) and the existing cross-breakpoint resize behavior (fixed
+in `1414147`, which closes the drawer live when resizing into the mobile
+range and restores the desktop value when resizing back out) are unaffected —
+this is only about what the *initial* value is on a fresh load, not about
+removing the ability to close it during a session or touching the resize
+sync.
+
+Reasoning:
+
+- **It gates access to other content, unlike every other layout setting in
+  this hook.** `gridSize`, `viewMode`, and `sortMode` only change how
+  already-reachable content is displayed; getting one of them "wrong" costs
+  nothing more than an extra click to adjust it. Getting `isSidebarOpen`
+  "wrong" after the fact means the library switcher — not just the filter
+  panel this document specs — is gone with no on-screen cue that anything is
+  hidden beyond a plain toggle icon in the toolbar, which is easy to miss if
+  the user wasn't the one who closed it, or doesn't remember doing so days or
+  launches later. That's a materially worse failure mode than the one
+  persistence is meant to prevent (an unnecessary extra click).
+- **The reopen control isn't lost, which makes this a low-cost change for the
+  power-user case it removes.** `FilterToolbar`'s toggle renders outside
+  `SidebarContainer`, so it stays visible and reachable even while the
+  sidebar is collapsed — a user who deliberately wants a single-pane layout
+  is one click away from it every launch, not locked out. The trade-off is a
+  single extra click per session for that user, in exchange for removing a
+  confusing, cumulative trap for everyone else.
+- **There's an existing precedent for context-sensitive defaults over a
+  blanket remembered value.** `viewMode`'s own initializer already special-
+  cases the sub-768px default (`list` instead of the stored/`grid` default).
+  Making `isSidebarOpen` default to the breakpoint-appropriate value instead
+  of a remembered one is consistent with that existing pattern, not a new one.
+- Mobile (`≤768px`) is unchanged — it already hardcodes `false` on initial
+  load regardless of storage (the drawer-over-content model never treated
+  this as a remembered preference there to begin with), so this decision only
+  changes the desktop default.
+
+This is scoped to the sidebar's *current* full-width, full-hide form. If the
+icon-only sidebar rail described in
+[roadmap/search.md](../roadmap/search.md) ships later, collapsing it costs
+far less screen real estate and far less "what disappeared" ambiguity than
+fully hiding the current sidebar does — persisting a rail's collapsed state
+may well be the right call then. This decision applies to the sidebar as it
+exists today, not as a permanent ban on ever persisting a collapse state for
+this element.
+
+Implementation note: remove the `localStorage.getItem('layout_isSidebarOpen')`
+read from the initializer and the `localStorage.setItem` call from the
+wrapped `setIsSidebarOpen`, for both the explicit-toggle path and the
+resize-resync effect's "restore desktop value" branch (which should now just
+set `true` rather than reading storage). No migration is needed for the
+now-unused `layout_isSidebarOpen` key already present in some users'
+`localStorage` — it simply stops being read.
+
 ## Non-goals
 
 - No change to the library switcher, library-reorder dropdown, or context
