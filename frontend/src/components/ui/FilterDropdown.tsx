@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Check, Search } from 'lucide-react';
 import clsx from 'clsx';
+import { useDismissOnOutsideInteraction } from '../../hooks/useDismissOnOutsideInteraction';
 
 /** A single selectable value inside a {@link FilterDropdown}. */
 export interface FilterOption {
@@ -103,39 +104,13 @@ export const FilterDropdown = ({
         const isCoarsePointer = typeof window.matchMedia === 'function'
             && window.matchMedia('(pointer: coarse)').matches;
         if (searchable && !isCoarsePointer) searchRef.current?.focus();
-
-        const onDocPointerDown = (e: MouseEvent | TouchEvent) => {
-            const t = e.target as Node;
-            if (popoverRef.current?.contains(t) || triggerRef.current?.contains(t)) return;
-            setOpen(false);
-        };
-        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
-
-        // A dropdown anchored to a button in a scroll container detaches on
-        // scroll/resize; closing is the least surprising behaviour (matches
-        // native). But most mobile browsers fire `window.resize` when the
-        // virtual keyboard opens/closes (height-only change) — that must NOT
-        // close the dropdown mid-typing, so only react to an actual width
-        // change (real resize/rotation), per #55.
-        const widthAtOpen = window.innerWidth;
-        const onResize = () => {
-            if (window.innerWidth !== widthAtOpen) setOpen(false);
-        };
-        const onScroll = () => setOpen(false);
-
-        document.addEventListener('mousedown', onDocPointerDown);
-        document.addEventListener('touchstart', onDocPointerDown);
-        document.addEventListener('keydown', onKey);
-        window.addEventListener('resize', onResize);
-        window.addEventListener('scroll', onScroll, true);
-        return () => {
-            document.removeEventListener('mousedown', onDocPointerDown);
-            document.removeEventListener('touchstart', onDocPointerDown);
-            document.removeEventListener('keydown', onKey);
-            window.removeEventListener('resize', onResize);
-            window.removeEventListener('scroll', onScroll, true);
-        };
     }, [open, searchable]);
+
+    useDismissOnOutsideInteraction({
+        insideRefs: [popoverRef, triggerRef],
+        onDismiss: () => setOpen(false),
+        enabled: open,
+    });
 
     const toggle = () => {
         if (open) { setOpen(false); return; }

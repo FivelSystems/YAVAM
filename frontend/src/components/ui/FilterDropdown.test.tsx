@@ -85,4 +85,27 @@ describe('FilterDropdown (#55 — mobile virtual-keyboard self-close)', () => {
 
         expect(screen.queryByPlaceholderText('Filter…')).not.toBeInTheDocument();
     });
+
+    it('does not close when the option list itself is scrolled (shared useDismissOnOutsideInteraction)', () => {
+        setMatchMedia(true);
+        setup();
+        fireEvent.click(screen.getByText('Status'));
+        const optionList = document.querySelector('.overflow-y-auto');
+        expect(optionList).toBeTruthy();
+
+        fireEvent.scroll(optionList!);
+
+        expect(screen.getByPlaceholderText('Filter…')).toBeInTheDocument();
+    });
+
+    it('closes when a scroll happens outside the popover', () => {
+        setMatchMedia(true);
+        setup();
+        fireEvent.click(screen.getByText('Status'));
+        expect(screen.getByPlaceholderText('Filter…')).toBeInTheDocument();
+
+        fireEvent.scroll(document.body);
+
+        expect(screen.queryByPlaceholderText('Filter…')).not.toBeInTheDocument();
+    });
 });
