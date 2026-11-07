@@ -8,6 +8,9 @@ import { SettingItem } from '../components/SettingItem';
 import { Toggle } from '../../../components/ui/Toggle';
 import { Input } from '../../../components/ui/Input';
 import { motion } from 'framer-motion';
+import Modal from '../../../components/ui/Modal';
+import { Button } from '../../../components/ui/Button';
+import RemoteAccessSettings from '../components/RemoteAccessSettings';
 
 const container = {
     hidden: { opacity: 0 },
@@ -61,6 +64,7 @@ const NetworkTab = ({
     // Session State (Local to this tab as it polls)
     const [sessions, setSessions] = useState<any[]>([]);
     const [isRunning, setIsRunning] = useState(false);
+    const [sessionToRevoke, setSessionToRevoke] = useState<string | null>(null);
 
     const fetchData = async () => {
         // @ts-ignore
@@ -76,7 +80,7 @@ const NetworkTab = ({
     };
 
     const handleRevokeSession = async (id: string) => {
-        if (!confirm("Are you sure you want to disconnect this device?")) return;
+        setSessionToRevoke(null);
         try {
             // @ts-ignore
             await window.go.main.App.RevokeSession(id);
@@ -101,7 +105,12 @@ const NetworkTab = ({
         if (!isWeb) {
             fetchData();
             const interval = setInterval(fetchData, 2000); // Faster poll for responsiveness
-            return () => clearInterval(interval);
+            // @ts-ignore
+            const unsubscribe = window.runtime?.EventsOn?.('server:status:changed', () => { fetchData(); });
+            return () => {
+                clearInterval(interval);
+                if (typeof unsubscribe === 'function') unsubscribe();
+            };
         }
     }, [isWeb]);
 
@@ -251,6 +260,12 @@ const NetworkTab = ({
                     )}
                 </SettingGroup>
 
+                {!isWeb && (
+                    <motion.div variants={item}>
+                        <RemoteAccessSettings />
+                    </motion.div>
+                )}
+
                 {/* Console */}
                 <SettingGroup title="Server Logs" className="bg-black/30" variants={item}>
                     <Console logs={logs} onClear={() => setLogs([])} maxHeight="h-32" />
@@ -261,7 +276,7 @@ const NetworkTab = ({
                     <motion.div variants={item} className="mt-6 border-t border-gray-700 pt-6">
                         <h4 className="text-sm font-medium text-white mb-3 flex items-center gap-2">
                             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                            Active Devices ({sessions.length})
+                            Paired &amp; Active Devices ({sessions.length})
                         </h4>
                         <div className="space-y-2">
                             {sessions.length === 0 ? (
@@ -283,7 +298,7 @@ const NetworkTab = ({
 
                                         {session.deviceName !== "Local System" ? (
                                             <button
-                                                onClick={() => handleRevokeSession(session.id)}
+                                                onClick={() => setSessionToRevoke(session.id)}
                                                 className="text-xs text-red-400 hover:text-red-300 hover:bg-red-900/20 px-2 py-1 rounded transition-colors"
                                             >
                                                 Disconnect
@@ -298,6 +313,22 @@ const NetworkTab = ({
                     </motion.div>
                 )}
             </div>
+
+            <Modal
+                isOpen={sessionToRevoke !== null}
+                onClose={() => setSessionToRevoke(null)}
+                title="Disconnect device"
+                description="This device will have to pair or sign in again to regain access."
+                size="sm"
+                footer={
+                    <>
+                        <Button variant="ghost" onClick={() => setSessionToRevoke(null)}>Cancel</Button>
+                        <Button variant="danger" onClick={() => sessionToRevoke && handleRevokeSession(sessionToRevoke)}>Disconnect</Button>
+                    </>
+                }
+            >
+                <p className="text-sm text-gray-300">Are you sure you want to disconnect this device?</p>
+            </Modal>
         </motion.div>
     );
 };
