@@ -101,7 +101,7 @@ func TestAPI_EmptyPathSecurity(t *testing.T) {
 	s.Start("127.0.0.1", "0", []string{})
 
 	// Construct Request to /api/packages
-	req := httptest.NewRequest("GET", "/api/packages", nil)
+	req := newTestRequest("GET", "/api/packages", nil)
 	// Add Auth Token (to bypass auth middleware)
 	req.Header.Set("Authorization", "Bearer valid")
 
@@ -136,7 +136,7 @@ func TestAPI_ExplicitPathSecurity(t *testing.T) {
 	s.Start("127.0.0.1", "0", []string{"C:/Allowed"})
 
 	// Let's test blocking of unsafe path
-	req := httptest.NewRequest("GET", "/api/packages?path=C:/Secrets", nil)
+	req := newTestRequest("GET", "/api/packages?path=C:/Secrets", nil)
 	req.Header.Set("Authorization", "Bearer valid")
 	w := httptest.NewRecorder()
 
@@ -158,7 +158,7 @@ func TestAPI_Config_SetupDone(t *testing.T) {
 	s.SkipEvents = true
 	s.Start("127.0.0.1", "0", []string{"C:/Allowed"})
 
-	req := httptest.NewRequest("GET", "/api/config", nil)
+	req := newTestRequest("GET", "/api/config", nil)
 	req.Header.Set("Authorization", "Bearer valid")
 	w := httptest.NewRecorder()
 

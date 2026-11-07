@@ -26,7 +26,7 @@ func TestAPI_MutatingRoutesRequireAuth(t *testing.T) {
 	s := startTestServer(t, func() { restoreCalled = true })
 
 	for _, path := range []string{"/api/scan/cancel", "/api/restore"} {
-		req := httptest.NewRequest(http.MethodPost, path, nil)
+		req := newTestRequest(http.MethodPost, path, nil)
 		w := httptest.NewRecorder()
 		s.httpSrv.Handler.ServeHTTP(w, req)
 		if w.Code != http.StatusUnauthorized {
@@ -43,7 +43,7 @@ func TestAPI_AuthenticatedRestoreAndCancel(t *testing.T) {
 	s := startTestServer(t, func() { restoreCalled = true })
 
 	for _, path := range []string{"/api/scan/cancel", "/api/restore"} {
-		req := httptest.NewRequest(http.MethodPost, path, nil)
+		req := newTestRequest(http.MethodPost, path, nil)
 		req.Header.Set("Authorization", "Bearer valid")
 		w := httptest.NewRecorder()
 		s.httpSrv.Handler.ServeHTTP(w, req)
@@ -97,8 +97,9 @@ func TestAPI_OversizedJSONBodyRejected(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		req := httptest.NewRequest(http.MethodPost, tt.path, strings.NewReader(oversizedJSONBody()))
+		req := newTestRequest(http.MethodPost, tt.path, strings.NewReader(oversizedJSONBody()))
 		req.RemoteAddr = "127.0.0.1:50000"
+		req.Header.Set("Content-Type", "application/json")
 		if tt.authenticated {
 			req.Header.Set("Authorization", "Bearer valid")
 		}
@@ -112,7 +113,7 @@ func TestAPI_OversizedJSONBodyRejected(t *testing.T) {
 
 func TestDecodeJSONBody_MalformedIsBadRequest(t *testing.T) {
 	s := &Server{}
-	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("{not json"))
+	req := newTestRequest(http.MethodPost, "/", strings.NewReader("{not json"))
 	w := httptest.NewRecorder()
 	var destination struct{}
 	if s.decodeJSONBody(w, req, &destination) {

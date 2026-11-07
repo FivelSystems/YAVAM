@@ -33,7 +33,7 @@ func TestTicketIssueAndStreamConnectDoNotSlideSession(t *testing.T) {
 		t.Fatalf("ticket connect: got %d", w.Code)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/events", nil)
+	req := newTestRequest(http.MethodGet, "/api/events", nil)
 	req.Header.Set("Authorization", "Bearer valid")
 	ctx, cancel := context.WithTimeout(req.Context(), 100*time.Millisecond)
 	defer cancel()
@@ -53,7 +53,7 @@ func TestRegularAuthMiddlewareStillSlidesSession(t *testing.T) {
 	s := &Server{auth: spy}
 	handler := s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 
-	req := httptest.NewRequest(http.MethodGet, "/api/anything", nil)
+	req := newTestRequest(http.MethodGet, "/api/anything", nil)
 	req.Header.Set("Authorization", "Bearer valid")
 	handler.ServeHTTP(httptest.NewRecorder(), req)
 

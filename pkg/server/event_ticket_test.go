@@ -78,7 +78,7 @@ func newTicketTestServer(t *testing.T, authService auth.AuthService, clock *fake
 
 func requestTicket(t *testing.T, s *Server, bearer string) (int, string) {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodPost, "/api/events/ticket", nil)
+	req := newTestRequest(http.MethodPost, "/api/events/ticket", nil)
 	if bearer != "" {
 		req.Header.Set("Authorization", "Bearer "+bearer)
 	}
@@ -92,7 +92,7 @@ func requestTicket(t *testing.T, s *Server, bearer string) (int, string) {
 }
 
 func openStreamWithTicket(s *Server, ticket string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(http.MethodGet, "/api/events?ticket="+ticket, nil)
+	req := newTestRequest(http.MethodGet, "/api/events?ticket="+ticket, nil)
 	ctx, cancel := context.WithTimeout(req.Context(), 200*time.Millisecond)
 	defer cancel()
 	w := httptest.NewRecorder()
@@ -159,7 +159,7 @@ func TestEventTicket_UnknownTicketRejected(t *testing.T) {
 func TestEvents_LongLivedQueryTokenNotAccepted(t *testing.T) {
 	s := newTicketTestServer(t, newRevocableAuth("valid"), &fakeClock{now: time.Now()})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/events?token=valid", nil)
+	req := newTestRequest(http.MethodGet, "/api/events?token=valid", nil)
 	w := httptest.NewRecorder()
 	s.httpSrv.Handler.ServeHTTP(w, req)
 	if w.Code != http.StatusUnauthorized {
@@ -170,7 +170,7 @@ func TestEvents_LongLivedQueryTokenNotAccepted(t *testing.T) {
 func TestEvents_BearerHeaderStillAccepted(t *testing.T) {
 	s := newTicketTestServer(t, newRevocableAuth("valid"), &fakeClock{now: time.Now()})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/events", nil)
+	req := newTestRequest(http.MethodGet, "/api/events", nil)
 	req.Header.Set("Authorization", "Bearer valid")
 	ctx, cancel := context.WithTimeout(req.Context(), 100*time.Millisecond)
 	defer cancel()
@@ -185,7 +185,7 @@ func TestEvents_OtherRoutesStillAcceptQueryToken(t *testing.T) {
 	s := newTicketTestServer(t, newRevocableAuth("valid"), &fakeClock{now: time.Now()})
 
 	for _, path := range []string{"/api/thumbnail?filePath=x&token=valid", "/files/?path=x&token=valid"} {
-		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req := newTestRequest(http.MethodGet, path, nil)
 		w := httptest.NewRecorder()
 		s.httpSrv.Handler.ServeHTTP(w, req)
 		if w.Code == http.StatusUnauthorized {
@@ -232,7 +232,7 @@ func TestEvents_StreamEndsWhenSessionRevoked(t *testing.T) {
 	authService := newRevocableAuth("valid")
 	s := newTicketTestServer(t, authService, &fakeClock{now: time.Now()})
 
-	req := httptest.NewRequest(http.MethodGet, "/api/events", nil)
+	req := newTestRequest(http.MethodGet, "/api/events", nil)
 	req.Header.Set("Authorization", "Bearer valid")
 	ctx, cancel := context.WithTimeout(req.Context(), 5*time.Second)
 	defer cancel()
