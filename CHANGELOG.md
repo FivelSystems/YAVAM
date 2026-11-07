@@ -6,6 +6,17 @@
 
 # Changelog
 
+## [1.3.21] - 2026-11-06
+
+### Changed
+- **Uploads**: Uploading through the web interface now accepts only package files and rejects a package that already exists in the target library instead of overwriting it.
+
+### Fixed
+- **Web Client Version**: The web client no longer shows a made-up version number when the server's version cannot be read; it now says the version is unknown.
+
+### Security
+- Hardened the remote-access server and its authentication. Updating is recommended if you use remote access.
+
 ## [1.3.20] - 2026-07-01
 
 ### Added
