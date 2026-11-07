@@ -104,10 +104,8 @@ func (s *Server) isGuestAllowed(r *http.Request) bool {
 			// "/api/events": // Secured. Logs should not be public.
 			return true
 		}
-
-		if strings.HasPrefix(path, "/files/") {
-			return true
-		}
+		// /files/ is deliberately absent: it serves whole package files, which
+		// guests may browse but never download.
 	}
 
 	// 2. Special POST Requests (Read-Only)
