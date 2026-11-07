@@ -22,6 +22,7 @@ type StoredSession struct {
 	Username   string    `json:"username"`
 	Role       string    `json:"role"`
 	DeviceName string    `json:"deviceName"`
+	DeviceID   string    `json:"deviceId,omitempty"` // client-held; a new session replaces only one with the same ID
 	IPAddress  string    `json:"ipAddress"`
 	CreatedAt  time.Time `json:"createdAt"`
 	LastUsedAt time.Time `json:"lastUsedAt"`

@@ -59,7 +59,7 @@ func TestRedeemedCodeYieldsUsableSession(t *testing.T) {
 	svc, _ := newPairingService(t)
 	code := issueCode(t, svc)
 
-	token, err := svc.RedeemPairingCode(code.Code, "Living room tablet")
+	token, err := svc.RedeemPairingCode(code.Code, "Living room tablet", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestRedeemedSessionSurvivesReload(t *testing.T) {
 	if err := svc.SetPassword(testPassword); err != nil {
 		t.Fatal(err)
 	}
-	token, err := svc.RedeemPairingCode(issueCode(t, svc).Code, "phone")
+	token, err := svc.RedeemPairingCode(issueCode(t, svc).Code, "phone", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,10 +101,10 @@ func TestCodeIsSingleUse(t *testing.T) {
 	svc, _ := newPairingService(t)
 	code := issueCode(t, svc)
 
-	if _, err := svc.RedeemPairingCode(code.Code, "first"); err != nil {
+	if _, err := svc.RedeemPairingCode(code.Code, "first", ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.RedeemPairingCode(code.Code, "second"); !errors.Is(err, ErrInvalidPairingCode) {
+	if _, err := svc.RedeemPairingCode(code.Code, "second", ""); !errors.Is(err, ErrInvalidPairingCode) {
 		t.Fatalf("second redemption: got %v, want ErrInvalidPairingCode", err)
 	}
 }
@@ -118,7 +118,7 @@ func TestExpiredCodeIsRejected(t *testing.T) {
 	if svc.PairingStatus().Active {
 		t.Fatal("expired code must not report as active")
 	}
-	if _, err := svc.RedeemPairingCode(code.Code, "late"); !errors.Is(err, ErrInvalidPairingCode) {
+	if _, err := svc.RedeemPairingCode(code.Code, "late", ""); !errors.Is(err, ErrInvalidPairingCode) {
 		t.Fatalf("expired redemption: got %v, want ErrInvalidPairingCode", err)
 	}
 }
@@ -129,7 +129,7 @@ func TestCodeStillValidJustBeforeExpiry(t *testing.T) {
 
 	clock.Advance(DefaultPairingTTL - time.Second)
 
-	if _, err := svc.RedeemPairingCode(code.Code, "punctual"); err != nil {
+	if _, err := svc.RedeemPairingCode(code.Code, "punctual", ""); err != nil {
 		t.Fatalf("code within its TTL must redeem: %v", err)
 	}
 }
@@ -137,7 +137,7 @@ func TestCodeStillValidJustBeforeExpiry(t *testing.T) {
 func TestNoOutstandingCodeIsInvalid(t *testing.T) {
 	svc, _ := newPairingService(t)
 
-	if _, err := svc.RedeemPairingCode("ABCD-EFGH", "dev"); !errors.Is(err, ErrInvalidPairingCode) {
+	if _, err := svc.RedeemPairingCode("ABCD-EFGH", "dev", ""); !errors.Is(err, ErrInvalidPairingCode) {
 		t.Fatalf("got %v, want ErrInvalidPairingCode", err)
 	}
 }
@@ -147,10 +147,10 @@ func TestRegeneratingInvalidatesPreviousCode(t *testing.T) {
 	first := issueCode(t, svc)
 	second := issueCode(t, svc)
 
-	if _, err := svc.RedeemPairingCode(first.Code, "dev"); !errors.Is(err, ErrInvalidPairingCode) {
+	if _, err := svc.RedeemPairingCode(first.Code, "dev", ""); !errors.Is(err, ErrInvalidPairingCode) {
 		t.Fatalf("previous code: got %v, want ErrInvalidPairingCode", err)
 	}
-	if _, err := svc.RedeemPairingCode(second.Code, "dev"); err != nil {
+	if _, err := svc.RedeemPairingCode(second.Code, "dev", ""); err != nil {
 		t.Fatalf("latest code must still redeem: %v", err)
 	}
 }
@@ -160,7 +160,7 @@ func TestFailuresDestroyTheCode(t *testing.T) {
 	code := issueCode(t, svc)
 
 	for i := 0; i < MaxPairingFailures; i++ {
-		if _, err := svc.RedeemPairingCode(wrongPairingCode, "attacker"); !errors.Is(err, ErrInvalidPairingCode) {
+		if _, err := svc.RedeemPairingCode(wrongPairingCode, "attacker", ""); !errors.Is(err, ErrInvalidPairingCode) {
 			t.Fatalf("attempt %d: got %v", i, err)
 		}
 	}
@@ -168,7 +168,7 @@ func TestFailuresDestroyTheCode(t *testing.T) {
 	if svc.PairingStatus().Active {
 		t.Fatal("code must be destroyed after the failure limit")
 	}
-	if _, err := svc.RedeemPairingCode(code.Code, "owner"); !errors.Is(err, ErrInvalidPairingCode) {
+	if _, err := svc.RedeemPairingCode(code.Code, "owner", ""); !errors.Is(err, ErrInvalidPairingCode) {
 		t.Fatalf("correct code after lockout: got %v, want ErrInvalidPairingCode", err)
 	}
 }
@@ -184,10 +184,10 @@ func TestCodeSurvivesFewerFailuresThanTheLimit(t *testing.T) {
 	code := issueCode(t, svc)
 
 	for i := 0; i < MaxPairingFailures-1; i++ {
-		svc.RedeemPairingCode(wrongPairingCode, "attacker")
+		svc.RedeemPairingCode(wrongPairingCode, "attacker", "")
 	}
 
-	if _, err := svc.RedeemPairingCode(code.Code, "owner"); err != nil {
+	if _, err := svc.RedeemPairingCode(code.Code, "owner", ""); err != nil {
 		t.Fatalf("code must survive %d failures: %v", MaxPairingFailures-1, err)
 	}
 }
@@ -196,15 +196,15 @@ func TestFailuresDoNotCarryOverToANewCode(t *testing.T) {
 	svc, _ := newPairingService(t)
 	issueCode(t, svc)
 	for i := 0; i < MaxPairingFailures-1; i++ {
-		svc.RedeemPairingCode(wrongPairingCode, "attacker")
+		svc.RedeemPairingCode(wrongPairingCode, "attacker", "")
 	}
 
 	fresh := issueCode(t, svc)
 
-	if _, err := svc.RedeemPairingCode(wrongPairingCode, "attacker"); !errors.Is(err, ErrInvalidPairingCode) {
+	if _, err := svc.RedeemPairingCode(wrongPairingCode, "attacker", ""); !errors.Is(err, ErrInvalidPairingCode) {
 		t.Fatal(err)
 	}
-	if _, err := svc.RedeemPairingCode(fresh.Code, "owner"); err != nil {
+	if _, err := svc.RedeemPairingCode(fresh.Code, "owner", ""); err != nil {
 		t.Fatalf("new code must start with a clean failure count: %v", err)
 	}
 }
@@ -221,7 +221,7 @@ func TestRedemptionNormalisesInput(t *testing.T) {
 			svc, _ := newPairingService(t)
 			code := issueCode(t, svc)
 
-			if _, err := svc.RedeemPairingCode(mangle(code.Code), "dev"); err != nil {
+			if _, err := svc.RedeemPairingCode(mangle(code.Code), "dev", ""); err != nil {
 				t.Fatalf("%q should redeem: %v", mangle(code.Code), err)
 			}
 		})
@@ -241,7 +241,7 @@ func TestConcurrentRedemptionsYieldOneSession(t *testing.T) {
 		go func(device string) {
 			defer wg.Done()
 			<-start
-			if _, err := svc.RedeemPairingCode(code.Code, device); err == nil {
+			if _, err := svc.RedeemPairingCode(code.Code, device, ""); err == nil {
 				successes.Add(1)
 			}
 		}(fmt.Sprintf("device-%d", i))
@@ -263,7 +263,7 @@ func TestPersistFailureLeavesNoSession(t *testing.T) {
 	code := issueCode(t, svc)
 	store.failSaves = true
 
-	_, err := svc.RedeemPairingCode(code.Code, "phone")
+	_, err := svc.RedeemPairingCode(code.Code, "phone", "")
 
 	if err == nil || errors.Is(err, ErrInvalidPairingCode) {
 		t.Fatalf("expected a persistence error, got %v", err)
@@ -273,7 +273,7 @@ func TestPersistFailureLeavesNoSession(t *testing.T) {
 	}
 
 	store.failSaves = false
-	if _, err := svc.RedeemPairingCode(code.Code, "phone"); !errors.Is(err, ErrInvalidPairingCode) {
+	if _, err := svc.RedeemPairingCode(code.Code, "phone", ""); !errors.Is(err, ErrInvalidPairingCode) {
 		t.Fatalf("consumed code must stay unusable: got %v", err)
 	}
 }
@@ -281,14 +281,14 @@ func TestPersistFailureLeavesNoSession(t *testing.T) {
 func TestPersistFailureKeepsReplacedSessionOfSameDevice(t *testing.T) {
 	store := newStoreWithAdmin(t)
 	svc, _ := newServiceOnStore(t, store)
-	existing, err := svc.Login("admin", failureTestPassword, "phone")
+	existing, err := svc.Login("admin", failureTestPassword, "phone", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	code := issueCode(t, svc)
 	store.failSaves = true
 
-	if _, err := svc.RedeemPairingCode(code.Code, "phone"); err == nil {
+	if _, err := svc.RedeemPairingCode(code.Code, "phone", ""); err == nil {
 		t.Fatal("expected a persistence error")
 	}
 
@@ -316,7 +316,7 @@ func TestPasswordChangeDestroysOutstandingCode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := svc.RedeemPairingCode(code.Code, "dev"); !errors.Is(err, ErrInvalidPairingCode) {
+	if _, err := svc.RedeemPairingCode(code.Code, "dev", ""); !errors.Is(err, ErrInvalidPairingCode) {
 		t.Fatalf("got %v, want ErrInvalidPairingCode", err)
 	}
 }
@@ -353,7 +353,7 @@ func TestPairedDeviceNameIsSanitised(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			svc, _ := newPairingService(t)
-			token, err := svc.RedeemPairingCode(issueCode(t, svc).Code, tc.input)
+			token, err := svc.RedeemPairingCode(issueCode(t, svc).Code, tc.input, "")
 			if err != nil {
 				t.Fatal(err)
 			}

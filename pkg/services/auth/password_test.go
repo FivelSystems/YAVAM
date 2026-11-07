@@ -12,7 +12,7 @@ const testPassword = "secret-pass"
 func TestSeededDefaultPasswordStillLogsIn(t *testing.T) {
 	svc, _, _ := newFreshService(t)
 
-	if _, err := svc.Login("admin", defaultAdminPassword, "dev"); err != nil {
+	if _, err := svc.Login("admin", defaultAdminPassword, "dev", ""); err != nil {
 		t.Fatalf("seeded default must work before any change: %v", err)
 	}
 }

@@ -324,6 +324,7 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 			Username   string `json:"username"`
 			Password   string `json:"password"`
 			DeviceName string `json:"deviceName"`
+			DeviceID   string `json:"deviceId"`
 		}
 		if !s.decodeJSONBody(w, r, &req) {
 			return
@@ -337,7 +338,7 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 			return
 		}
 
-		token, err := s.auth.Login(req.Username, req.Password, req.DeviceName)
+		token, err := s.auth.Login(req.Username, req.Password, req.DeviceName, req.DeviceID)
 		if err != nil {
 			s.log(fmt.Sprintf("Login failed for user %s from device %s: %v", utils.SanitizeForLog(req.Username), utils.SanitizeForLog(req.DeviceName), err))
 			// Generic error for security

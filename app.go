@@ -283,7 +283,7 @@ func (a *App) Login(username, password string) (string, error) {
 	}
 
 	// Simplified Login
-	return a.auth.Login(username, password, "Desktop Client")
+	return a.auth.Login(username, password, "Desktop Client", "")
 }
 
 // GetAppVersion returns the current application version

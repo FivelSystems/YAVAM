@@ -81,7 +81,7 @@ func TestValidateTokenNotBlockedByLoginPasswordCheck(t *testing.T) {
 	loginDone := make(chan struct{})
 	go func() {
 		defer close(loginDone)
-		svc.Login("admin", "secret", "other-device")
+		svc.Login("admin", "secret", "other-device", "")
 	}()
 
 	time.Sleep(50 * time.Millisecond)
@@ -115,7 +115,7 @@ func TestLoginRejectedWhenPasswordChangesDuringCheck(t *testing.T) {
 
 	result := make(chan error, 1)
 	go func() {
-		_, err := svc.Login("admin", "secret", "dev")
+		_, err := svc.Login("admin", "secret", "dev", "")
 		result <- err
 	}()
 

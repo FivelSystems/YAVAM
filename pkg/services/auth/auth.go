@@ -35,6 +35,10 @@ const (
 	// MinPasswordLength is the shortest admin password SetPassword accepts.
 	MinPasswordLength = 8
 
+	// systemSessionUsername belongs to the session GenerateToken opens for the
+	// application itself. Login and pairing only ever create "admin" sessions.
+	systemSessionUsername = "system"
+
 	// defaultAdminPassword only seeds a fresh install; SetPassword rejects it.
 	defaultAdminPassword = "admin"
 )
@@ -246,7 +250,7 @@ func (s *SimpleTokenAuthService) InitiateLogin(username string) (string, error) 
 // createSession registers a new session and returns the raw token, which is
 // never stored, plus any sessions evicted to stay within maxSessions so a
 // caller that rolls back can restore them. Callers must hold s.mu for writing.
-func (s *SimpleTokenAuthService) createSession(username, deviceName string) (string, map[string]*StoredSession, error) {
+func (s *SimpleTokenAuthService) createSession(username, deviceName, deviceID string) (string, map[string]*StoredSession, error) {
 	token, err := randomHex(tokenByteLength)
 	if err != nil {
 		return "", nil, err
@@ -264,10 +268,36 @@ func (s *SimpleTokenAuthService) createSession(username, deviceName string) (str
 		Username:   username,
 		Role:       "admin",
 		DeviceName: deviceName,
+		DeviceID:   deviceID,
 		CreatedAt:  now,
 		LastUsedAt: now,
 	}
 	return token, evicted, nil
+}
+
+// detachSessionsOfDevice removes the sessions the same device held before, so a
+// re-login does not pile up sessions. Only a valid, client-held deviceID counts:
+// a display name is shared by anyone, so it never identifies a device, and
+// without an ID nothing is replaced (maxSessions bounds growth instead).
+// Callers must hold s.mu for writing.
+func (s *SimpleTokenAuthService) detachSessionsOfDevice(username, deviceID string) map[string]*StoredSession {
+	detached := make(map[string]*StoredSession)
+	if deviceID == "" {
+		return detached
+	}
+	for tokenHash, session := range s.sessions {
+		if session.DeviceID == deviceID && session.Username == username {
+			detached[tokenHash] = session
+			delete(s.sessions, tokenHash)
+		}
+	}
+	return detached
+}
+
+func (s *SimpleTokenAuthService) restoreSessions(sessions map[string]*StoredSession) {
+	for tokenHash, session := range sessions {
+		s.sessions[tokenHash] = session
+	}
 }
 
 // evictLeastRecentlyUsed removes sessions, least recently used first, until at
@@ -302,7 +332,7 @@ func (s *SimpleTokenAuthService) evictLeastRecentlyUsed(keep int) map[string]*St
 }
 
 // Login verifies credentials directly using Bcrypt
-func (s *SimpleTokenAuthService) Login(username, password, deviceName string) (string, error) {
+func (s *SimpleTokenAuthService) Login(username, password, deviceName, deviceID string) (string, error) {
 	if username != "admin" {
 		return "", ErrInvalidToken
 	}
@@ -324,14 +354,12 @@ func (s *SimpleTokenAuthService) Login(username, password, deviceName string) (s
 
 	deviceName = sanitizeDeviceName(deviceName, defaultDeviceName)
 
-	for tokenHash, session := range s.sessions {
-		if session.DeviceName == deviceName && session.Username == username {
-			delete(s.sessions, tokenHash)
-		}
-	}
+	deviceID = sanitizeDeviceID(deviceID)
+	replaced := s.detachSessionsOfDevice(username, deviceID)
 
-	token, _, err := s.createSession(username, deviceName)
+	token, _, err := s.createSession(username, deviceName, deviceID)
 	if err != nil {
+		s.restoreSessions(replaced)
 		return "", err
 	}
 
@@ -411,6 +439,7 @@ func toUser(session *StoredSession) User {
 		DeviceName: session.DeviceName,
 		IPAddress:  session.IPAddress,
 		CreatedAt:  session.CreatedAt.Format(time.RFC3339),
+		IsSystem:   session.Username == systemSessionUsername,
 	}
 }
 
@@ -418,7 +447,7 @@ func (s *SimpleTokenAuthService) GenerateToken() (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	token, _, err := s.createSession("system", localSystemDevice)
+	token, _, err := s.createSession(systemSessionUsername, localSystemDevice, "")
 	if err != nil {
 		return "", err
 	}

@@ -20,7 +20,11 @@ type User struct {
 	DeviceName string `json:"deviceName"`
 	IPAddress  string `json:"ipAddress"`
 	CreatedAt  string `json:"createdAt"` // ISO or timestamp
-	Token      string `json:"-"`         // Internal use
+	// IsSystem is true only for the session the application opened for itself.
+	// It comes from the session's identity, never from DeviceName, which a
+	// client chooses.
+	IsSystem bool   `json:"isSystem"`
+	Token    string `json:"-"` // Internal use
 }
 
 // AuthService handles authentication and token management
@@ -49,8 +53,9 @@ type AuthService interface {
 	// RevokeSession removes a session by ID
 	RevokeSession(id string) error
 
-	// Login verifies credentials directly
-	Login(username, password, deviceName string) (string, error)
+	// Login verifies credentials directly. deviceID is optional; a valid one
+	// makes the new session replace the earlier session of the same device.
+	Login(username, password, deviceName, deviceID string) (string, error)
 
 	// SetPassword updates the admin password, enforcing the password rules
 	SetPassword(newPassword string) error
@@ -62,7 +67,7 @@ type AuthService interface {
 	CreatePairingCode(ttl time.Duration) (PairingCode, error)
 
 	// RedeemPairingCode consumes a pairing code and returns a session token
-	RedeemPairingCode(code, deviceName string) (string, error)
+	RedeemPairingCode(code, deviceName, deviceID string) (string, error)
 
 	// PairingStatus reports whether a pairing code is outstanding, never the code itself
 	PairingStatus() PairingStatus

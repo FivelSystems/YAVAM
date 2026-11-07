@@ -118,9 +118,10 @@ func (s *SimpleTokenAuthService) PairingStatus() PairingStatus {
 }
 
 // RedeemPairingCode consumes the outstanding code and opens a session for the
-// named device. If the session cannot be persisted it is rolled back and the
-// code stays consumed, so no session exists that a restart would lose.
-func (s *SimpleTokenAuthService) RedeemPairingCode(code, deviceName string) (string, error) {
+// named device. A valid deviceID makes it replace that device's earlier
+// session. If the session cannot be persisted it is rolled back and the code
+// stays consumed, so no session exists that a restart would lose.
+func (s *SimpleTokenAuthService) RedeemPairingCode(code, deviceName, deviceID string) (string, error) {
 	submitted := hashPairingCode(code)
 
 	s.mu.Lock()
@@ -131,9 +132,10 @@ func (s *SimpleTokenAuthService) RedeemPairingCode(code, deviceName string) (str
 	}
 
 	deviceName = sanitizeDeviceName(deviceName, pairedDeviceName)
-	replaced := s.detachSessionsOfDevice(pairedSessionUsername, deviceName)
+	deviceID = sanitizeDeviceID(deviceID)
+	replaced := s.detachSessionsOfDevice(pairedSessionUsername, deviceID)
 
-	token, evicted, err := s.createSession(pairedSessionUsername, deviceName)
+	token, evicted, err := s.createSession(pairedSessionUsername, deviceName, deviceID)
 	if err != nil {
 		s.restoreSessions(replaced)
 		return "", err
@@ -170,21 +172,4 @@ func (s *SimpleTokenAuthService) consumePairingCode(submitted [sha256.Size]byte)
 		s.pairing = nil
 	}
 	return false
-}
-
-func (s *SimpleTokenAuthService) detachSessionsOfDevice(username, deviceName string) map[string]*StoredSession {
-	detached := make(map[string]*StoredSession)
-	for tokenHash, session := range s.sessions {
-		if session.DeviceName == deviceName && session.Username == username {
-			detached[tokenHash] = session
-			delete(s.sessions, tokenHash)
-		}
-	}
-	return detached
-}
-
-func (s *SimpleTokenAuthService) restoreSessions(sessions map[string]*StoredSession) {
-	for tokenHash, session := range sessions {
-		s.sessions[tokenHash] = session
-	}
 }

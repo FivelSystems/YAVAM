@@ -32,7 +32,7 @@ func newClockedService(t *testing.T) (*SimpleTokenAuthService, *fakeClock, strin
 
 func loginToken(t *testing.T, svc *SimpleTokenAuthService, device string) string {
 	t.Helper()
-	token, err := svc.Login("admin", testPassword, device)
+	token, err := svc.Login("admin", testPassword, device, "")
 	if err != nil {
 		t.Fatalf("login: %v", err)
 	}

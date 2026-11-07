@@ -109,7 +109,7 @@ type loginSpyAuth struct {
 
 func (a *loginSpyAuth) HasCustomPassword() bool { return true }
 
-func (a *loginSpyAuth) Login(username, password, deviceName string) (string, error) {
+func (a *loginSpyAuth) Login(username, password, deviceName, deviceID string) (string, error) {
 	a.loginCalls.Add(1)
 	if a.succeed.Load() {
 		return "session-token", nil

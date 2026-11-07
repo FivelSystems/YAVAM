@@ -49,7 +49,7 @@ func (m *MockAuthService) CreatePairingCode(ttl time.Duration) (auth.PairingCode
 	return auth.PairingCode{}, nil
 }
 
-func (m *MockAuthService) RedeemPairingCode(code, deviceName string) (string, error) {
+func (m *MockAuthService) RedeemPairingCode(code, deviceName, deviceID string) (string, error) {
 	return "", auth.ErrInvalidPairingCode
 }
 
@@ -63,7 +63,7 @@ func (m *MockAuthService) RevokeSession(id string) error {
 	return nil
 }
 
-func (m *MockAuthService) Login(username, password, deviceName string) (string, error) {
+func (m *MockAuthService) Login(username, password, deviceName, deviceID string) (string, error) {
 	if username == "admin" && password == "password" {
 		return m.validToken, nil
 	}
