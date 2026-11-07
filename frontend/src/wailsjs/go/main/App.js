@@ -50,6 +50,10 @@ export function CopyPackagesToLibrary(arg1, arg2, arg3) {
   return window['go']['main']['App']['CopyPackagesToLibrary'](arg1, arg2, arg3);
 }
 
+export function CreatePairingCode() {
+  return window['go']['main']['App']['CreatePairingCode']();
+}
+
 export function CutFileToClipboard(arg1) {
   return window['go']['main']['App']['CutFileToClipboard'](arg1);
 }
@@ -116,6 +120,10 @@ export function GetPackageContents(arg1) {
 
 export function GetPackageThumbnail(arg1) {
   return window['go']['main']['App']['GetPackageThumbnail'](arg1);
+}
+
+export function GetRemoteAccessState() {
+  return window['go']['main']['App']['GetRemoteAccessState']();
 }
 
 export function GetThumbnailCacheSize() {
@@ -206,6 +214,10 @@ export function SelectDirectory() {
   return window['go']['main']['App']['SelectDirectory']();
 }
 
+export function SetAllowRemotePasswordLogin(arg1) {
+  return window['go']['main']['App']['SetAllowRemotePasswordLogin'](arg1);
+}
+
 export function SetAlwaysOnTop(arg1) {
   return window['go']['main']['App']['SetAlwaysOnTop'](arg1);
 }
@@ -248,6 +260,10 @@ export function SetPrivacyOptions(arg1, arg2, arg3, arg4) {
 
 export function SetPublicAccess(arg1) {
   return window['go']['main']['App']['SetPublicAccess'](arg1);
+}
+
+export function SetServerBindAddress(arg1) {
+  return window['go']['main']['App']['SetServerBindAddress'](arg1);
 }
 
 export function SetServerEnabled(arg1) {
