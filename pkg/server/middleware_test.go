@@ -42,6 +42,8 @@ func (m *MockAuthService) SetPassword(newPassword string) error {
 	return nil
 }
 
+func (m *MockAuthService) HasCustomPassword() bool { return true }
+
 func (m *MockAuthService) ListSessions() ([]auth.User, error) {
 	return []auth.User{}, nil
 }

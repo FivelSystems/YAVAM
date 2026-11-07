@@ -223,7 +223,7 @@ func TestSetPasswordRevokesAllSessions(t *testing.T) {
 		}
 	}
 
-	if _, err := svc.Login("admin", "secret", "phone"); err == nil {
+	if _, err := svc.Login("admin", testPassword, "phone"); err == nil {
 		t.Fatal("old password must be rejected")
 	}
 	freshToken, err := svc.Login("admin", "new-password", "phone")

@@ -120,7 +120,7 @@ func TestLoginRejectedWhenPasswordChangesDuringCheck(t *testing.T) {
 	}()
 
 	time.Sleep(50 * time.Millisecond)
-	if err := svc.SetPassword("changed"); err != nil {
+	if err := svc.SetPassword("changed-password"); err != nil {
 		t.Fatal(err)
 	}
 

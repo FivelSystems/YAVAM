@@ -8,6 +8,7 @@ import (
 	"log"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -25,6 +26,12 @@ const (
 
 	tokenByteLength     = 32
 	sessionIDByteLength = 8
+
+	// MinPasswordLength is the shortest admin password SetPassword accepts.
+	MinPasswordLength = 8
+
+	// defaultAdminPassword only seeds a fresh install; SetPassword rejects it.
+	defaultAdminPassword = "admin"
 )
 
 // authStore is the persistence the service needs; tests substitute failing ones.
@@ -66,7 +73,7 @@ func newSimpleAuthServiceWithStore(store authStore, now func() time.Time) (*Simp
 	if config != nil && config.AdminHash != "" {
 		hashStr = config.AdminHash
 	} else {
-		hash, err := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.DefaultCost)
+		hash, err := bcrypt.GenerateFromPassword([]byte(defaultAdminPassword), bcrypt.DefaultCost)
 		if err != nil {
 			return nil, err
 		}
@@ -172,6 +179,10 @@ func (s *SimpleTokenAuthService) persistState() error {
 // so on failure both the previous password and the existing sessions stay in
 // effect. Open event streams are closed by their next CheckToken recheck.
 func (s *SimpleTokenAuthService) SetPassword(newPassword string) error {
+	if err := validateNewPassword(newPassword); err != nil {
+		return err
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -188,6 +199,26 @@ func (s *SimpleTokenAuthService) SetPassword(newPassword string) error {
 	s.adminHash = string(hash)
 	s.sessions = revokedSessions
 	return nil
+}
+
+func validateNewPassword(password string) error {
+	if password == defaultAdminPassword {
+		return ErrPasswordIsDefault
+	}
+	if utf8.RuneCountInString(password) < MinPasswordLength {
+		return ErrPasswordTooShort
+	}
+	return nil
+}
+
+// HasCustomPassword reports whether the stored hash no longer matches the
+// seeded default. The bcrypt comparison runs outside the lock, like Login.
+func (s *SimpleTokenAuthService) HasCustomPassword() bool {
+	s.mu.RLock()
+	currentHash := s.adminHash
+	s.mu.RUnlock()
+
+	return bcrypt.CompareHashAndPassword([]byte(currentHash), []byte(defaultAdminPassword)) != nil
 }
 
 // InitiateLogin is deprecated/noop in bcrypt flow but kept for interface/api compatibility if strictly needed,

@@ -6,6 +6,9 @@ import (
 
 var (
 	ErrInvalidToken = errors.New("invalid or expired token")
+
+	ErrPasswordTooShort  = errors.New("password is too short")
+	ErrPasswordIsDefault = errors.New("password must not be the default password")
 )
 
 // User represents an authenticated session
@@ -48,6 +51,9 @@ type AuthService interface {
 	// Login verifies credentials directly
 	Login(username, password, deviceName string) (string, error)
 
-	// SetPassword updates the admin password
+	// SetPassword updates the admin password, enforcing the password rules
 	SetPassword(newPassword string) error
+
+	// HasCustomPassword reports whether the admin password differs from the seeded default
+	HasCustomPassword() bool
 }
