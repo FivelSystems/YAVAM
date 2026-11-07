@@ -51,13 +51,6 @@ type ScanResult struct {
 	Tags     []string     `json:"tags"`
 }
 
-// ResolveConflictResult holds statistics about the resolution operation
-type ResolveConflictResult struct {
-	Merged   int    `json:"merged"`
-	Disabled int    `json:"disabled"`
-	NewPath  string `json:"newPath"`
-}
-
 // BulkDeleteResult reports the outcome for a single file in a bulk delete operation.
 type BulkDeleteResult struct {
 	FilePath string `json:"filePath"`

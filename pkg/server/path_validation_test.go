@@ -76,39 +76,6 @@ func TestAPI_ToggleValidatesFilePath(t *testing.T) {
 	}
 }
 
-func TestAPI_ResolveRejectsWholeCallOnAnyInvalidPath(t *testing.T) {
-	libraryDir, outsideDir := newLibraryAndOutsideDirs(t)
-	s := startUploadTestServer(t, libraryDir)
-	keep := filepath.Join(libraryDir, "keep.var")
-	duplicate := filepath.Join(libraryDir, "dup.var")
-	foreign := filepath.Join(outsideDir, "foreign.var")
-	for _, path := range []string{keep, duplicate, foreign} {
-		writeTestFile(t, path, "same")
-	}
-
-	code := postJSON(t, s, "/api/resolve", map[string]interface{}{
-		"keepPath": keep, "others": []string{duplicate, foreign}, "libraryPath": libraryDir,
-	})
-	if code != http.StatusForbidden {
-		t.Fatalf("expected 403, got %d", code)
-	}
-	for _, path := range []string{keep, duplicate, foreign} {
-		if !fileExists(path) {
-			t.Fatalf("%s must be untouched after rejected call", path)
-		}
-	}
-
-	code = postJSON(t, s, "/api/resolve", map[string]interface{}{
-		"keepPath": keep, "others": []string{duplicate}, "libraryPath": libraryDir,
-	})
-	if code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", code)
-	}
-	if fileExists(duplicate) || !fileExists(keep) {
-		t.Fatal("valid resolve should remove the duplicate and keep the chosen file")
-	}
-}
-
 func TestAPI_InstallValidatesSourcesAndDestination(t *testing.T) {
 	libraryDir, outsideDir := newLibraryAndOutsideDirs(t)
 	s := startUploadTestServer(t, libraryDir)

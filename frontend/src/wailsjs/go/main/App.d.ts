@@ -105,8 +105,6 @@ export function RemoveConfiguredLibrary(arg1:string):Promise<void>;
 
 export function ReorderConfiguredLibraries(arg1:Array<string>):Promise<void>;
 
-export function ResolveConflicts(arg1:string,arg2:Array<string>,arg3:string):Promise<models.ResolveConflictResult>;
-
 export function RestartApp():Promise<void>;
 
 export function RevokeSession(arg1:string):Promise<void>;

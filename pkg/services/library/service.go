@@ -60,5 +60,4 @@ type LibraryService interface {
 	CheckDependencies(pkgs []models.VarPackage) []models.VarPackage
 	Toggle(pkgPath string, enable bool) (string, error)
 	DisableOldVersions(creator string, pkgName string, libraryPath string) error
-	ResolveConflicts(keepPath string, others []string, libraryPath string) (*models.ResolveConflictResult, error)
 }

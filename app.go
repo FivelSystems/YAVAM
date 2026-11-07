@@ -702,11 +702,6 @@ func (a *App) onTrayReady() {
 	})
 }
 
-// ResolveConflicts handles deduplication and cleanup of conflicting packages
-func (a *App) ResolveConflicts(keepPath string, others []string, libraryPath string) (*models.ResolveConflictResult, error) {
-	return a.manager.ResolveConflicts(keepPath, others, libraryPath)
-}
-
 func (a *App) onTrayExit() {
 	a.trayRunning = false
 }
