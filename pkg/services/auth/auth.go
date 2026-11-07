@@ -477,7 +477,13 @@ func (s *SimpleTokenAuthService) RevokeSession(id string) error {
 	for tokenHash, session := range s.sessions {
 		if session.ID == id {
 			delete(s.sessions, tokenHash)
-			return s.persistState()
+			if err := s.persistState(); err != nil {
+				// Reporting success for a revocation a restart would undo is worse
+				// than failing: the session stays valid, and the caller knows.
+				s.sessions[tokenHash] = session
+				return err
+			}
+			return nil
 		}
 	}
 	return fmt.Errorf("session not found")
