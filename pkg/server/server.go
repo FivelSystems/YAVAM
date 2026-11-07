@@ -55,7 +55,11 @@ type Server struct {
 
 	remoteLoginThrottle   *LoginThrottle
 	loopbackLoginThrottle *LoginThrottle
+
+	shutdownGracePeriod time.Duration // zero selects defaultShutdownGracePeriod
 }
+
+const defaultShutdownGracePeriod = time.Second
 
 func NewServer(ctx context.Context, m *manager.Manager, authService auth.AuthService, assets fs.FS, version string, onRestore func()) *Server {
 	return &Server{
@@ -945,12 +949,19 @@ func (s *Server) Stop() error {
 	}
 
 	s.log("Stopping server...")
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	grace := s.shutdownGracePeriod
+	if grace <= 0 {
+		grace = defaultShutdownGracePeriod
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), grace)
 	defer cancel()
 
 	err := s.httpSrv.Shutdown(ctx)
 	if err != nil {
-		s.log(fmt.Sprintf("Error during shutdown: %v", err))
+		// Streams that outlive the grace period would otherwise keep being
+		// served on an address the caller believes is closed.
+		s.log(fmt.Sprintf("Graceful shutdown timed out, closing remaining connections: %v", err))
+		err = s.httpSrv.Close()
 	}
 
 	s.running = false
