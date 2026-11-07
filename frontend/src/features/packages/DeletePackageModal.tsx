@@ -3,6 +3,7 @@ import { Trash2, AlertTriangle, HardDrive, X, ChevronDown, Check, ShieldAlert } 
 import clsx from 'clsx';
 import { usePackageContext } from '../../context/PackageContext';
 import { formatBytes } from '../../utils/format';
+import { VarPackage } from '../../types';
 
 
 const getBasename = (path: string) => path.split(/[/\\]/).pop() || path;
@@ -28,24 +29,37 @@ export const DeletePackageModal = ({ isOpen, onClose, onConfirm, packagesToDelet
         unsafe: [] as string[]
     });
 
-    // Run Analysis when modal opens
+    // `packages` keeps mutating live while a background scan runs. Snapshotting it only on the
+    // open transition keeps the impact analysis (and the list it renders) stable for as long as
+    // the modal stays open, instead of re-running on every scan flush.
+    const [snapshot, setSnapshot] = useState<{ packages: VarPackage[]; packagesToDelete: string[] } | null>(null);
+
     useEffect(() => {
-        if (!isOpen) {
+        if (isOpen) {
+            setSnapshot({ packages, packagesToDelete });
+        } else {
             setMode('keep'); // Reset on close
-            return;
         }
+        // Intentionally only re-runs on the isOpen transition: including `packages`/`packagesToDelete`
+        // here would re-snapshot on every background scan tick, reintroducing the flicker this fixes.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen]);
+
+    // Run Analysis whenever the snapshot refreshes (i.e. each time the modal opens)
+    useEffect(() => {
+        if (!snapshot) return;
 
         setAnalyzing(true);
         // Defer to prevent UI blocking
         setTimeout(() => {
             import('../../utils/packageDependencyAnalysis').then(({ analyzeGraph, getImpact, getAllDependencies }) => {
-                const { reverseDeps } = analyzeGraph(packages);
+                const { reverseDeps } = analyzeGraph(snapshot.packages);
 
                 // 1. Safe Purge Impact
-                const safeImpact = getImpact(packagesToDelete, packages, reverseDeps);
+                const safeImpact = getImpact(snapshot.packagesToDelete, snapshot.packages, reverseDeps);
 
                 // 2. Force Purge Impact ("Unsafe" / All Deps)
-                const allDeps = getAllDependencies(packagesToDelete, packages);
+                const allDeps = getAllDependencies(snapshot.packagesToDelete, snapshot.packages);
 
                 setImpactMap({
                     safe: safeImpact.cascade,
@@ -54,7 +68,10 @@ export const DeletePackageModal = ({ isOpen, onClose, onConfirm, packagesToDelet
                 setAnalyzing(false);
             });
         }, 50);
-    }, [isOpen, packagesToDelete, packages]);
+    }, [snapshot]);
+
+    const snapshotTargets = snapshot?.packagesToDelete ?? packagesToDelete;
+    const snapshotPackages = snapshot?.packages ?? packages;
 
     // Derived List based on Mode
     const filesToDelete = useMemo(() => {
@@ -63,18 +80,18 @@ export const DeletePackageModal = ({ isOpen, onClose, onConfirm, packagesToDelet
         if (mode === 'purge_all') extras = impactMap.unsafe;
 
         // Combine unique
-        return Array.from(new Set([...packagesToDelete, ...extras]));
-    }, [mode, packagesToDelete, impactMap]);
+        return Array.from(new Set([...snapshotTargets, ...extras]));
+    }, [mode, snapshotTargets, impactMap]);
 
     // Calculate Total Size
     const totalSize = useMemo(() => {
         let size = 0;
         const fileSet = new Set(filesToDelete);
-        packages.forEach(p => {
+        snapshotPackages.forEach(p => {
             if (fileSet.has(p.filePath)) size += p.size;
         });
         return size;
-    }, [filesToDelete, packages]);
+    }, [filesToDelete, snapshotPackages]);
 
 
     if (!isOpen) return null;
@@ -117,7 +134,7 @@ export const DeletePackageModal = ({ isOpen, onClose, onConfirm, packagesToDelet
                         <div>
                             <h2 className="text-xl font-bold text-gray-100">Delete Packages</h2>
                             <div className="text-sm text-gray-400 mt-1">
-                                {packagesToDelete.length} package{packagesToDelete.length !== 1 ? 's' : ''} selected
+                                {snapshotTargets.length} package{snapshotTargets.length !== 1 ? 's' : ''} selected
                             </div>
                         </div>
                     </div>
@@ -199,7 +216,7 @@ export const DeletePackageModal = ({ isOpen, onClose, onConfirm, packagesToDelet
                                 </div>
                             ) : (
                                 filesToDelete.map(path => {
-                                    const isTarget = packagesToDelete.includes(path);
+                                    const isTarget = snapshotTargets.includes(path);
                                     return (
                                         <div key={path} className="flex items-center gap-2 px-3 py-1.5 rounded hover:bg-gray-800/50 text-xs group">
                                             <span className={clsx("font-mono font-bold w-12 text-right shrink-0", isTarget ? "text-red-400" : "text-violet-400")}>
