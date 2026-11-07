@@ -8,6 +8,7 @@ import { useFilterContext } from '../../context/FilterContext';
 import { useLibraryContext } from '../../context/LibraryContext';
 import { useActionContext } from '../../context/ActionContext';
 import { STATUS_FILTERS } from '../../constants';
+import { getStoredToken } from '../../services/auth';
 
 
 
@@ -110,7 +111,7 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
+                            'Authorization': `Bearer ${getStoredToken() || ''}`
                         },
                         body: JSON.stringify({ libraries })
                     });

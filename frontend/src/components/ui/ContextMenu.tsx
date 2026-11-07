@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useLayoutEffect } from 'react';
 import { VarPackage } from '../../types';
+import { getStoredToken } from '../../services/auth';
 import { Power, FolderOpen, Copy, Trash2, FileCode, Scissors, Download, Layers, Sparkles } from 'lucide-react';
 
 interface ContextMenuProps {
@@ -170,7 +171,7 @@ const ContextMenu = ({ x, y, pkg, selectedCount = 0, onClose, onToggle, onOpenFo
                     onClick={() => {
                         onClose();
                         // Download directly
-                        const token = localStorage.getItem('yavam_auth_token');
+                        const token = getStoredToken();
                         const url = `/files/?path=${encodeURIComponent(pkg.filePath)}&token=${token || ''}`;
                         const a = document.createElement('a');
                         a.href = url;
