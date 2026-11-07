@@ -1,15 +1,36 @@
 
-// This service handles the Authentication flow (Simple Password)
-// NOTE: Since this is a local desktop app, we send password over "HTTPS" (or localhost) directly.
-// The backend handles bcrypt hashing.
+// Authentication flow for web/mobile clients. The desktop app never goes through here.
+// NOTE: the local server speaks plain HTTP, so anything typed here (password or
+// pairing code) travels unencrypted on the local network. That is why pairing
+// codes are short-lived and one-time, and remote password login is opt-in.
 
 const AUTH_KEY = 'yavam_auth_token';
 let cachedToken: string | null = null;
+
+const DEFAULT_RETRY_AFTER_SECONDS = 30;
+const MAX_RETRY_AFTER_SECONDS = 3600;
+const PAIRING_CODE_GROUP_LENGTH = 4;
+const PAIRING_CODE_LENGTH = PAIRING_CODE_GROUP_LENGTH * 2;
 
 export interface User {
     username: string;
     role: string;
 }
+
+export interface AuthStatus {
+    setupRequired: boolean;
+    passwordLoginAllowed: boolean;
+    pairingAvailable: boolean;
+}
+
+export type AuthErrorCode =
+    | 'RATE_LIMIT'
+    | 'INVALID_CREDENTIALS'
+    | 'INVALID_CODE'
+    | 'PASSWORD_LOGIN_DISABLED'
+    | 'SETUP_REQUIRED'
+    | 'SERVER_ERROR'
+    | 'NETWORK_ERROR';
 
 // Checks if we have any token stored (does not validate it)
 export function getStoredToken(): string | null {
@@ -24,15 +45,104 @@ export function isAuthenticated(): boolean {
 export function logout() {
     cachedToken = null;
     localStorage.removeItem(AUTH_KEY);
-    // Reload to reset app state or let the App component handle it by checking event?
     // Dispatch event so App can react immediately
     window.dispatchEvent(new Event('auth:logout'));
 }
 
 export class AuthError extends Error {
-    constructor(public code: 'RATE_LIMIT' | 'INVALID_CREDENTIALS' | 'SERVER_ERROR' | 'NETWORK_ERROR', message: string, public retryAfter?: number) {
+    constructor(public code: AuthErrorCode, message: string, public retryAfter?: number) {
         super(message);
         this.name = 'AuthError';
+    }
+}
+
+function storeToken(token: string) {
+    cachedToken = token;
+    localStorage.setItem(AUTH_KEY, token);
+    // Other parts of the app (like the Wails polyfill) react to this event
+    window.dispatchEvent(new Event('auth:login'));
+}
+
+function parseRetryAfterSeconds(response: Response): number {
+    const seconds = parseInt(response.headers?.get('Retry-After') ?? '', 10);
+    if (!Number.isFinite(seconds) || seconds <= 0) return DEFAULT_RETRY_AFTER_SECONDS;
+    return Math.min(seconds, MAX_RETRY_AFTER_SECONDS);
+}
+
+function rateLimitError(response: Response, message: string): AuthError {
+    return new AuthError('RATE_LIMIT', message, parseRetryAfterSeconds(response));
+}
+
+const SETUP_REQUIRED_MESSAGE = 'An administrator password must be set from the desktop app first.';
+const PASSWORD_LOGIN_DISABLED_MESSAGE = 'Password sign-in is disabled for other devices. Pair this device with a code from the desktop app.';
+
+function rethrowAsAuthError(err: unknown, action: string): never {
+    if (err instanceof AuthError) throw err;
+    console.error(`${action} failed:`, err);
+    throw new AuthError('NETWORK_ERROR', 'Unable to reach the server. Check your connection.');
+}
+
+// Unauthenticated probe; deliberately native fetch so a refusal can never trigger the 401 interceptor.
+export async function getAuthStatus(): Promise<AuthStatus> {
+    try {
+        const response = await fetch('/api/auth/status', { cache: 'no-store' });
+        if (!response.ok) {
+            throw new AuthError('SERVER_ERROR', `Could not load sign-in options (${response.status}).`);
+        }
+        const status = await response.json();
+        return {
+            setupRequired: !!status.setupRequired,
+            passwordLoginAllowed: !!status.passwordLoginAllowed,
+            pairingAvailable: !!status.pairingAvailable,
+        };
+    } catch (err) {
+        rethrowAsAuthError(err, 'Auth status');
+    }
+}
+
+export function normalizePairingCode(input: string): string {
+    return input.replace(/\s+/g, '').toUpperCase();
+}
+
+// Live formatting for the code field: letters/digits only, grouped as XXXX-XXXX.
+export function formatPairingCodeInput(input: string): string {
+    const symbols = input.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, PAIRING_CODE_LENGTH);
+    if (symbols.length <= PAIRING_CODE_GROUP_LENGTH) return symbols;
+    return `${symbols.slice(0, PAIRING_CODE_GROUP_LENGTH)}-${symbols.slice(PAIRING_CODE_GROUP_LENGTH)}`;
+}
+
+export function isCompletePairingCode(input: string): boolean {
+    return input.replace(/[^a-zA-Z0-9]/g, '').length === PAIRING_CODE_LENGTH;
+}
+
+export async function pairWithCode(code: string, deviceName: string = describeThisDevice()): Promise<string> {
+    try {
+        const response = await fetch('/api/auth/pair', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: normalizePairingCode(code), deviceName })
+        });
+
+        if (!response.ok) {
+            switch (response.status) {
+                case 401:
+                    throw new AuthError('INVALID_CODE', 'That code is incorrect or has expired. Generate a new one in the desktop app.');
+                case 403:
+                    throw new AuthError('PASSWORD_LOGIN_DISABLED', 'This device is not allowed to pair.');
+                case 429:
+                    throw rateLimitError(response, 'Too many attempts. Please wait a moment and try again.');
+                case 503:
+                    throw new AuthError('SETUP_REQUIRED', SETUP_REQUIRED_MESSAGE);
+                default:
+                    throw new AuthError('SERVER_ERROR', 'Pairing failed. Please try again.');
+            }
+        }
+
+        const { token } = await response.json();
+        storeToken(token);
+        return token;
+    } catch (err) {
+        rethrowAsAuthError(err, 'Pairing');
     }
 }
 
@@ -40,41 +150,40 @@ export async function login(password: string): Promise<string> {
     const username = "admin"; // Hardcoded for single-user v1
 
     try {
-        const deviceName = `${getBrowserName()} (${getOSName()})`;
-
         const loginRes = await fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password, deviceName })
+            body: JSON.stringify({ username, password, deviceName: describeThisDevice() })
         });
 
         if (loginRes.status === 429) {
-            throw new AuthError('RATE_LIMIT', 'Too many login attempts. Please wait a moment.');
+            throw rateLimitError(loginRes, 'Too many login attempts. Please wait a moment.');
         }
 
         if (!loginRes.ok) {
-            if (loginRes.status === 401) {
-                throw new AuthError('INVALID_CREDENTIALS', 'Incorrect password.');
+            switch (loginRes.status) {
+                case 401:
+                    throw new AuthError('INVALID_CREDENTIALS', 'Incorrect password.');
+                case 403:
+                    throw new AuthError('PASSWORD_LOGIN_DISABLED', PASSWORD_LOGIN_DISABLED_MESSAGE);
+                case 503:
+                    throw new AuthError('SETUP_REQUIRED', SETUP_REQUIRED_MESSAGE);
+                default:
+                    throw new AuthError('SERVER_ERROR', `Login failed: ${loginRes.statusText}`);
             }
-            throw new AuthError('SERVER_ERROR', `Login failed: ${loginRes.statusText}`);
         }
 
         const { token } = await loginRes.json();
-
-        // Store Token
-        cachedToken = token;
-        localStorage.setItem(AUTH_KEY, token);
-
-        // Dispatch Login Event so other parts of the app (like Wails Polyfill) react
-        window.dispatchEvent(new Event('auth:login'));
-
+        storeToken(token);
         return token;
 
-    } catch (err: any) {
-        if (err instanceof AuthError) throw err;
-        console.error("Login failed:", err);
-        throw new AuthError('NETWORK_ERROR', 'Unable to reach the server. Check your connection.');
+    } catch (err) {
+        rethrowAsAuthError(err, 'Login');
     }
+}
+
+function describeThisDevice(): string {
+    return `${getBrowserName()} (${getOSName()})`;
 }
 
 // Helper functions for device identification
