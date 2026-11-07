@@ -215,6 +215,21 @@ Commit style is `type(scope): description` (`feat`, `fix`, `refactor`, `test`,
   `## [Unreleased]` during dev; rename it to `## [X.Y.Z] - date` at release.
   Release notes are extracted from these headings by CI. Group entries under
   `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`.
+- **`main`'s CHANGELOG.md must always have a complete version history.** When a
+  patch release is cut from `main` at a lower version than `main`'s own
+  in-progress target (e.g. a `1.3.x` hotfix while `main` is already targeting
+  `1.4.0`), its `## [X.Y.Z]` section is written on the release branch — but
+  that section (and the version/date) must *also* be committed back to `main`
+  right after, as its own small commit, so `main` never loses that version's
+  history. Never leave a release's changelog entry living only on a disposable
+  `release/*` branch.
+- **After merging anything into `main`, verify `CHANGELOG.md` yourself** —
+  confirm `## [Unreleased]` actually reflects what just merged, and prune any
+  bullet that duplicates something already shipped under its own version
+  section (a bullet surviving in `Unreleased` after its underlying change
+  shipped elsewhere is a sign it was never pruned). Don't rely solely on an
+  automated post-merge check; if one runs and gets denied permissions or
+  fails partially, redo the check yourself rather than moving on.
 - **Go:** standard-library-first; validate every filesystem path against the
   configured libraries (`Manager.ValidatePath`) before access; never shell out
   (`cmd`/`powershell`) for file operations; add/adjust `*_test.go` when touching

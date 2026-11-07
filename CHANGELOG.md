@@ -9,8 +9,6 @@
 ## [Unreleased]
 
 ### Added
-- **Update Channels**: A new **Stable / Unstable** selector under `Settings → Application → Updates`. Stay on tested **Stable** releases, or opt into **Unstable** to preview weekly in-development builds early. Switching back to Stable is always available, and your data is preserved either way.
-- **Manual Update Check**: A "Check now" button in the Updates section lets you check your selected channel on demand instead of waiting for the startup check.
 - **Instant Grid on Launch**: Opening a library now shows its packages immediately from the local index while a fresh scan reconciles with disk in the background — no more waiting on an empty grid. Files deleted since the last scan drop off automatically once the scan completes.
 - **Cross-Library Dependencies**: In the details panel, a dependency or "Used By" entry that lives in a *different* library is now labelled with that library's name and is clickable — clicking switches to that library and **locates & highlights** the package in the grid (your current selection and open panel stay put). Those rows are coloured by the target's enabled/disabled state, so only the library label is blue. Previously such entries were unclickable and could leave the grid empty.
 - **Ratings & Favourites**: You can now rate a package from **1 to 5 stars** and mark it as a **favourite**. Right-click any package to set its rating or toggle the heart; ratings and favourites are then searchable and filterable from the sidebar (the star row, the *Only favourites* toggle) or the search bar (`rating:4`, `rating:>=3`, `favorite:true`). A rating applies to the whole package family, so every version shares it, and your choices persist in the local database. (Desktop for now; the mobile/web entry point arrives with the upcoming card redesign.)
@@ -20,8 +18,6 @@
 - **Dependencies**: Updated the Go backend (Wails 2.17, `x/crypto`, `x/net`, `x/text`, `x/sys`) and the frontend toolchain (Vite 7) to current patched releases.
 - **Local Database (Foundation)**: Package and library metadata is now indexed into a local SQLite database, laying the groundwork for faster startups, persistent ratings/favourites, and upcoming features. Your `config.json` remains the source of truth for configured library paths, so the change is fully backward-compatible.
 - **Dependency Version Fallback**: Clicking a dependency whose exact version isn't installed no longer dead-ends with "specific version not found". YAVAM now takes you to the newest available copy — locally or in another library — with a heads-up that the exact version wasn't found.
-- **Deletion**: Improved package deletion behaviour for more reliable and predictable results.
-- **Release Pipeline**: Reworked the release process around the new Stable and Unstable channels.
 
 ### Fixed
 - **Links No Longer Break the App**: Clicking a web link (for example in the "What's New" window) now opens it in your system browser instead of navigating inside the app. Previously such a link took over the app window with no way to go back, and the app had to be restarted to recover.
@@ -32,11 +28,64 @@
 - **Smoother Scanning**: The grid no longer flickers or feels sluggish while a scan runs. Cards only update when their data actually changes, so you can browse uninterrupted as content fills in the background.
 - **Test Isolation**: Automated tests no longer write fixture libraries (e.g. `C:\Allowed`) into the real application database.
 - **No More Console Flash on Copy**: Copying a package (`CTRL+C` or the context menu) no longer briefly pops up a console window. File copying now uses the native Windows clipboard directly instead of launching PowerShell in the background.
+
+### Security
+- **Library Optimization Hardening**: Removed an unused internal endpoint that could permanently delete files without going through the Recycle Bin ([#112](https://github.com/FivelSystems/YAVAM/issues/112)). Deleting to the Recycle Bin during Library Optimization now correctly distinguishes "already gone" from "successfully moved to the Recycle Bin" instead of counting both as freed space, and refuses to delete on network or removable drives (where Windows generally has no Recycle Bin and the delete would otherwise be silently permanent) ([#110](https://github.com/FivelSystems/YAVAM/issues/110), [#111](https://github.com/FivelSystems/YAVAM/issues/111)).
+
+## [1.3.23] - 2026-11-07
+
+### Fixed
+- **Library Optimization — Safer Deduplication**: Consolidating duplicate packages could, in a specific collision case, send the copy you meant to keep to the Recycle Bin without any warning, if another file already occupied its destination name. This no longer happens — the conflicting group is now skipped with a clear error instead of losing content.
+- **Library Optimization — Accurate "Space Saved"**: The reported space saved after optimizing or deleting packages no longer counts files that had already been removed, or files whose deletion actually failed. The optimization screen now also clearly reports when it finished with errors.
+- **Package Deletion — No More Misleading "Permanent"/"Liberated" Wording**: Deleting packages — whether through the normal Delete dialog or Library Optimization — always moves files to the Recycle Bin rather than deleting them outright. Wording that implied otherwise, or that space was freed immediately, has been corrected: space is only truly freed once you empty the Recycle Bin yourself.
+
+### Security
+- **Library Optimization — Unsafe Drive Protection**: YAVAM no longer attempts to send files to the Recycle Bin on network or removable drives, where Windows generally has no Recycle Bin and the operation would otherwise silently become a permanent, unrecoverable delete.
+- Removed an unused internal endpoint that could permanently delete files without using the Recycle Bin at all. It required an authenticated session and was never called by any client, so this is hardening rather than a disclosed vulnerability.
+
+## [1.3.22] - 2026-11-07
+
+### Added
+- **Device Pairing**: Sign in a phone or tablet with a one-time code shown in the desktop app under `Settings → Network`. The code expires after a few minutes and works once.
+- **Remote Access Settings**: Choose which network address the web server listens on, and whether other devices may sign in with the password (off by default).
+
+### Changed
+- **Remote Sign-in**: Other devices now sign in by pairing. Password sign-in from other devices is off by default, so devices that used the password before need to pair once after updating. The web sign-in screen explains which option is available.
+- **Administrator Password**: It must be at least 8 characters long and cannot be `admin`. Until a password is set from the desktop app, the web interface stays disabled. Changing the password signs out every device.
+- **Setup**: The password step can now be skipped; remote access stays disabled until a password is set in Settings.
+- **Custom Network Names**: If you open YAVAM through your own DNS name instead of an IP address or the computer name, add that name to `serverAllowedHosts` in `config.json`.
+- **Guest Mode**: Guests can no longer download raw files.
+- **Enable / Disable**: A package is no longer overwritten or deleted when a copy already exists; the action is refused with a clear message instead.
+
+### Fixed
+- **Revoked Sessions**: A device whose session is revoked returns to the sign-in screen right away.
+- **Notifications**: Toasts now appear above dialogs, and rejected uploads explain why.
+- **Library Counts**: Per-library package counts now load in the web client.
+- **Release Tags**: Stable releases are now tagged on the commit that was built.
+
+### Security
+- Hardened the remote-access server: request validation, sign-in rate limiting and session handling. Updating is recommended if you use remote access.
+
+## [1.3.21] - 2026-11-06
+
+### Changed
+- **Uploads**: Uploading through the web interface now accepts only package files and rejects a package that already exists in the target library instead of overwriting it.
+
+### Fixed
 - **Web Client Version**: The web client no longer shows a made-up version number when the server's version cannot be read; it now says the version is unknown.
 
 ### Security
 - Hardened the remote-access server and its authentication. Updating is recommended if you use remote access.
-- **Library Optimization Hardening**: Removed an unused internal endpoint that could permanently delete files without going through the Recycle Bin ([#112](https://github.com/FivelSystems/YAVAM/issues/112)). Deleting to the Recycle Bin during Library Optimization now correctly distinguishes "already gone" from "successfully moved to the Recycle Bin" instead of counting both as freed space, and refuses to delete on network or removable drives (where Windows generally has no Recycle Bin and the delete would otherwise be silently permanent) ([#110](https://github.com/FivelSystems/YAVAM/issues/110), [#111](https://github.com/FivelSystems/YAVAM/issues/111)).
+
+## [1.3.20] - 2026-07-01
+
+### Added
+- **Update Channels**: A new **Stable / Unstable** selector under `Settings → Application → Updates`. Stay on tested **Stable** releases, or opt into **Unstable** to preview weekly in-development builds early. Switching back to Stable is always available, and your data is preserved either way.
+- **Manual Update Check**: A "Check now" button in the Updates section lets you check your selected channel on demand instead of waiting for the startup check.
+
+### Changed
+- **Deletion**: Improved package deletion behaviour for more reliable and predictable results.
+- **Release Pipeline**: Reworked the release process around the new Stable and Unstable channels. See [docs/RELEASING.md](docs/RELEASING.md).
 
 ## [1.3.19] - 2026-05-14
 
