@@ -49,6 +49,9 @@ func (s *Server) ticketStore() *eventTicketStore {
 // handler through the request context.
 func (s *Server) eventsAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !s.requireAuthService(w) {
+			return
+		}
 		sessionToken := bearerToken(r)
 		if sessionToken == "" {
 			if ticket := r.URL.Query().Get("ticket"); ticket != "" {
@@ -68,6 +71,9 @@ func (s *Server) eventsAuthMiddleware(next http.Handler) http.Handler {
 func (s *Server) handleEventTicket(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		s.writeError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.requireAuthService(w) {
 		return
 	}
 	sessionToken := bearerToken(r)

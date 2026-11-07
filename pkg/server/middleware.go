@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+const messageAuthUnavailable = "Authentication is temporarily unavailable"
+
 // AuthMiddleware protects routes requiring authentication and extends the
 // session's idle window on each accepted request.
 func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
@@ -30,8 +32,22 @@ func (s *Server) sessionTokenValidator(slideIdleWindow bool) func(token string) 
 	}
 }
 
+// requireAuthService fails the request closed when the auth service did not
+// initialise, instead of dereferencing it.
+func (s *Server) requireAuthService(w http.ResponseWriter) bool {
+	if s.auth != nil {
+		return true
+	}
+	s.writeError(w, messageAuthUnavailable, http.StatusServiceUnavailable)
+	return false
+}
+
 func (s *Server) authenticate(next http.Handler, validateToken func(token string) error) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !s.requireAuthService(w) {
+			return
+		}
+
 		// 1. Get Token from Header or Query
 		token := ""
 		authHeader := r.Header.Get("Authorization")

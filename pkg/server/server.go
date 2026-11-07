@@ -356,6 +356,9 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 
 	// Auth: List Sessions
 	mux.Handle("/api/auth/sessions", s.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !s.requireAuthService(w) {
+			return
+		}
 		sessions, err := s.auth.ListSessions()
 		if err != nil {
 			s.writeError(w, err.Error(), 500)
@@ -418,6 +421,9 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 			return
 		}
 
+		if !s.requireAuthService(w) {
+			return
+		}
 		if err := s.auth.RevokeSession(req.ID); err != nil {
 			s.writeError(w, err.Error(), 500)
 			return
