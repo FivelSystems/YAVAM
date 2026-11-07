@@ -15,6 +15,7 @@
 - **Cross-Library Dependencies**: In the details panel, a dependency or "Used By" entry that lives in a *different* library is now labelled with that library's name and is clickable — clicking switches to that library and **locates & highlights** the package in the grid (your current selection and open panel stay put). Those rows are coloured by the target's enabled/disabled state, so only the library label is blue. Previously such entries were unclickable and could leave the grid empty.
 
 ### Changed
+- **Dependencies**: Updated the Go backend (Wails 2.13, `x/crypto`, `x/net`, `x/text`, `x/sys`) and the frontend toolchain (Vite 7) to current patched releases.
 - **Local Database (Foundation)**: Package and library metadata is now indexed into a local SQLite database, laying the groundwork for faster startups, persistent ratings/favourites, and upcoming features. Your `config.json` remains the source of truth for configured library paths, so the change is fully backward-compatible.
 - **Dependency Version Fallback**: Clicking a dependency whose exact version isn't installed no longer dead-ends with "specific version not found". YAVAM now takes you to the newest available copy — locally or in another library — with a heads-up that the exact version wasn't found.
 - **Deletion**: Improved package deletion behaviour for more reliable and predictable results.
