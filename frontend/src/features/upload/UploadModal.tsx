@@ -365,7 +365,7 @@ export const UploadModal = ({ isOpen, onClose, initialFiles, onAppendFiles, libr
 
     return (
         <AnimatePresence>
-            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
                 <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}

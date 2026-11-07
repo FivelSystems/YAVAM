@@ -5,7 +5,13 @@ export default {
         "./src/**/*.{js,ts,jsx,tsx}",
     ],
     theme: {
-        extend: {},
+        extend: {
+            // Stacking scale for full-screen layers. Toasts must stay above the highest modal in use (currently z-[110]).
+            zIndex: {
+                modal: '60',
+                toast: '200',
+            },
+        },
     },
     plugins: [
         require('@tailwindcss/typography'),
