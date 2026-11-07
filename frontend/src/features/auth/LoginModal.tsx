@@ -230,6 +230,16 @@ function StatusNotice({ title, body, onRetry, retryLabel }: StatusNoticeProps) {
     );
 }
 
+function PasswordUnavailableHint() {
+    const { port } = window.location;
+    return (
+        <p className="text-xs text-gray-500 text-center">
+            Password sign-in is turned off for other devices. Use the pairing code from the YAVAM desktop app (Settings &gt; Network).
+            {port && ` On the computer running YAVAM you can also open http://localhost:${port} to sign in with the password.`}
+        </p>
+    );
+}
+
 export default function LoginModal({ isOpen, onClose, force = false, message }: LoginModalProps) {
     const navigate = useNavigate();
     const [status, setStatus] = useState<AuthStatus | null>(null);
@@ -299,7 +309,9 @@ export default function LoginModal({ isOpen, onClose, force = false, message }: 
                         <div className="flex-1 h-px bg-[#333]" />
                     </div>
                 )}
-                {status.passwordLoginAllowed && <PasswordForm {...formProps} />}
+                {status.passwordLoginAllowed
+                    ? <PasswordForm {...formProps} />
+                    : <PasswordUnavailableHint />}
             </div>
         );
     };
