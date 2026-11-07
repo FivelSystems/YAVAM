@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+	yavamfs "yavam/pkg/fs"
 	"yavam/pkg/manager"
 	"yavam/pkg/models"
 	"yavam/pkg/services/auth"
@@ -754,8 +755,27 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 		}
 
 		if err := s.manager.DeleteToTrash(req.FilePath); err != nil {
-			s.log(fmt.Sprintf("Error deleting package: %s", utils.SanitizeForLog(err.Error())))
-			s.writeError(w, err.Error(), 500)
+			switch {
+			case errors.Is(err, yavamfs.ErrFileNotFound):
+				s.log(fmt.Sprintf("Delete skipped, file already missing: %s", utils.SanitizeForLog(filepath.Base(req.FilePath))))
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"success":        false,
+					"alreadyMissing": true,
+				})
+			case errors.Is(err, yavamfs.ErrUnsafeRecycleBinVolume):
+				s.log(fmt.Sprintf("Delete refused, unsafe recycle bin volume: %s", utils.SanitizeForLog(filepath.Base(req.FilePath))))
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusConflict)
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"success":      false,
+					"unsafeVolume": true,
+					"message":      "This location has no recycle bin; refusing to delete without explicit confirmation",
+				})
+			default:
+				s.log(fmt.Sprintf("Error deleting package: %s", utils.SanitizeForLog(err.Error())))
+				s.writeError(w, err.Error(), 500)
+			}
 			return
 		}
 

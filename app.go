@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	yavamfs "yavam/pkg/fs"
 	"yavam/pkg/manager"
 	"yavam/pkg/models"
 	"yavam/pkg/services/auth"
@@ -160,21 +162,36 @@ func (a *App) OpenFolderInExplorer(path string) {
 	}
 }
 
+// DeleteFileToRecycleBin sends a single file to the recycle bin.
+// The returned error, if any, wraps yavamfs.ErrFileNotFound (file was
+// already gone — no bytes were freed) or yavamfs.ErrUnsafeRecycleBinVolume
+// (the volume has no recycle bin; nothing was deleted) — check with
+// errors.Is on the Go side, or match the message substring from the JS side.
 func (a *App) DeleteFileToRecycleBin(path string) error {
 	return a.manager.DeleteToTrash(path)
 }
 
 // BulkDeleteFilesToRecycleBin deletes multiple files to the recycle bin.
 // Every file is attempted regardless of prior failures.
-// Returns one BulkDeleteResult per input path so the UI can report per-file outcomes.
+// Returns one BulkDeleteResult per input path so the UI can report per-file
+// outcomes, distinguishing an actual trash operation (Success) from a file
+// that was already gone (AlreadyMissing) or a volume without a recycle bin
+// where the file was deliberately left untouched (UnsafeVolume).
 func (a *App) BulkDeleteFilesToRecycleBin(paths []string) []models.BulkDeleteResult {
 	results := make([]models.BulkDeleteResult, 0, len(paths))
 	for _, path := range paths {
 		res := models.BulkDeleteResult{FilePath: path}
-		if err := a.manager.DeleteToTrash(path); err != nil {
-			res.Error = err.Error()
-		} else {
+		err := a.manager.DeleteToTrash(path)
+		switch {
+		case err == nil:
 			res.Success = true
+		case errors.Is(err, yavamfs.ErrFileNotFound):
+			res.AlreadyMissing = true
+		case errors.Is(err, yavamfs.ErrUnsafeRecycleBinVolume):
+			res.UnsafeVolume = true
+			res.Error = err.Error()
+		default:
+			res.Error = err.Error()
 		}
 		results = append(results, res)
 	}
@@ -185,38 +202,58 @@ func (a *App) BulkDeleteFilesToRecycleBin(paths []string) []models.BulkDeleteRes
 // It returns immediately — the caller should NOT await any return value.
 // Progress is streamed via two Wails events:
 //
-//	"delete:progress" — fired after each file: { current, total, filePath, success, error }
-//	"delete:complete" — fired once when all files are done: { succeeded, failed[] }
+//	"delete:progress" — fired after each file: { current, total, filePath, success, error, alreadyMissing, unsafeVolume }
+//	"delete:complete" — fired once when all files are done: { succeeded, failed[], alreadyMissing[], unsafeVolume[] }
+//
+// alreadyMissing means the file no longer existed (no bytes were freed by
+// this operation); unsafeVolume means the file sits on a volume without a
+// recycle bin and was deliberately left untouched.
 func (a *App) BulkDeleteFilesToRecycleBinAsync(paths []string) {
 	go func() {
 		total := len(paths)
 		succeeded := 0
 		failed := make([]string, 0)
+		alreadyMissing := make([]string, 0)
+		unsafeVolume := make([]string, 0)
 
 		for i, path := range paths {
-			var errStr string
-			if err := a.manager.DeleteToTrash(path); err != nil {
-				errStr = err.Error()
-			} else {
-				succeeded++
-			}
+			err := a.manager.DeleteToTrash(path)
 
-			if errStr != "" {
+			var errStr string
+			isAlreadyMissing := false
+			isUnsafeVolume := false
+
+			switch {
+			case err == nil:
+				succeeded++
+			case errors.Is(err, yavamfs.ErrFileNotFound):
+				isAlreadyMissing = true
+				alreadyMissing = append(alreadyMissing, path)
+			case errors.Is(err, yavamfs.ErrUnsafeRecycleBinVolume):
+				isUnsafeVolume = true
+				errStr = err.Error()
+				unsafeVolume = append(unsafeVolume, path)
+			default:
+				errStr = err.Error()
 				failed = append(failed, path)
 			}
 
 			runtime.EventsEmit(a.ctx, "delete:progress", map[string]interface{}{
-				"current":  i + 1,
-				"total":    total,
-				"filePath": path,
-				"success":  errStr == "",
-				"error":    errStr,
+				"current":        i + 1,
+				"total":          total,
+				"filePath":       path,
+				"success":        err == nil,
+				"error":          errStr,
+				"alreadyMissing": isAlreadyMissing,
+				"unsafeVolume":   isUnsafeVolume,
 			})
 		}
 
 		runtime.EventsEmit(a.ctx, "delete:complete", map[string]interface{}{
-			"succeeded": succeeded,
-			"failed":    failed,
+			"succeeded":      succeeded,
+			"failed":         failed,
+			"alreadyMissing": alreadyMissing,
+			"unsafeVolume":   unsafeVolume,
 		})
 	}()
 }

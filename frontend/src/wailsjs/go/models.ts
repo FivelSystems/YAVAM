@@ -121,6 +121,8 @@ export namespace models {
 	    filePath: string;
 	    success: boolean;
 	    error?: string;
+	    alreadyMissing?: boolean;
+	    unsafeVolume?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new BulkDeleteResult(source);
@@ -131,6 +133,8 @@ export namespace models {
 	        this.filePath = source["filePath"];
 	        this.success = source["success"];
 	        this.error = source["error"];
+	        this.alreadyMissing = source["alreadyMissing"];
+	        this.unsafeVolume = source["unsafeVolume"];
 	    }
 	}
 	export class FileDetail {
