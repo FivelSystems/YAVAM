@@ -296,7 +296,7 @@ const NetworkTab = ({
                                             </div>
                                         </div>
 
-                                        {session.deviceName !== "Local System" ? (
+                                        {!session.isSystem ? (
                                             <button
                                                 onClick={() => setSessionToRevoke(session.id)}
                                                 className="text-xs text-red-400 hover:text-red-300 hover:bg-red-900/20 px-2 py-1 rounded transition-colors"

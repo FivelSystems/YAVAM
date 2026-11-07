@@ -194,4 +194,21 @@ describe('NetworkTab remote access', () => {
 
         expect(app.SetServerBindAddress).toHaveBeenCalledWith('all');
     });
+    it('decides the system session from its flag, not its display name', async () => {
+        const app = installApp();
+        app.ListSessions.mockResolvedValue([
+            { id: 'lookalike', deviceName: 'Local System', createdAt: '2026-01-01T11:00:00Z', isSystem: false },
+            { id: 'internal', deviceName: 'Internal', createdAt: '2026-01-01T11:00:00Z', isSystem: true },
+        ]);
+        renderTab();
+        await settle();
+
+        expect(screen.getAllByRole('button', { name: 'Disconnect' })).toHaveLength(1);
+        expect(screen.getAllByText('Current')).toHaveLength(1);
+        fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
+        await settle();
+        fireEvent.click((([...screen.getAllByRole('button', { name: 'Disconnect' })]).pop() as HTMLElement));
+        await settle();
+        expect(app.RevokeSession).toHaveBeenCalledWith('lookalike');
+    });
 });
