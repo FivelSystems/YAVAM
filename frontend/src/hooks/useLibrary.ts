@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { config } from '../wailsjs/go/models';
 import { fetchWithAuth } from '../services/api';
+import { resolveActiveLibrary, rememberActiveLibrary } from './activeLibrary';
 
 export const useLibrary = () => {
     // -- State --
@@ -131,6 +132,14 @@ export const useLibrary = () => {
     }, [addLibrary]);
 
 
+    const applyHostLibraries = (hostLibraries: string[]) => {
+        const active = resolveActiveLibrary(hostLibraries, activeLibraryPath);
+        setLibraries(hostLibraries);
+        setActiveLibraryPath(active.path);
+        setActiveLibIndex(active.index);
+        rememberActiveLibrary(hostLibraries, active);
+    };
+
     // Initialization Effect (Sync with Backend/WebAPI)
     useEffect(() => {
         // @ts-ignore
@@ -142,23 +151,7 @@ export const useLibrary = () => {
                     // Setup wizard is Desktop-only: FinishSetup() can only be called via Wails.
                     setNeedsSetup(!cfg.setupDone);
 
-                    if (cfg.libraries) {
-                        setLibraries(cfg.libraries);
-
-                        const current = activeLibraryPath;
-                        const isValid = cfg.libraries.some((l: string) => l.toLowerCase() === current.toLowerCase());
-
-                        if ((!current || !isValid) && cfg.libraries.length > 0) {
-                            const first = cfg.libraries[0];
-                            setActiveLibraryPath(first);
-                            setActiveLibIndex(0);
-                            localStorage.setItem("activeLibraryPath", first);
-                        } else if (isValid) {
-                            // Sync index if it was valid
-                            const idx = cfg.libraries.findIndex((l: string) => l.toLowerCase() === current.toLowerCase());
-                            if (idx !== -1) setActiveLibIndex(idx);
-                        }
-                    }
+                    applyHostLibraries(cfg.libraries ?? []);
                 }
             }).catch((err: any) => console.error("Failed to load library config:", err));
         } else {
@@ -172,24 +165,7 @@ export const useLibrary = () => {
                     if (data) {
                         setNeedsSetup(!data.setupDone);
 
-                        if (data.libraries) {
-                            setLibraries(data.libraries);
-
-                            // Validate active path
-                            const current = activeLibraryPath;
-                            const isValid = data.libraries.some((l: string) => l.toLowerCase() === current.toLowerCase());
-
-                            // If empty or invalid, select first available
-                            if ((!current || !isValid) && data.libraries.length > 0) {
-                                const first = data.libraries[0];
-                                setActiveLibraryPath(first);
-                                setActiveLibIndex(0);
-                                localStorage.setItem("activeLibraryPath", first);
-                            } else if (isValid) {
-                                const idx = data.libraries.findIndex((l: string) => l.toLowerCase() === current.toLowerCase());
-                                if (idx !== -1) setActiveLibIndex(idx);
-                            }
-                        }
+                        applyHostLibraries(data.libraries ?? []);
                     }
                 })
                 .catch(err => console.error("Web Config Load Error:", err));
