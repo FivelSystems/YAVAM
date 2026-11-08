@@ -26,6 +26,14 @@ afterEach(() => {
 });
 
 describe('useLibrary', () => {
+    it('reports the host libraries as loaded only once the host has answered', async () => {
+        localStorage.setItem('activeLibraryPath', 'D:\\Libs\\Stale');
+        const { result } = renderHook(useLibrary);
+        expect(result.current.hostLibrariesLoaded).toBe(false);
+
+        await waitFor(() => expect(result.current.hostLibrariesLoaded).toBe(true));
+    });
+
     it('forgets a remembered library when the host lists none', async () => {
         localStorage.setItem('activeLibraryPath', 'D:\\Libs\\Stale');
         const { result } = renderHook(useLibrary);

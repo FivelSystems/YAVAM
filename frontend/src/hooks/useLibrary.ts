@@ -15,6 +15,7 @@ export const useLibrary = () => {
     });
     const [activeLibIndex, setActiveLibIndex] = useState(0);
     const [needsSetup, setNeedsSetup] = useState(false);
+    const [hostLibrariesLoaded, setHostLibrariesLoaded] = useState(false);
 
     // Ref for stale closure access
     const activeLibIndexRef = useRef(activeLibIndex);
@@ -146,6 +147,7 @@ export const useLibrary = () => {
         setActiveLibraryPath(active.path);
         setActiveLibIndex(active.index);
         rememberActiveLibrary(hostLibraries, active);
+        setHostLibrariesLoaded(true);
     };
 
     // Initialization Effect (Sync with Backend/WebAPI)
@@ -197,6 +199,7 @@ export const useLibrary = () => {
         activeLibraryPath, setActiveLibraryPath,
         activeLibIndex, setActiveLibIndex, // Exposing setters for hydration
         needsSetup, setNeedsSetup,
+        hostLibrariesLoaded,
         selectLibrary,
         addLibrary,
         removeLibrary,

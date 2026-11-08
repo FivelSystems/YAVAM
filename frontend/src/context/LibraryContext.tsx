@@ -10,6 +10,7 @@ interface LibraryContextType {
     setActiveLibIndex: (i: number) => void;
     needsSetup: boolean;
     setNeedsSetup: (v: boolean) => void;
+    hostLibrariesLoaded: boolean;
     selectLibrary: (pathOrIndex: string | number) => void;
     addLibrary: (path: string) => void;
     removeLibrary: (path: string) => void;
