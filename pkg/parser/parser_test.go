@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -168,3 +170,72 @@ func TestLicenseTypeParsing(t *testing.T) {
 	}
 }
 
+func TestParseVarMetadataWithOptionsSkipsThumbnailOnly(t *testing.T) {
+	buf := new(bytes.Buffer)
+	w := zip.NewWriter(buf)
+	for name, content := range map[string]string{
+		"meta.json":                `{"creatorName":"c","packageName":"p","tags":"a,b"}`,
+		"package.jpg":              "root_thumb",
+		"Saves/scene/MyScene.json": "{}",
+		"Custom/Clothing/Item.vam": `{"tags":"extra"}`,
+	} {
+		f, err := w.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		f.Write([]byte(content))
+	}
+	w.Close()
+	path := filepath.Join(t.TempDir(), "test.var")
+	if err := os.WriteFile(path, buf.Bytes(), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	fullMeta, fullThumb, fullCats, err := ParseVarMetadataWithOptions(path, ParseOptions{ExtractThumbnail: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	skipMeta, skipThumb, skipCats, err := ParseVarMetadataWithOptions(path, ParseOptions{ExtractThumbnail: false})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if string(fullThumb) != "root_thumb" {
+		t.Fatalf("extracting call returned thumbnail %q", fullThumb)
+	}
+	if len(skipThumb) != 0 {
+		t.Errorf("skipping call returned %d thumbnail bytes", len(skipThumb))
+	}
+	if !reflect.DeepEqual(fullMeta, skipMeta) {
+		t.Errorf("metadata differs: %+v vs %+v", fullMeta, skipMeta)
+	}
+	sort.Strings(fullCats)
+	sort.Strings(skipCats)
+	if !reflect.DeepEqual(fullCats, skipCats) || len(fullCats) == 0 {
+		t.Errorf("categories differ or empty: %v vs %v", fullCats, skipCats)
+	}
+}
+
+func BenchmarkParseVarMetadataThumbnail(b *testing.B) {
+	buf := new(bytes.Buffer)
+	w := zip.NewWriter(buf)
+	f, _ := w.Create("meta.json")
+	f.Write([]byte("{}"))
+	f, _ = w.Create("package.jpg")
+	f.Write(bytes.Repeat([]byte("x"), 4*1024*1024))
+	w.Close()
+	path := filepath.Join(b.TempDir(), "bench.var")
+	if err := os.WriteFile(path, buf.Bytes(), 0644); err != nil {
+		b.Fatal(err)
+	}
+
+	for _, extract := range []bool{true, false} {
+		b.Run(map[bool]string{true: "extract", false: "skip"}[extract], func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				if _, _, _, err := ParseVarMetadataWithOptions(path, ParseOptions{ExtractThumbnail: extract}); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}

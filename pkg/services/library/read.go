@@ -12,7 +12,6 @@ import (
 	"strings"
 	"yavam/pkg/database"
 	"yavam/pkg/models"
-	"yavam/pkg/parser"
 )
 
 // GetPackageContents scans a .var file and returns a list of its displayable contents
@@ -154,7 +153,7 @@ func (s *defaultLibraryService) GetThumbnail(pkgPath string) ([]byte, error) {
 	}
 
 	// 2. Cache miss — open zip and extract thumbnail
-	_, thumbBytes, _, err := parser.ParseVarMetadata(pkgPath)
+	thumbBytes, err := s.extractThumbnail(pkgPath)
 	if err != nil {
 		return nil, fmt.Errorf("thumbnail: parse failed: %w", err)
 	}
