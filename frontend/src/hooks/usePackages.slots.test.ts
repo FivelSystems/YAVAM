@@ -272,6 +272,117 @@ describe('cold scan hold window', () => {
     });
 });
 
+describe('re-adding an indexed library with no cached rows', () => {
+    const LIBRARY_SIZE = 600;
+    const DISCOVERY_CHUNK = 50;
+    const allNames = Array.from({ length: LIBRARY_SIZE }, (_, index) => `Pkg${String(index).padStart(4, '0')}`);
+    const stageProgress = (stage: string, current: number, total: number, done = false) =>
+        emit('scan:stage', { stage, current, total, done });
+
+    const streamDiscovery = (result: { current: ReturnType<typeof useGrid> }, upTo = LIBRARY_SIZE) => {
+        stageProgress('discovery', 0, LIBRARY_SIZE);
+        for (let index = 0; index < upTo; index++) {
+            emit('package:discovered', buildPackage(allNames[index]));
+            if ((index + 1) % DISCOVERY_CHUNK === 0) {
+                stageProgress('discovery', index + 1, LIBRARY_SIZE);
+                advanceBatch();
+                expect(result.current.filters.pendingCount).toBe(0);
+            }
+        }
+    };
+
+    it('holds, never counts the cold discoveries as pending, and places every slot at once', async () => {
+        const { result } = renderHook(useGrid);
+        await startScan(result);
+
+        streamDiscovery(result, LIBRARY_SIZE - 1);
+        expect(names(result)).toEqual([]);
+        emit('package:discovered', buildPackage(allNames[LIBRARY_SIZE - 1]));
+        stageProgress('discovery', LIBRARY_SIZE, LIBRARY_SIZE, true);
+
+        expect(result.current.packageLogic.scanSlots.phase).toBe('placed');
+        expect(names(result)).toEqual(allNames);
+        expect(result.current.filters.pendingCount).toBe(0);
+        stageProgress('analyzing', 10, LIBRARY_SIZE);
+        advanceBatch();
+        expect(names(result)).toEqual(allNames);
+        expect(result.current.filters.pendingCount).toBe(0);
+    });
+
+    it('is not released by a finished discovery event left over from the previous scan', async () => {
+        const { result } = renderHook(useGrid);
+        await startScan(result);
+
+        stageProgress('discovery', 0, 0, true);
+        streamDiscovery(result, LIBRARY_SIZE - 1);
+        expect(result.current.packageLogic.scanSlots.phase).toBe('held');
+        expect(result.current.filters.pendingCount).toBe(0);
+    });
+
+    it('is not released by a smaller total left over from the previous scan', async () => {
+        const { result } = renderHook(useGrid);
+        await startScan(result);
+
+        stageProgress('discovery', 20, 20, true);
+        stageProgress('discovery', 0, LIBRARY_SIZE);
+        streamDiscovery(result, LIBRARY_SIZE - 1);
+        expect(names(result)).toEqual([]);
+        expect(result.current.filters.pendingCount).toBe(0);
+    });
+
+    it('starts cold even while the previous library is still in state', async () => {
+        cachedRows = [buildPackage('Old1'), buildPackage('Old2')];
+        const { result } = renderHook(useGrid);
+        await startScan(result);
+        expect(names(result)).toEqual(['Old1', 'Old2']);
+
+        cachedRows = [];
+        await startScan(result);
+        expect(result.current.packageLogic.scanSlots.phase).toBe('held');
+        expect(names(result)).toEqual([]);
+
+        streamDiscovery(result);
+        expect(names(result)).toEqual(allNames);
+        expect(result.current.filters.pendingCount).toBe(0);
+    });
+
+    it('treats a placed ledger with an empty snapshot as cold, never as everything pending', async () => {
+        const { result } = renderHook(useGrid);
+        await startScan(result);
+        stageProgress('discovery', 0, 0, true);
+        expect(result.current.packageLogic.scanSlots.phase).toBe('placed');
+
+        ['Charlie', 'Alpha', 'Bravo'].forEach(name => emit('package:discovered', buildPackage(name)));
+        advanceBatch();
+
+        expect(result.current.filters.pendingCount).toBe(0);
+    });
+
+    it('still counts a file added after a placed snapshot as pending', async () => {
+        cachedRows = [buildPackage('Alpha')];
+        const { result } = renderHook(useGrid);
+        await startScan(result);
+        emit('package:discovered', buildPackage('Zulu'));
+        advanceBatch();
+        expect(result.current.filters.pendingCount).toBe(1);
+    });
+
+    it('leaves a sorted grid after completion and after a cancel', async () => {
+        const { result } = renderHook(useGrid);
+        await startScan(result);
+        streamDiscovery(result, 100);
+        await act(async () => { await result.current.packageLogic.cancelScan(); });
+        advanceBatch();
+        expect(names(result)).toEqual(allNames.slice(0, 100));
+
+        await startScan(result);
+        streamDiscovery(result);
+        emit('scan:complete');
+        expect(names(result)).toEqual(allNames);
+        expect(result.current.filters.pendingCount).toBe(0);
+    });
+});
+
 describe('cache-painted library', () => {
     it('renders final immediately and is not held', async () => {
         cachedRows = [buildPackage('Bravo'), buildPackage('Alpha')];

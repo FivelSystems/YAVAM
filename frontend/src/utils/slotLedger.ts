@@ -91,6 +91,10 @@ interface LedgerViewInput extends ViewInput {
  * reshuffles cards that are already visible. Everything else waits as pending.
  */
 export const computeLedgerView = ({ packages, matches, sortMode, ledger, query, contentDependent }: LedgerViewInput): SlotView => {
+    // An empty snapshot means nothing was known at placement: this is a cold
+    // scan, not a library whose every file is new, so nothing is "pending".
+    if (ledger.placed.size === 0) return EMPTY_SLOT_VIEW;
+
     if (ledger.decisionsQuery !== query) {
         ledger.decisions.clear();
         ledger.decisionsQuery = query;

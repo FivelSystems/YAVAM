@@ -281,6 +281,7 @@ export const usePackages = (activeLibraryPath: string) => {
             const enumeratedPaths = new Set<string>();
             let enumerationTotal = 0;
             let isEnumerationDone = false;
+            let hasPlacedEmptySnapshot = false;
 
             // Releases the held grid in the same batch as the final enumeration flush,
             // so the full ordered set appears at once. Arrival order is irrelevant:
@@ -290,10 +291,21 @@ export const usePackages = (activeLibraryPath: string) => {
                 const isTotalKnown = enumerationTotal > 0 || isEnumerationDone;
                 if (!isTotalKnown || enumeratedPaths.size < enumerationTotal) return;
                 isGridHeld = false;
+                hasPlacedEmptySnapshot = enumeratedPaths.size === 0;
                 if (flushTimer) clearTimeout(flushTimer);
                 flushTimer = null;
                 batchFlush();
                 placeSlots();
+            };
+
+            // A "finished, empty" enumeration followed by files can only be a stale
+            // stage event; placing on it would turn the whole library into pending.
+            const reholdIfPlacedEmpty = () => {
+                if (!hasPlacedEmptySnapshot) return;
+                hasPlacedEmptySnapshot = false;
+                isGridHeld = true;
+                isEnumerationDone = false;
+                setScanSlots({ phase: 'held', epoch: ++slotsEpochRef.current });
             };
 
             // Phase 1 — Light Pass
@@ -303,7 +315,8 @@ export const usePackages = (activeLibraryPath: string) => {
                 seenThisScanRef.current.add(normPath(data.filePath));
                 enumeratedPaths.add(normPath(data.filePath));
                 discoveredBuffer.push(data);
-                if (isGridHeld) releaseGridWhenEnumerated();
+                reholdIfPlacedEmpty();
+                releaseGridWhenEnumerated();
                 const now = Date.now();
                 if (now - lastFlush > 200) scheduleFlush(true);
                 else scheduleFlush();
