@@ -43,10 +43,15 @@ func (m *Manager) AddLibrary(path string) error {
 	return m.db.UpsertLibrary(path)
 }
 
-// RemoveLibrary removes a library and all its associated package records.
+// RemoveLibrary removes a library and all its associated package records, and
+// stops any scan still running on it.
 func (m *Manager) RemoveLibrary(path string) error {
 	if m.db == nil {
 		return fmt.Errorf("database not available")
 	}
-	return m.db.DeleteLibrary(path)
+	if err := m.db.DeleteLibrary(path); err != nil {
+		return err
+	}
+	m.scans.cancelScansOf(path)
+	return nil
 }

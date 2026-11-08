@@ -27,6 +27,7 @@ type Manager struct {
 	mu       sync.Mutex
 	DataPath string
 	config   config.ConfigService
+	scans    scanRegistry
 }
 
 func (m *Manager) GetConfig() *config.Config {
@@ -111,6 +112,9 @@ func (m *Manager) ScanFull(
 	if !m.IsConfiguredLibrary(rootPath) {
 		return ErrPathNotAllowed
 	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	defer m.scans.register(rootPath, cancel)()
 	return m.library.ScanFull(ctx, rootPath, onDiscovered, onScanned, onAnalysisDone, onStage)
 }
 
