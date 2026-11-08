@@ -65,6 +65,9 @@ type scanOrchestrator struct {
 	onStage        func(ScanStageProgress)
 }
 
+// workerStartHook lets tests act on a Hard Pass worker before it checks for cancellation.
+var workerStartHook func(filePath string)
+
 // runThreePhase executes all three phases sequentially and blocks until completion.
 func (o *scanOrchestrator) runThreePhase(ctx context.Context, rawPkgs []models.VarPackage) error {
 	total := len(rawPkgs)
@@ -161,10 +164,20 @@ func (o *scanOrchestrator) runThreePhase(ctx context.Context, rawPkgs []models.V
 		}
 
 		wg.Add(1)
-		sem <- struct{}{}
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			wg.Done()
+			wg.Wait()
+			return ctx.Err()
+		}
 		go func(filePath string) {
 			defer wg.Done()
 			defer func() { <-sem }()
+
+			if workerStartHook != nil {
+				workerStartHook(filePath)
+			}
 
 			select {
 			case <-ctx.Done():
@@ -255,7 +268,12 @@ func (o *scanOrchestrator) runThreePhase(ctx context.Context, rawPkgs []models.V
 	close(stopBump)
 	<-bumpDone
 
-	o.onStage(ScanStageProgress{Stage: StageScanning, Current: total, Total: total, Done: true})
+	// A cancelled scan covers only part of the library, so absence from
+	// scannedPkgs says nothing about the file: upsert what was scanned, never prune.
+	cancelled := ctx.Err() != nil
+	if !cancelled {
+		o.onStage(ScanStageProgress{Stage: StageScanning, Current: total, Total: total, Done: true})
+	}
 
 	// ── DB persistence ────────────────────────────────────────────────────────
 	// Batch-upsert all scanned packages into the DB, then remove records for
@@ -273,10 +291,16 @@ func (o *scanOrchestrator) runThreePhase(ctx context.Context, rawPkgs []models.V
 			if err := o.db.UpsertPackages(dbRows); err != nil {
 				log.Printf("[Scanner] DB upsert error: %v", err)
 			}
-			if err := o.db.DeletePackagesOlderThan(libID, scanStart); err != nil {
-				log.Printf("[Scanner] DB orphan cleanup error: %v", err)
+			if !cancelled {
+				if err := o.db.DeletePackagesOlderThan(libID, scanStart); err != nil {
+					log.Printf("[Scanner] DB orphan cleanup error: %v", err)
+				}
 			}
 		}
+	}
+
+	if cancelled {
+		return ctx.Err()
 	}
 
 	// ── Phase 3: LINK PASS ────────────────────────────────────────────────────────

@@ -525,6 +525,9 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 				s.Broadcast("scan:stage", sp)
 			},
 		)
+		if errors.Is(err, context.Canceled) {
+			return
+		}
 		if err != nil {
 			s.Broadcast("scan:error", err.Error())
 			s.writeError(w, err.Error(), 500)
