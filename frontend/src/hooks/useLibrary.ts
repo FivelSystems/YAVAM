@@ -3,10 +3,39 @@ import { config } from '../wailsjs/go/models';
 import { fetchWithAuth } from '../services/api';
 import { resolveActiveLibrary, rememberActiveLibrary } from './activeLibrary';
 
-export const useLibrary = () => {
+const ADD_LIBRARY_FAILED_MESSAGE = "Couldn't add that folder. Check that it exists and that you can read it.";
+
+interface HostConfig {
+    setupDone: boolean;
+    libraries?: string[] | null;
+}
+
+interface UseLibraryOptions {
+    notifyError?: (message: string) => void;
+}
+
+const hasDesktopBridge = (): boolean =>
+    // @ts-ignore
+    Boolean(window.go && window.go.main && window.go.main.App);
+
+const fetchHostConfig = async (): Promise<HostConfig> => {
+    if (hasDesktopBridge()) {
+        // @ts-ignore
+        const cfg: config.Config | null = await window.go.main.App.GetConfig();
+        if (!cfg) throw new Error("The host returned no configuration");
+        return cfg;
+    }
+    const response = await fetchWithAuth('/api/config');
+    if (!response.ok) throw new Error("Failed to fetch config");
+    const data: HostConfig | null = await response.json();
+    if (!data) throw new Error("The host returned no configuration");
+    return data;
+};
+
+export const useLibrary = ({ notifyError }: UseLibraryOptions = {}) => {
     // -- State --
     const [libraries, setLibraries] = useState<string[]>([]);
-    const [activeLibraryPath, setActiveLibraryPath] = useState<string>(() => {
+    const [rememberedPath, setRememberedPath] = useState<string>(() => {
         const current = localStorage.getItem("activeLibraryPath");
         if (current) return current;
         const saved = localStorage.getItem("savedLibraries");
@@ -16,12 +45,24 @@ export const useLibrary = () => {
     const [activeLibIndex, setActiveLibIndex] = useState(0);
     const [needsSetup, setNeedsSetup] = useState(false);
     const [hostLibrariesLoaded, setHostLibrariesLoaded] = useState(false);
+    const [libraryLoadFailed, setLibraryLoadFailed] = useState(false);
 
     // Ref for stale closure access
     const activeLibIndexRef = useRef(activeLibIndex);
     useEffect(() => {
         activeLibIndexRef.current = activeLibIndex;
     }, [activeLibIndex]);
+
+    const rememberedPathRef = useRef(rememberedPath);
+    useEffect(() => {
+        rememberedPathRef.current = rememberedPath;
+    }, [rememberedPath]);
+
+    const addInProgressRef = useRef(false);
+
+    // The path the app works on. A path remembered by this client is not used
+    // until the host has said which libraries exist: the host decides.
+    const activeLibraryPath = hostLibrariesLoaded ? rememberedPath : "";
 
     // -- Helpers --
 
@@ -41,13 +82,13 @@ export const useLibrary = () => {
 
         if (path && index !== -1) {
             setActiveLibIndex(index);
-            setActiveLibraryPath(path);
+            setRememberedPath(path);
             localStorage.setItem("activeLibraryPath", path);
         }
     }, [libraries]);
 
     const addLibrary = useCallback(async (path: string) => {
-        if (!path) return;
+        if (!path || !hasDesktopBridge() || addInProgressRef.current) return;
 
         if (libraries.includes(path)) {
             selectLibrary(path);
@@ -56,24 +97,25 @@ export const useLibrary = () => {
 
         // The host refuses to scan a folder that is not a configured library,
         // so it has to know the library before it becomes the active one.
-        // @ts-ignore
-        if (window.go && window.go.main && window.go.main.App) {
-            try {
-                // @ts-ignore
-                await window.go.main.App.AddConfiguredLibrary(path);
-            } catch (err) {
-                console.error("Failed to add library:", err);
-                return;
-            }
+        addInProgressRef.current = true;
+        try {
+            // @ts-ignore
+            await window.go.main.App.AddConfiguredLibrary(path);
+        } catch (err) {
+            console.error("Failed to add library:", err);
+            notifyError?.(ADD_LIBRARY_FAILED_MESSAGE);
+            return;
+        } finally {
+            addInProgressRef.current = false;
         }
 
         const newLibs = [...libraries, path];
         const active = { path, index: newLibs.length - 1 };
         setLibraries(newLibs);
-        setActiveLibraryPath(active.path);
+        setRememberedPath(active.path);
         setActiveLibIndex(active.index);
         rememberActiveLibrary(newLibs, active);
-    }, [libraries, selectLibrary]);
+    }, [libraries, selectLibrary, notifyError]);
 
     const removeLibrary = useCallback((path: string) => {
         setLibraries(prev => {
@@ -89,12 +131,12 @@ export const useLibrary = () => {
                 const newIdx = Math.max(0, newLibs.length - 1);
                 setActiveLibIndex(newIdx);
                 const newPath = newLibs[newIdx] || "";
-                setActiveLibraryPath(newPath);
+                setRememberedPath(newPath);
                 localStorage.setItem("activeLibraryPath", newPath);
             } else if (index === activeLibIndex) {
                 // Removed currently active?
                 const newPath = newLibs[activeLibIndex] || (newLibs.length > 0 ? newLibs[0] : "");
-                setActiveLibraryPath(newPath);
+                setRememberedPath(newPath);
                 if (newPath) localStorage.setItem("activeLibraryPath", newPath);
             } else if (index < activeLibIndex) {
                 setActiveLibIndex(prevIdx => prevIdx - 1);
@@ -120,11 +162,11 @@ export const useLibrary = () => {
         }
 
         // Sync index
-        const newIdx = newOrder.indexOf(activeLibraryPath);
+        const newIdx = newOrder.indexOf(rememberedPath);
         if (newIdx !== -1) {
             setActiveLibIndex(newIdx);
         }
-    }, [activeLibraryPath]);
+    }, [rememberedPath]);
 
     // Desktop: Browse
     const browseAndAdd = useCallback(async () => {
@@ -133,73 +175,58 @@ export const useLibrary = () => {
             try {
                 // @ts-ignore
                 const p = await window.go.main.App.SelectDirectory();
-                if (p) addLibrary(p);
+                if (p) await addLibrary(p);
             } catch (e) {
                 console.error(e);
             }
         }
     }, [addLibrary]);
 
-
-    const applyHostLibraries = (hostLibraries: string[]) => {
-        const active = resolveActiveLibrary(hostLibraries, activeLibraryPath);
+    const applyHostLibraries = useCallback((hostLibraries: string[]) => {
+        const active = resolveActiveLibrary(hostLibraries, rememberedPathRef.current);
         setLibraries(hostLibraries);
-        setActiveLibraryPath(active.path);
+        setRememberedPath(active.path);
         setActiveLibIndex(active.index);
         rememberActiveLibrary(hostLibraries, active);
         setHostLibrariesLoaded(true);
-    };
-
-    // Initialization Effect (Sync with Backend/WebAPI)
-    useEffect(() => {
-        // @ts-ignore
-        if (window.go && window.go.main && window.go.main.App) {
-            // Desktop Mode: Fetch saved config
-            // @ts-ignore
-            window.go.main.App.GetConfig().then((cfg: config.Config) => {
-                if (cfg) {
-                    // Setup wizard is Desktop-only: FinishSetup() can only be called via Wails.
-                    setNeedsSetup(!cfg.setupDone);
-
-                    applyHostLibraries(cfg.libraries ?? []);
-                }
-            }).catch((err: any) => console.error("Failed to load library config:", err));
-        } else {
-            // Web Mode: Fetch config via API
-            fetchWithAuth('/api/config')
-                .then(res => {
-                    if (!res.ok) throw new Error("Failed to fetch config");
-                    return res.json();
-                })
-                .then(data => {
-                    if (data) {
-                        setNeedsSetup(!data.setupDone);
-
-                        applyHostLibraries(data.libraries ?? []);
-                    }
-                })
-                .catch(err => console.error("Web Config Load Error:", err));
-        }
-
     }, []);
+
+    const loadHostLibraries = useCallback(async () => {
+        setLibraryLoadFailed(false);
+        try {
+            const hostConfig = await fetchHostConfig();
+            // The setup wizard is desktop-only: FinishSetup() can only be called via Wails.
+            setNeedsSetup(!hostConfig.setupDone);
+            applyHostLibraries(hostConfig.libraries ?? []);
+        } catch (err) {
+            console.error("Failed to load the library list from the host:", err);
+            setLibraryLoadFailed(true);
+        }
+    }, [applyHostLibraries]);
+
+    useEffect(() => {
+        void loadHostLibraries();
+    }, [loadHostLibraries]);
 
     // Also: Sync Active Index when libraries list changes (Refactored from Dashboard)
     useEffect(() => {
-        if (activeLibraryPath && libraries.length > 0) {
-            const idx = libraries.findIndex(l => l.toLowerCase() === activeLibraryPath.toLowerCase());
+        if (rememberedPath && libraries.length > 0) {
+            const idx = libraries.findIndex(l => l.toLowerCase() === rememberedPath.toLowerCase());
             if (idx !== -1 && idx !== activeLibIndex) {
                 setActiveLibIndex(idx);
             }
         }
-    }, [libraries, activeLibraryPath, activeLibIndex]);
+    }, [libraries, rememberedPath, activeLibIndex]);
 
 
     return {
         libraries, setLibraries,
-        activeLibraryPath, setActiveLibraryPath,
+        activeLibraryPath, setActiveLibraryPath: setRememberedPath,
         activeLibIndex, setActiveLibIndex, // Exposing setters for hydration
         needsSetup, setNeedsSetup,
         hostLibrariesLoaded,
+        libraryLoadFailed,
+        reloadHostLibraries: loadHostLibraries,
         selectLibrary,
         addLibrary,
         removeLibrary,

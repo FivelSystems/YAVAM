@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { AlertTriangle } from 'lucide-react';
 import { VarPackage, DependencyLocation } from '../../types';
 import CardGrid from '../library/CardGrid';
 import { Pagination } from '../../components/common/Pagination';
 import RightSidebar from '../library/RightSidebar';
 import { ScanHoldNotice, ScanPendingNotice } from '../library/ScanGridNotices';
+import { ErrorBanner, LibrariesLoadingNotice, NoLibrariesNotice } from '../library/LibraryStatusNotices';
 import { usePackageContext } from '../../context/PackageContext';
 import { useFilterContext } from '../../context/FilterContext';
 import { useSelectionContext } from '../../context/SelectionContext';
@@ -47,7 +47,12 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
         isDetailsPanelOpen, setIsDetailsPanelOpen,
         handlePackageClick, handleContextMenu, handleLongPress, setSelectedIds, setContextMenu
     } = useSelectionContext();
-    const { activeLibraryPath, selectLibrary } = useLibraryContext();
+    const {
+        activeLibraryPath, selectLibrary, libraries, hostLibrariesLoaded,
+        libraryLoadFailed, reloadHostLibraries, browseAndAdd
+    } = useLibraryContext();
+    // @ts-ignore
+    const canAddLibrary = Boolean(window.go);
     const { handleSingleResolve, handleGetDependencyStatus, setPackageRating, setPackageFavorite } = useActionContext();
     const { addToast } = useToasts();
 
@@ -240,18 +245,22 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
     return (
         <div className="flex-1 flex overflow-hidden">
             <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
-                {scanError && (
-                    <div className="bg-red-500/10 border-b border-red-500/20 p-4 flex items-center justify-center text-red-400 gap-3 shrink-0">
-                        <AlertTriangle className="w-5 h-5" />
-                        <span className="font-medium">Library Access Error: {scanError}</span>
-                    </div>
+                {libraryLoadFailed && (
+                    <ErrorBanner
+                        message="Couldn't load your libraries. Check the connection and try again."
+                        actionLabel="Retry"
+                        onAction={reloadHostLibraries}
+                    />
                 )}
+                {scanError && <ErrorBanner message={`Library Access Error: ${scanError}`} />}
 
                 <ScanPendingNotice count={pendingCount} />
 
                 {/* CardGrid Container */}
                 <div ref={scrollContainerRef} className="flex-1 overflow-auto p-4 pb-32 md:pb-24 custom-scrollbar">
-                    {scanSlots.phase === 'held' ? <ScanHoldNotice stages={scanStages} /> : <CardGrid
+                    {!hostLibrariesLoaded ? (libraryLoadFailed ? null : <LibrariesLoadingNotice />)
+                    : libraries.length === 0 ? <NoLibrariesNotice onAddLibrary={canAddLibrary ? browseAndAdd : undefined} />
+                    : scanSlots.phase === 'held' ? <ScanHoldNotice stages={scanStages} /> : <CardGrid
                         packages={currentSlice}
                         currentPath={activeLibraryPath}
                         totalCount={packages.length}

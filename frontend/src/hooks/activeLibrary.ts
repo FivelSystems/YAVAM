@@ -12,7 +12,7 @@ const sameLibraryPath = (a: string, b: string) => a.toLowerCase() === b.toLowerC
  */
 export const resolveActiveLibrary = (hostLibraries: string[], rememberedPath: string): ActiveLibrary => {
     const rememberedIndex = hostLibraries.findIndex(library => sameLibraryPath(library, rememberedPath));
-    if (rememberedIndex !== -1) return { path: rememberedPath, index: rememberedIndex };
+    if (rememberedIndex !== -1) return { path: hostLibraries[rememberedIndex], index: rememberedIndex };
     if (hostLibraries.length > 0) return { path: hostLibraries[0], index: 0 };
     return { path: "", index: 0 };
 };

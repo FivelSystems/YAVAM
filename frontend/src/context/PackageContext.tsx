@@ -42,8 +42,7 @@ interface PackageContextType {
 const PackageContext = createContext<PackageContextType | undefined>(undefined);
 
 export const PackageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const { activeLibraryPath: rememberedLibraryPath, hostLibrariesLoaded } = useLibraryContext();
-    const activeLibraryPath = hostLibrariesLoaded ? rememberedLibraryPath : "";
+    const { activeLibraryPath } = useLibraryContext();
     const packageLogic = usePackages(activeLibraryPath);
 
     // Keybind: Refresh

@@ -1,5 +1,6 @@
-import React, { createContext, useContext } from 'react';
+import React, { createContext, useCallback, useContext } from 'react';
 import { useLibrary } from '../hooks/useLibrary';
+import { useToasts } from './ToastContext';
 
 interface LibraryContextType {
     libraries: string[];
@@ -11,8 +12,10 @@ interface LibraryContextType {
     needsSetup: boolean;
     setNeedsSetup: (v: boolean) => void;
     hostLibrariesLoaded: boolean;
+    libraryLoadFailed: boolean;
+    reloadHostLibraries: () => Promise<void>;
     selectLibrary: (pathOrIndex: string | number) => void;
-    addLibrary: (path: string) => void;
+    addLibrary: (path: string) => Promise<void>;
     removeLibrary: (path: string) => void;
     reorderLibraries: (order: string[]) => void;
     browseAndAdd: () => Promise<void>;
@@ -22,7 +25,9 @@ interface LibraryContextType {
 const LibraryContext = createContext<LibraryContextType | undefined>(undefined);
 
 export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const libraryLogic = useLibrary();
+    const { addToast } = useToasts();
+    const notifyError = useCallback((message: string) => { addToast(message, 'error'); }, [addToast]);
+    const libraryLogic = useLibrary({ notifyError });
 
     // Future keybinds: 'next_library', 'prev_library' could go here
 

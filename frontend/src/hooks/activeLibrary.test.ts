@@ -4,8 +4,8 @@ import { resolveActiveLibrary } from './activeLibrary';
 describe('resolveActiveLibrary', () => {
     const hostLibraries = ['D:\\Libs\\One', 'D:\\Libs\\Two'];
 
-    it('keeps the remembered path while the host still lists it, ignoring case', () => {
-        expect(resolveActiveLibrary(hostLibraries, 'd:\\libs\\two')).toEqual({ path: 'd:\\libs\\two', index: 1 });
+    it('keeps the remembered library while the host still lists it, spelled as the host spells it', () => {
+        expect(resolveActiveLibrary(hostLibraries, 'd:\\libs\\two')).toEqual({ path: 'D:\\Libs\\Two', index: 1 });
     });
 
     it('falls back to the first library when the remembered path is no longer listed', () => {
