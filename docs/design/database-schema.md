@@ -9,15 +9,19 @@
 
 ## Role of the database
 
-SQLite is an **index/cache**, not the source of truth. It is rebuilt from disk
-scans, plus a small amount of genuinely new data (ratings, favourites, notes) that
-exists nowhere else.
+SQLite is an **index/cache for package data**: it is rebuilt from disk scans. It
+also holds data that exists nowhere else, so the database file is **not**
+disposable.
 
-- `config.json` remains the source of truth for configured library paths and
-  host-level settings. Library paths are mirrored *from* `config.json` into the DB
-  on launch, so a build predating the DB still works off `config.json`.
-- Only genuinely new, user-authored data (ratings, favourites, notes, hidden flag)
-  originates in the DB.
+- **The database is the source of truth for the configured library list**, in the
+  `libraries` table. A `libraries` array found in `config.json` (written by a build
+  that predates the database) is imported once on launch and then cleared; nothing
+  writes the list back to `config.json`.
+- **User-authored data originates in the DB** and cannot be rebuilt from disk:
+  ratings, favourites, notes, and the hidden flag.
+- `config.json` holds host-level settings only.
+- Deleting `yavam.db` therefore loses the library list and all user-authored data.
+  Back the file up (or use the settings export) before removing it.
 
 ## Driver
 

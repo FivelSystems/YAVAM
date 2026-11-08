@@ -140,7 +140,9 @@ cfg.Update(func(c) { c.Libraries = []string{} }) // zero out config.json
 ```
 
 This is idempotent — safe to call on every subsequent launch.  
-After migration, `config.json` no longer stores the `libraries` array.
+After migration, `config.json` no longer stores the `libraries` array: the
+`libraries` table is the only place the library list lives, so losing `yavam.db`
+loses it (together with ratings, favourites and notes).
 
 ---
 
