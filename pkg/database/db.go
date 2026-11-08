@@ -3,6 +3,8 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -28,9 +30,10 @@ type DB struct {
 // Open opens (or creates) the SQLite database at the given path,
 // runs all pending migrations, and returns a ready-to-use DB.
 func Open(path string) (*DB, error) {
-	// WAL mode for better concurrent read performance.
-	// foreign_keys enforces CASCADE deletes (packages → libraries, pocket_items → pockets).
-	dsn := fmt.Sprintf("file:%s?_journal_mode=WAL&_foreign_keys=on", path)
+	dsn, err := buildDSN(path)
+	if err != nil {
+		return nil, fmt.Errorf("database: open %q: %w", path, err)
+	}
 	conn, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("database: open %q: %w", path, err)
@@ -51,7 +54,53 @@ func Open(path string) (*DB, error) {
 		conn.Close()
 		return nil, fmt.Errorf("database: reconcile path_norm: %w", err)
 	}
+	if err := db.removeOrphanRows(); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("database: remove orphan rows: %w", err)
+	}
 	return db, nil
+}
+
+// connectionPragmas are applied by the driver to every new connection.
+var connectionPragmas = []string{
+	"foreign_keys(1)",
+	"journal_mode(WAL)",
+	"busy_timeout(5000)",
+	"synchronous(NORMAL)",
+}
+
+// buildDSN returns a file: URI for path with connectionPragmas attached.
+// modernc.org/sqlite silently ignores mattn-style params such as
+// _journal_mode and _foreign_keys; only _pragma=name(value) takes effect.
+func buildDSN(path string) (string, error) {
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	uriPath := filepath.ToSlash(absolute)
+	if !strings.HasPrefix(uriPath, "/") {
+		uriPath = "/" + uriPath
+	}
+
+	query := url.Values{"_pragma": connectionPragmas}
+	uri := url.URL{Scheme: "file", Path: uriPath, RawQuery: query.Encode()}
+	return uri.String(), nil
+}
+
+// removeOrphanRows deletes child rows whose parent no longer exists. Databases
+// created before foreign keys were enforced can hold such rows (for example
+// packages of a duplicate library dropped by reconcilePathNorm).
+func (db *DB) removeOrphanRows() error {
+	orphanCleanups := []string{
+		`DELETE FROM packages WHERE library_id NOT IN (SELECT id FROM libraries)`,
+		`DELETE FROM pocket_items WHERE session_id NOT IN (SELECT session_id FROM pockets)`,
+	}
+	for _, statement := range orphanCleanups {
+		if _, err := db.conn.Exec(statement); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Close releases the underlying connection.
