@@ -165,6 +165,113 @@ describe('cold scan', () => {
     });
 });
 
+describe('visible page results', () => {
+    const FRAME_MS = 16;
+    const advanceFrame = () => act(() => { vi.advanceTimersByTime(FRAME_MS); });
+    const phaseOf = (result: { current: ReturnType<typeof useGrid> }, name: string) =>
+        result.current.filters.filteredPkgs.find(p => p.meta.packageName === name)?.scanPhase;
+
+    const startVisibleScan = async (visibleNames: string[]) => {
+        const hook = renderHook(useGrid);
+        await startScan(hook.result);
+        const all = ['Alpha', 'Bravo', 'Charlie', 'Delta'];
+        discoveryStage(0, all.length);
+        all.forEach(name => emit('package:discovered', buildPackage(name)));
+        act(() => hook.result.current.packageLogic.prioritizePackages(
+            visibleNames.map(name => buildPackage(name).filePath),
+        ));
+        return hook.result;
+    };
+
+    it('applies visible results on the next frame, in arrival order, without waiting for the batch', async () => {
+        const result = await startVisibleScan(['Alpha', 'Bravo', 'Charlie']);
+
+        emit('package:scanned', buildPackage('Charlie'));
+        expect(phaseOf(result, 'Charlie')).toBe('discovered');
+        advanceFrame();
+        expect(phaseOf(result, 'Charlie')).toBe('scanned');
+        expect(phaseOf(result, 'Alpha')).toBe('discovered');
+
+        emit('package:scanned', buildPackage('Alpha'));
+        advanceFrame();
+        expect(phaseOf(result, 'Alpha')).toBe('scanned');
+        expect(phaseOf(result, 'Bravo')).toBe('discovered');
+    });
+
+    it('applies every visible result that arrives within one frame together', async () => {
+        const result = await startVisibleScan(['Alpha', 'Bravo', 'Charlie']);
+
+        emit('package:scanned', buildPackage('Alpha'));
+        emit('package:scanned', buildPackage('Bravo'));
+        expect(['Alpha', 'Bravo'].map(name => phaseOf(result, name))).toEqual(['discovered', 'discovered']);
+        advanceFrame();
+
+        expect(['Alpha', 'Bravo'].map(name => phaseOf(result, name))).toEqual(['scanned', 'scanned']);
+    });
+
+    it('keeps off-screen results on the batch timer', async () => {
+        const result = await startVisibleScan(['Alpha']);
+        emit('package:scanned', buildPackage('Charlie'));
+        advanceBatch();
+        expect(phaseOf(result, 'Charlie')).toBe('scanned');
+
+        emit('package:scanned', buildPackage('Delta'));
+        advanceFrame();
+        expect(phaseOf(result, 'Delta')).toBe('discovered');
+
+        advanceBatch();
+        expect(phaseOf(result, 'Delta')).toBe('scanned');
+    });
+
+    it('never moves a card when visible results land', async () => {
+        const result = await startVisibleScan(['Alpha', 'Bravo']);
+        const before = names(result);
+
+        emit('package:scanned', buildPackage('Bravo', { size: 9999 }));
+        advanceFrame();
+
+        expect(names(result)).toEqual(before);
+    });
+});
+
+describe('cold scan hold window', () => {
+    it('stays held while the enumeration total is unknown, however many files arrive', async () => {
+        const { result } = renderHook(useGrid);
+        await startScan(result);
+
+        discoveryStage(0, 0);
+        ['Alpha', 'Bravo', 'Charlie'].forEach(name => emit('package:discovered', buildPackage(name)));
+
+        expect(result.current.packageLogic.scanSlots.phase).toBe('held');
+    });
+
+    it('ends in the same event that completes the list, with no timer involved', async () => {
+        const { result } = renderHook(useGrid);
+        await startScan(result);
+        discoveryStage(0, 2);
+
+        emit('package:discovered', buildPackage('Bravo'));
+        expect(result.current.packageLogic.scanSlots.phase).toBe('held');
+
+        emit('package:discovered', buildPackage('Alpha'));
+        expect(result.current.packageLogic.scanSlots.phase).toBe('placed');
+        expect(names(result)).toEqual(['Alpha', 'Bravo']);
+    });
+
+    it('ends when the total arrives after every file was already enumerated', async () => {
+        const { result } = renderHook(useGrid);
+        await startScan(result);
+        emit('package:discovered', buildPackage('Bravo'));
+        emit('package:discovered', buildPackage('Alpha'));
+        expect(result.current.packageLogic.scanSlots.phase).toBe('held');
+
+        discoveryStage(2, 2);
+
+        expect(result.current.packageLogic.scanSlots.phase).toBe('placed');
+        expect(names(result)).toEqual(['Alpha', 'Bravo']);
+    });
+});
+
 describe('cache-painted library', () => {
     it('renders final immediately and is not held', async () => {
         cachedRows = [buildPackage('Bravo'), buildPackage('Alpha')];

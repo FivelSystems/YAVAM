@@ -7,9 +7,11 @@ import { clampPage } from '../utils/pagination';
 const ITEMS_PER_PAGE = 2;
 
 let mockPackages: unknown[] = [];
+const mockScanSlots = { phase: 'idle', epoch: 0 };
+const prioritizeSpy = vi.fn();
 
 vi.mock('./PackageContext', () => ({
-    usePackageContext: () => ({ packages: mockPackages, prioritizePackages: vi.fn() }),
+    usePackageContext: () => ({ packages: mockPackages, scanSlots: mockScanSlots, prioritizePackages: prioritizeSpy }),
 }));
 vi.mock('./KeybindContext', () => ({
     useKeybindSubscription: () => undefined,
@@ -36,6 +38,23 @@ describe('clampPage', () => {
     it('keeps a valid page', () => expect(clampPage(2, 4, 2)).toBe(2));
     it('clamps to the last page', () => expect(clampPage(9, 5, 2)).toBe(3));
     it('falls back to page 1 for an empty set', () => expect(clampPage(4, 0, 2)).toBe(1));
+});
+
+describe('FilterProvider page priority', () => {
+    it('sends the visible page once, and again only when the page contents change', () => {
+        prioritizeSpy.mockClear();
+        const { result, rerender } = renderFilterContext(makePackages(6));
+        expect(prioritizeSpy).toHaveBeenCalledTimes(1);
+        expect(prioritizeSpy).toHaveBeenLastCalledWith(['/lib/Creator.Pkg0.1.var', '/lib/Creator.Pkg1.1.var']);
+
+        mockPackages = makePackages(6);
+        rerender();
+        expect(prioritizeSpy).toHaveBeenCalledTimes(1);
+
+        act(() => result.current.setCurrentPage(2));
+        expect(prioritizeSpy).toHaveBeenCalledTimes(2);
+        expect(prioritizeSpy).toHaveBeenLastCalledWith(['/lib/Creator.Pkg2.1.var', '/lib/Creator.Pkg3.1.var']);
+    });
 });
 
 describe('FilterProvider page clamping', () => {

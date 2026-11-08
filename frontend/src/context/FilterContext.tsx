@@ -51,16 +51,19 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     // Notify the backend Hard Pass about the current page so it gets priority.
     const { prioritizePackages } = usePackageContext();
+    const lastSentPageRef = React.useRef('');
     React.useEffect(() => {
         if (filterLogic.filteredPkgs.length === 0) return;
         const start = (currentPage - 1) * itemsPerPage;
         const pagePaths = filterLogic.filteredPkgs
             .slice(start, start + itemsPerPage)
             .map(p => p.filePath);
-        if (pagePaths.length > 0) {
-            prioritizePackages(pagePaths);
-        }
-    }, [currentPage, itemsPerPage, filterLogic.filteredPkgs, prioritizePackages]);
+        if (pagePaths.length === 0) return;
+        const pageSignature = `${scanSlots.epoch}\n${pagePaths.join('\n')}`;
+        if (pageSignature === lastSentPageRef.current) return;
+        lastSentPageRef.current = pageSignature;
+        prioritizePackages(pagePaths);
+    }, [currentPage, itemsPerPage, filterLogic.filteredPkgs, scanSlots.epoch, prioritizePackages]);
 
 
     // Keybind: Focus Search

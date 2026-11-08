@@ -9,6 +9,7 @@ import { RatingFavoriteControl } from '../../components/ui/RatingFavoriteControl
 import { useLongPress } from '../../hooks/useLongPress';
 import { getStoredToken } from '../../services/auth';
 import { useInViewport } from '../../hooks/useInViewport';
+import { useScanReveal } from '../../hooks/useScanReveal';
 import PackageSkeleton from './components/PackageSkeleton';
 import { getCardState, isPendingCardState } from './utils';
 
@@ -147,7 +148,9 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, onRate, onToggleFavori
     const longPress = useLongPress(() => onOpenActionSheet(pkg));
     const cardState = getCardState(pkg);
     const isListed = cardState === 'listed';
-    const isShimmerVisible = useInViewport(cardRef, isScanActive && isPendingCardState(cardState));
+    const isPending = isPendingCardState(cardState);
+    const isShimmerVisible = useInViewport(cardRef, isScanActive && isPending);
+    const revealClassName = useScanReveal(isPending, isScanActive);
 
     // ── All hooks must be declared unconditionally (Rules of Hooks) ───────────
     // Do NOT add early returns before these declarations.
@@ -307,7 +310,8 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, onRate, onToggleFavori
                 onContextMenu={(e) => onContextMenu(e, pkg)}
                 className={clsx(
                     "relative group rounded-lg border overflow-hidden cursor-pointer bg-gray-900 transition-colors hover:bg-gray-800 flex items-center h-20 p-2 gap-3",
-                    statusClass
+                    statusClass,
+                    revealClassName
                 )}
                 {...longPressHandlers}
             >
@@ -320,7 +324,8 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, onRate, onToggleFavori
                             loading="lazy"
                             className={clsx(
                                 "w-full h-full object-cover",
-                                censorThumbnails && "scale-110" // Scale up to hide blur edges
+                                censorThumbnails && "scale-110", // Scale up to hide blur edges
+                                revealClassName
                             )}
                             style={censorThumbnails ? { filter: `blur(${blurAmount}px)` } : undefined}
                         />
@@ -377,7 +382,8 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, onRate, onToggleFavori
             onContextMenu={(e) => onContextMenu(e, pkg)}
             className={clsx(
                 "relative group rounded-xl border-2 overflow-hidden cursor-pointer bg-gray-900 aspect-square transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:z-10",
-                statusClass
+                statusClass,
+                revealClassName
             )}
             {...longPressHandlers}
         >
@@ -390,7 +396,8 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, onRate, onToggleFavori
                         loading="lazy"
                         className={clsx(
                             "w-full h-full object-cover transition-transform duration-500 group-hover:scale-110",
-                            censorThumbnails && "scale-125" // Scale up to hide blur edges
+                            censorThumbnails && "scale-125", // Scale up to hide blur edges
+                            revealClassName
                         )}
                         style={censorThumbnails ? { filter: `blur(${blurAmount}px)` } : undefined}
                     />

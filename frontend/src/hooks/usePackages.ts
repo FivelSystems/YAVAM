@@ -65,6 +65,8 @@ const applyAnalysis = (p: VarPackage, a: PackageAnalysis): VarPackage => {
     return pkgSignature(p) === pkgSignature(merged) ? p : merged;
 };
 
+const normPath = (p: string) => p.replace(/\\/g, '/').toLowerCase();
+
 export const usePackages = (activeLibraryPath: string) => {
     const [packages, setPackages] = useState<VarPackage[]>([]);
     const [scanError, setScanError] = useState<string | null>(null);
@@ -87,7 +89,7 @@ export const usePackages = (activeLibraryPath: string) => {
     const seenThisScanRef = useRef(new Set<string>());
     const cacheSeededRef = useRef(false);
 
-    const normPath = (p: string) => p.replace(/\\/g, '/').toLowerCase();
+    const visiblePathsRef = useRef(new Set<string>());
 
     const [slotsState, setScanSlots] = useState<ScanSlots>(IDLE_SLOTS);
     const slotsEpochRef = useRef(0);
@@ -119,6 +121,7 @@ export const usePackages = (activeLibraryPath: string) => {
      * Called by FilterContext when the page changes, and by PackageCard on click.
      */
     const prioritizePackages = useCallback((paths: string[]) => {
+        visiblePathsRef.current = new Set(paths.map(normPath));
         if (!window.go || paths.length === 0) return;
         window.go.main.App.SetCurrentPage(paths).catch(() => { /* non-fatal */ });
     }, []);
@@ -197,8 +200,26 @@ export const usePackages = (activeLibraryPath: string) => {
             // ── Buffered batch flush for discovered/scanned ───────────────────
             let discoveredBuffer: VarPackage[] = [];
             let scannedBuffer: VarPackage[] = [];
+            let visibleScannedBuffer: VarPackage[] = [];
             let lastFlush = Date.now();
             let flushTimer: ReturnType<typeof setTimeout> | null = null;
+            let frameHandle: number | null = null;
+
+            const cancelFrameFlush = () => {
+                if (frameHandle === null) return;
+                cancelAnimationFrame(frameHandle);
+                frameHandle = null;
+            };
+
+            // Visible-page results skip the 200 ms batch: one flush per frame, in
+            // arrival order, so on-screen cards turn identified as results come in.
+            const scheduleFrameFlush = () => {
+                if (frameHandle !== null) return;
+                frameHandle = requestAnimationFrame(() => {
+                    frameHandle = null;
+                    flushVisible();
+                });
+            };
 
             const scheduleFlush = (immediate = false) => {
                 if (flushTimer) clearTimeout(flushTimer);
@@ -212,12 +233,7 @@ export const usePackages = (activeLibraryPath: string) => {
 
             const libNorm = currentScanPath.replace(/\\/g, '/').toLowerCase();
 
-            const batchFlush = () => {
-                if (scanSessionId.current !== currentId) return;
-
-                const toDiscover = discoveredBuffer.splice(0);
-                const toScan = scannedBuffer.splice(0);
-
+            const applyBatch = (toDiscover: VarPackage[], toScan: VarPackage[]) => {
                 if (toDiscover.length === 0 && toScan.length === 0) return;
 
                 setPackages(prev => {
@@ -247,6 +263,19 @@ export const usePackages = (activeLibraryPath: string) => {
                     // during a rescan never disturbs the grid being browsed.
                     return changed ? Array.from(map.values()) : prev;
                 });
+            };
+
+            const batchFlush = () => {
+                if (scanSessionId.current !== currentId) return;
+                cancelFrameFlush();
+                const toScan = [...scannedBuffer.splice(0), ...visibleScannedBuffer.splice(0)];
+                applyBatch(discoveredBuffer.splice(0), toScan);
+            };
+
+            // Discovered rows always go first: a result must never land before its row.
+            const flushVisible = () => {
+                if (scanSessionId.current !== currentId) return;
+                applyBatch(discoveredBuffer.splice(0), visibleScannedBuffer.splice(0));
             };
 
             const enumeratedPaths = new Set<string>();
@@ -285,6 +314,11 @@ export const usePackages = (activeLibraryPath: string) => {
             window.runtime.EventsOn('package:scanned', (data: VarPackage) => {
                 if (scanSessionId.current !== currentId) return;
                 seenThisScanRef.current.add(normPath(data.filePath));
+                if (visiblePathsRef.current.has(normPath(data.filePath))) {
+                    visibleScannedBuffer.push(data);
+                    scheduleFrameFlush();
+                    return;
+                }
                 scannedBuffer.push(data);
                 const now = Date.now();
                 if (now - lastFlush > 200) scheduleFlush(true);
