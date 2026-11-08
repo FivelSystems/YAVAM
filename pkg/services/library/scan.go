@@ -23,7 +23,9 @@ type activeScan struct {
 	pendingFocus []string
 }
 
-const maxPendingFocusPaths = 512
+// maxPendingFocusPaths bounds a focus remembered before a scan registers; it is
+// sized well above any page so the on-screen order is never truncated.
+const maxPendingFocusPaths = 4096
 
 func (a *activeScan) register(orc *scanOrchestrator) {
 	a.mu.Lock()
@@ -77,8 +79,7 @@ func (s *defaultLibraryService) ScanFull(
 		thumbCache:     s.thumbCache,
 		db:             s.db,
 		libraryPath:    rootPath,
-		highCh:         make(chan string, 512),
-		bumpPaths:      make(chan []string, 64),
+		bumpPaths:      make(chan priorityRequest, 64),
 		onDiscovered:   onDiscovered,
 		onScanned:      onScanned,
 		onAnalysisDone: onAnalysisDone,
@@ -91,10 +92,14 @@ func (s *defaultLibraryService) ScanFull(
 	return orc.runThreePhase(ctx, rawPkgs)
 }
 
-// Prioritize bumps the given paths to the front of the Hard Pass queue.
-// Safe to call at any time. With no scan registered yet, the latest request is
-// remembered and applied when the next scan registers.
+// Prioritize appends the given paths behind the current priority set of the
+// Hard Pass queue. Safe to call at any time. With no scan registered yet, the
+// latest request is remembered and applied when the next scan registers.
 func (s *defaultLibraryService) Prioritize(paths []string) {
+	s.requestPriority(paths, false)
+}
+
+func (s *defaultLibraryService) requestPriority(paths []string, replace bool) {
 	if len(paths) == 0 {
 		return
 	}
@@ -108,15 +113,16 @@ func (s *defaultLibraryService) Prioritize(paths []string) {
 		return
 	}
 	select {
-	case orc.bumpPaths <- paths:
+	case orc.bumpPaths <- priorityRequest{paths: paths, replace: replace}:
 	default:
 		// Channel full — drop; the package will be scanned in normal order.
 	}
 }
 
-// SetCurrentPage is a convenience wrapper that bumps the paths for the current page.
+// SetCurrentPage focuses the Hard Pass on the current page: its paths replace
+// the not-yet-started priority paths of the previous focus, in on-screen order.
 func (s *defaultLibraryService) SetCurrentPage(paths []string) {
-	s.Prioritize(paths)
+	s.requestPriority(paths, true)
 }
 
 // ClearThumbnailCache removes all cached thumbnails.

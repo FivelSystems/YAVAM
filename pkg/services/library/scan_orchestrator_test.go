@@ -38,8 +38,7 @@ func TestHardPassSkipsThumbnailExtractionOnCacheHit(t *testing.T) {
 	orc := &scanOrchestrator{
 		thumbCache:     thumbCache,
 		libraryPath:    libDir,
-		highCh:         make(chan string, 8),
-		bumpPaths:      make(chan []string, 8),
+		bumpPaths:      make(chan priorityRequest, 8),
 		onDiscovered:   func(models.VarPackage) {},
 		onAnalysisDone: func([]PackageAnalysis) {},
 		onStage:        func(ScanStageProgress) {},

@@ -59,8 +59,7 @@ func TestCancelledScanKeepsIndexRowsAndReportsCancellation(t *testing.T) {
 	orc := &scanOrchestrator{
 		db:             db,
 		libraryPath:    libraryPath,
-		highCh:         make(chan string, 8),
-		bumpPaths:      make(chan []string, 8),
+		bumpPaths:      make(chan priorityRequest, 8),
 		onDiscovered:   func(models.VarPackage) {},
 		onScanned:      func(models.VarPackage) {},
 		onAnalysisDone: func([]PackageAnalysis) { t.Error("analysis delivered for a cancelled scan") },
