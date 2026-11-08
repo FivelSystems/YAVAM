@@ -9,9 +9,6 @@ import (
 type LibraryService interface {
 	// ── Scan ──────────────────────────────────────────────────────────────────
 
-	// Scan is the legacy single-callback scan entry point (preserved for backward compatibility).
-	Scan(ctx context.Context, libraryPath string, onPackage func(models.VarPackage), onProgress func(int, int)) error
-
 	// ScanFull is the three-phase scan entry point.
 	// onDiscovered    fires during the Light Pass (skeleton data, no zip open).
 	// onScanned       fires during the Hard Pass (full metadata; NO thumbnail bytes in payload).
@@ -66,5 +63,4 @@ type LibraryService interface {
 	CheckCollisions(filePaths []string, destLibPath string) ([]string, error)
 	CheckDependencies(pkgs []models.VarPackage) []models.VarPackage
 	Toggle(pkgPath string, enable bool) (string, error)
-	DisableOldVersions(creator string, pkgName string, libraryPath string) error
 }

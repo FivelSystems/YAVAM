@@ -159,7 +159,7 @@ func BuildDependencyGraph(db *database.DB) (*DependencyGraph, error) {
 // is version-agnostic and cross-library. Falls back to LinkPass alone when no DB
 // is available.
 func AnalyzePackages(pkgs []models.VarPackage, db *database.DB) []PackageAnalysis {
-	analyses := LinkPass(pkgs, NewLocalResolver(pkgs))
+	analyses := LinkPass(pkgs)
 	if db == nil {
 		return analyses
 	}

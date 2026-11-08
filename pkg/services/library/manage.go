@@ -4,9 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
-	"sort"
-	"strconv"
 	"strings"
 )
 
@@ -52,62 +49,4 @@ func (s *defaultLibraryService) Toggle(pkgPath string, enable bool) (string, err
 	}
 
 	return destPath, nil
-}
-
-// DisableOldVersions disables all versions of a package except the latest
-func (s *defaultLibraryService) DisableOldVersions(creator string, packageName string, libraryPath string) error {
-	// CAUTION: This operation requires scanning the library to find all versions.
-	// The original Manager.DisableOldVersions took a LIST of packages as input `pkgs []models.VarPackage`.
-	// My interface definition `DisableOldVersions(creator, pkgName, libraryPath)` implies re-scanning or using path globs.
-	// Globs might be faster than full scan.
-
-	pattern := filepath.Join(libraryPath, fmt.Sprintf("%s.%s.*.var", creator, packageName))
-	matches, err := filepath.Glob(pattern)
-	if err != nil {
-		return err
-	}
-	// Also check disabled ones? No, we only want to disable enabled ones.
-
-	if len(matches) <= 1 {
-		return nil
-	}
-
-	// We need to parse versions from filenames
-	type pkgVersion struct {
-		Path    string
-		Version string
-		VInt    int
-	}
-	var versions []pkgVersion
-
-	for _, m := range matches {
-		base := filepath.Base(m)
-		// expected: Creator.Package.Version.var
-		parts := strings.Split(base, ".")
-		if len(parts) >= 4 { // c.p.v.var
-			vStr := parts[len(parts)-2] // 2nd to last
-			vInt, _ := strconv.Atoi(vStr)
-			versions = append(versions, pkgVersion{Path: m, Version: vStr, VInt: vInt})
-		}
-	}
-
-	// Sort
-	sort.Slice(versions, func(i, j int) bool {
-		if versions[i].VInt != versions[j].VInt {
-			return versions[i].VInt > versions[j].VInt // Descending
-		}
-		return versions[i].Version > versions[j].Version
-	})
-
-	// Keep the newest version; a failure on one file must not stop the others.
-	var failures []error
-	if len(versions) > 0 {
-		for _, v := range versions[1:] {
-			if _, err := s.Toggle(v.Path, false); err != nil {
-				failures = append(failures, fmt.Errorf("%s: %w", filepath.Base(v.Path), err))
-			}
-		}
-	}
-
-	return errors.Join(failures...)
 }

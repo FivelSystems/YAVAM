@@ -16,55 +16,6 @@ type activeScan struct {
 	orchestrator *scanOrchestrator
 }
 
-// Scan runs the three-phase scan against rootPath, streaming results via callbacks.
-//
-// Callbacks:
-//   - onDiscovered  → called once per package during the Light Pass (no zip open)
-//   - onScanned     → called once per package when the Hard Pass finishes it
-//   - onAnalyzed    → called once per package when the Link Pass finishes
-//   - onStage       → called on every meaningful progress tick across all three phases
-//
-// The old onPackage / onProgress callbacks in the LibraryService interface are preserved
-// via the wrapper in service.go for callers that haven't migrated yet.
-func (s *defaultLibraryService) Scan(ctx context.Context, rootPath string, onPackage func(models.VarPackage), onProgress func(int, int)) error {
-	rawPkgs, err := s.scanner.ScanForPackages(rootPath)
-	if err != nil {
-		return err
-	}
-
-	orc := &scanOrchestrator{
-		thumbCache:  s.thumbCache,
-		db:          s.db,
-		libraryPath: rootPath,
-		highCh:      make(chan string, 512),
-		bumpPaths:   make(chan []string, 64),
-		onDiscovered: func(p models.VarPackage) {},
-		onScanned: func(p models.VarPackage) {
-			if onPackage != nil {
-				onPackage(p)
-			}
-		},
-		onAnalysisDone: func(_ []PackageAnalysis) {},
-		onStage: func(sp ScanStageProgress) {
-			if onProgress != nil && sp.Stage == StageScanning {
-				onProgress(sp.Current, sp.Total)
-			}
-		},
-	}
-
-	// Register as active scan so priority bumps can reach it.
-	s.active.mu.Lock()
-	s.active.orchestrator = orc
-	s.active.mu.Unlock()
-	defer func() {
-		s.active.mu.Lock()
-		s.active.orchestrator = nil
-		s.active.mu.Unlock()
-	}()
-
-	return orc.runThreePhase(ctx, rawPkgs)
-}
-
 // ScanFull is the three-phase scan entry point.
 func (s *defaultLibraryService) ScanFull(
 	ctx context.Context,

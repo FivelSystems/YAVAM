@@ -109,23 +109,3 @@ func TestDeleteToTrashValidatesPath(t *testing.T) {
 		t.Fatalf("expected ErrPathNotAllowed, got %v", err)
 	}
 }
-
-func TestDisableOldVersionsValidatesInputs(t *testing.T) {
-	m, _, libraryDir, outsideDir := newManagerWithLibrary(t)
-	writeFile(t, filepath.Join(libraryDir, "Maker.Look.1.var"), "x")
-	writeFile(t, filepath.Join(libraryDir, "Maker.Look.2.var"), "x")
-
-	if err := m.DisableOldVersions(nil, "Maker", "Look", outsideDir); !errors.Is(err, ErrPathNotAllowed) {
-		t.Fatalf("expected ErrPathNotAllowed, got %v", err)
-	}
-	if err := m.DisableOldVersions(nil, "..", "Look", libraryDir); err == nil {
-		t.Fatal("expected rejection of malformed identifier")
-	}
-	assertMissing(t, filepath.Join(libraryDir, "Maker.Look.1.var.disabled"))
-
-	if err := m.DisableOldVersions(nil, "Maker", "Look", libraryDir); err != nil {
-		t.Fatalf("valid call failed: %v", err)
-	}
-	assertExists(t, filepath.Join(libraryDir, "Maker.Look.1.var.disabled"))
-	assertExists(t, filepath.Join(libraryDir, "Maker.Look.2.var"))
-}
