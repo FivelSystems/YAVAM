@@ -33,11 +33,23 @@ type ScanStageProgress struct {
 	Done    bool      `json:"done"`
 }
 
+type metadataParser func(filePath string, opts parser.ParseOptions) (models.MetaJSON, []byte, []string, error)
+
+func (o *scanOrchestrator) parseMetadata() metadataParser {
+	if o.parse != nil {
+		return o.parse
+	}
+	return parser.ParseVarMetadataWithOptions
+}
+
 // scanOrchestrator runs the three-phase scan for a single library path.
 type scanOrchestrator struct {
 	thumbCache  *cache.ThumbnailCache
 	db          *database.DB // nil = no persistence (e.g. legacy callers)
 	libraryPath string        // root path being scanned; used for DB operations
+
+	// parse is a test seam; nil means parser.ParseVarMetadataWithOptions.
+	parse metadataParser
 
 	// Priority queue for the Hard Pass.
 	highCh      chan string
@@ -166,16 +178,15 @@ func (o *scanOrchestrator) runThreePhase(ctx context.Context, rawPkgs []models.V
 			// do NOT embed it in the emitted package. The frontend will request it
 			// lazily via GetPackageThumbnail → cache hit → fast disk read, not a zip open.
 			hasThumbnail := false
+			var cacheKeyInfo os.FileInfo
 			if o.thumbCache != nil {
-				info, err := os.Stat(filePath)
-				if err == nil {
-					if _, ok := o.thumbCache.Get(filePath, info.ModTime(), info.Size()); ok {
-						hasThumbnail = true
-					}
+				if info, err := os.Stat(filePath); err == nil {
+					cacheKeyInfo = info
+					hasThumbnail = o.thumbCache.Has(filePath, info.ModTime(), info.Size())
 				}
 			}
 
-			meta, freshThumb, categories, err := parser.ParseVarMetadata(filePath)
+			meta, freshThumb, categories, err := o.parseMetadata()(filePath, parser.ParseOptions{ExtractThumbnail: !hasThumbnail})
 			if err == nil {
 				// Preserve filename-inferred Creator and PackageName if the zip's meta.json is missing them.
 				if meta.Creator == "" {
@@ -210,11 +221,8 @@ func (o *scanOrchestrator) runThreePhase(ctx context.Context, rawPkgs []models.V
 				// Cache fresh thumbnail if we got one (and didn't already have a cache hit).
 				if !hasThumbnail && len(freshThumb) > 0 {
 					hasThumbnail = true
-					if o.thumbCache != nil {
-						info, err2 := os.Stat(filePath)
-						if err2 == nil {
-							_ = o.thumbCache.Set(filePath, info.ModTime(), info.Size(), freshThumb)
-						}
+					if cacheKeyInfo != nil {
+						_ = o.thumbCache.Set(filePath, cacheKeyInfo.ModTime(), cacheKeyInfo.Size(), freshThumb)
 					}
 				}
 
