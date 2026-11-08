@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"yavam/pkg/database"
 	"yavam/pkg/models"
@@ -192,6 +193,52 @@ func TestScanFullRefusesUnconfiguredPathWithoutRegisteringIt(t *testing.T) {
 	}
 	if err := scan(strings.ToUpper(configured) + string(os.PathSeparator)); err != nil {
 		t.Fatalf("scan of a configured library spelled with other casing and a trailing separator: %v", err)
+	}
+}
+
+func TestRemovingALibraryCancelsItsRunningScanOnly(t *testing.T) {
+	m, cleanup := testManagerWithDB(t)
+	defer cleanup()
+	removed := t.TempDir()
+	kept := t.TempDir()
+	for _, dir := range []string{removed, kept} {
+		if err := m.AddLibrary(dir); err != nil {
+			t.Fatalf("AddLibrary: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "A.One.1.var"), []byte("not a zip"), 0o600); err != nil {
+			t.Fatalf("write fixture: %v", err)
+		}
+	}
+
+	startBlockedScan := func(path string) (discovered, release chan struct{}, result chan error) {
+		discovered, release, result = make(chan struct{}), make(chan struct{}), make(chan error, 1)
+		var once sync.Once
+		go func() {
+			result <- m.ScanFull(context.Background(), path,
+				func(models.VarPackage) {
+					once.Do(func() { close(discovered) })
+					<-release
+				},
+				func(models.VarPackage) {}, func([]library.PackageAnalysis) {}, func(library.ScanStageProgress) {})
+		}()
+		return discovered, release, result
+	}
+	removedDiscovered, releaseRemoved, removedResult := startBlockedScan(removed)
+	keptDiscovered, releaseKept, keptResult := startBlockedScan(kept)
+	<-removedDiscovered
+	<-keptDiscovered
+
+	if err := m.RemoveLibrary(removed); err != nil {
+		t.Fatalf("RemoveLibrary: %v", err)
+	}
+	close(releaseRemoved)
+	close(releaseKept)
+
+	if err := <-removedResult; !errors.Is(err, context.Canceled) {
+		t.Errorf("scan of the removed library ended with %v, want context.Canceled", err)
+	}
+	if err := <-keptResult; err != nil {
+		t.Errorf("scan of another library was disturbed: %v", err)
 	}
 }
 

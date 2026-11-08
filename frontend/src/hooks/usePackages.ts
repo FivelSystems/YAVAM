@@ -134,6 +134,10 @@ export const usePackages = (activeLibraryPath: string) => {
     // ── Scan ──────────────────────────────────────────────────────────────────
     const scanPackages = useCallback(async () => {
         if (!activeLibraryPath) {
+            // Invalidates the events a scan of the library that just went away may still send.
+            scanSessionId.current++;
+            await cancelScan();
+            setScanError(null);
             setPackages([]);
             setFilteredPkgs([]);
             setAvailableTags([]);

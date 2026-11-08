@@ -70,6 +70,38 @@ afterEach(() => {
     delete (window as unknown as { go?: unknown }).go;
 });
 
+describe('library removal', () => {
+    it('stops the scan and empties the grid when the active library goes away, ignoring its late events', async () => {
+        const { result, rerender } = renderHook(
+            ({ path }: { path: string }) => {
+                const packageLogic = usePackages(path);
+                const filters = useFilters(packageLogic.packages, packageLogic.scanSlots);
+                return { packageLogic, filters };
+            },
+            { initialProps: { path: LIBRARY } },
+        );
+        await act(async () => { void result.current.packageLogic.scanPackages(); });
+        await act(async () => { await Promise.resolve(); });
+        discoveryStage(0, 2);
+        emit('package:discovered', buildPackage('Alpha'));
+        emit('package:discovered', buildPackage('Bravo'));
+        advanceBatch();
+        expect(result.current.filters.filteredPkgs).toHaveLength(2);
+        expect(result.current.packageLogic.loading).toBe(true);
+
+        rerender({ path: '' });
+        await act(async () => { await result.current.packageLogic.scanPackages(); });
+        emit('package:discovered', buildPackage('Late'));
+        advanceBatch();
+
+        const app = (window as unknown as { go: { main: { App: { CancelScan: ReturnType<typeof vi.fn> } } } }).go.main.App;
+        expect(app.CancelScan).toHaveBeenCalled();
+        expect(result.current.packageLogic.loading).toBe(false);
+        expect(result.current.packageLogic.packages).toEqual([]);
+        expect(result.current.filters.filteredPkgs).toEqual([]);
+    });
+});
+
 describe('cold scan', () => {
     it('shows no partial grid until enumeration is complete, then the full ordered set at once', async () => {
         const { result } = renderHook(useGrid);
