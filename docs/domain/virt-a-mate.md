@@ -132,3 +132,52 @@ If multiple candidates share the same highest priority (e.g., two Scenes in one 
 ### 3. "Plugin" vs "Script"
 -   **Clarification:** "Plugin" and "Script" are effectively the same category in VaM ("Plugins + Scripts").
 -   **Identification:** They are script-based tools/apps. The distinction is largely semantic or based on usage (tool vs. scene automation), but technically they are `.cs` files.
+
+## 📜 License Types
+
+Every `.var` declares a `licenseType` in its `meta.json`. The VaM Hub documents the
+rules in its [license help page](https://hub.virtamate.com/wiki/license_help/); the
+summary below is a reference for how YAVAM should interpret the values, not a legal
+reading. Anything that affects what a user may redistribute needs verification against
+the Hub's current policy.
+
+### Values
+
+| Value | Family | Meaning for a package |
+| --- | --- | --- |
+| `FC` | VaM-specific | Free Content. May be redistributed, remixed and bundled, even commercially. Credit not required. |
+| `PC` | VaM-specific | Paid Content. Must not be distributed, remixed or used as a dependency by anyone other than its owner. Belongs behind a paywall. |
+| `PC EA` | VaM-specific | Paid Content in Early Access. Treated as `PC` until the early-access end date, then adopts the declared secondary license. |
+| `CC BY` | Creative Commons | Reusable, including in paid resources, with credit to the author. |
+| `CC BY-SA` | Creative Commons | As `CC BY`. A modified, bundled copy must be republished under the same license. A plain dependency reference is treated as `CC BY`. |
+| `CC BY-ND` | Creative Commons | As `CC BY`, but bundled content must stay unmodified. A plain dependency reference is treated as `CC BY`. |
+| `CC BY-NC` | Creative Commons | As `CC BY`, but not allowed in paid resources without the author's permission. |
+| `CC BY-NC-SA` | Creative Commons | `CC BY-NC` plus share-alike for bundled modified copies. |
+| `CC BY-NC-ND` | Creative Commons | `CC BY-NC` plus no modification of bundled content. The most restrictive Creative Commons value. |
+| `Questionable` | Hub status | Origin cannot be determined. The uploader must acknowledge responsibility. Not allowed in paid content. |
+| `MISSING` | Hub status | License information was stripped from the package. May be restored when the Hub knows the content. Not allowed in paid content. |
+
+### Rules that matter for a package manager
+
+- **Referencing is not redistributing.** `ND` and `SA` only apply when content is
+  bundled or modified. A package that merely lists another as a dependency is treated
+  as if that dependency were `CC BY`.
+- **`NC` and `PC` are the commercial gates.** Paid resources cannot depend on `NC`
+  content (without permission) or on another creator's `PC` content. Free content
+  cannot depend on `PC` content at all.
+- **Licenses only loosen.** A published Creative Commons license can be made less
+  restrictive by its owner, never more.
+- **Credit is the baseline.** Every value except `FC` requires credit to the original
+  author.
+
+### Implications for YAVAM
+
+- The scanner already stores the declared value (`licenseType`) per package and per
+  dependency; the values above are the set to expect, plus any free-text value an
+  author typed.
+- A `license:` filter and any UI grouping must decide how the Creative Commons values
+  combine (for example whether one token matches only `CC BY` or every `CC BY-*`
+  variant). That decision is tracked with the filter work.
+- License is a safeguarding signal for local libraries: `PC` and `PC EA` content cannot
+  be re-acquired from the Hub for free, so it deserves more protection from deletion
+  than `FC` or `CC BY` content.
