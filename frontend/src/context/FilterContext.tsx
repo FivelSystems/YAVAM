@@ -3,6 +3,7 @@ import { useFilters } from '../hooks/useFilters';
 import { usePackageContext } from './PackageContext';
 import { VarPackage } from '../types';
 import { useKeybindSubscription } from './KeybindContext';
+import { FIRST_PAGE, clampPage } from '../utils/pagination';
 
 interface FilterContextType {
     searchQuery: string;
@@ -28,8 +29,12 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const filterLogic = useFilters(packages);
 
     // Pagination State (Added to FilterContext)
-    const [currentPage, setCurrentPage] = React.useState(1);
+    const [requestedPage, setCurrentPage] = React.useState(FIRST_PAGE);
     const [itemsPerPage, setItemsPerPage] = React.useState(() => parseInt(localStorage.getItem("itemsPerPage") || "50"));
+
+    // Derived during render so a shrunken page count never produces an out-of-range frame.
+    const currentPage = clampPage(requestedPage, filterLogic.filteredPkgs.length, itemsPerPage);
+    if (currentPage !== requestedPage) setCurrentPage(currentPage);
 
     const handleSetItemsPerPage = (val: number) => {
         setItemsPerPage(val);
