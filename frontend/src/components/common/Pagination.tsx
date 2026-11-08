@@ -1,6 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import clsx from 'clsx';
+import { Button } from '../ui/Button';
+import { AnchoredMenu } from '../ui/AnchoredMenu';
+import { BottomSheet } from '../ui/BottomSheet';
+import { PageJumpForm } from './PageJumpForm';
+import { PAGINATION_STRINGS as strings } from '../../config/uiStrings';
+import { FIRST_PAGE, clampPage, lastPage } from '../../utils/pagination';
+
+const MAX_VISIBLE_PAGE_BUTTONS = 9;
+const CONTROL_ICON_SIZE = 16;
+const POPOVER_WIDTH_CLASS = 'w-64';
 
 interface PaginationProps {
     currentPage: number;
@@ -9,106 +19,173 @@ interface PaginationProps {
     onChange: (page: number) => void;
 }
 
-export const Pagination: React.FC<PaginationProps> = ({ currentPage, totalItems, itemsPerPage, onChange }) => {
-    const totalPages = Math.ceil(totalItems / itemsPerPage);
+type PageSlot = { kind: 'page'; page: number } | { kind: 'gap'; key: string };
 
-    // Safety check
+const buildPageSlots = (currentPage: number, totalPages: number): PageSlot[] => {
+    let startPage = Math.max(FIRST_PAGE, currentPage - Math.floor(MAX_VISIBLE_PAGE_BUTTONS / 2));
+    const endPage = Math.min(totalPages, startPage + MAX_VISIBLE_PAGE_BUTTONS - 1);
+    startPage = Math.max(FIRST_PAGE, endPage - MAX_VISIBLE_PAGE_BUTTONS + 1);
+
+    const slots: PageSlot[] = [];
+    if (startPage > FIRST_PAGE) {
+        slots.push({ kind: 'page', page: FIRST_PAGE });
+        if (startPage > FIRST_PAGE + 1) slots.push({ kind: 'gap', key: 'gap-start' });
+    }
+    for (let page = startPage; page <= endPage; page++) slots.push({ kind: 'page', page });
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) slots.push({ kind: 'gap', key: 'gap-end' });
+        slots.push({ kind: 'page', page: totalPages });
+    }
+    return slots;
+};
+
+/**
+ * Page controls plus the "where am I" text. Below `md` it is previous / next
+ * around a tappable `Page N of M` that opens the jump sheet; from `md` up it
+ * shows numbered buttons whose gaps open the jump popover.
+ */
+export const Pagination: React.FC<PaginationProps> = ({ currentPage, totalItems, itemsPerPage, onChange }) => {
+    const totalPages = lastPage(totalItems, itemsPerPage);
+    const [popoverAnchor, setPopoverAnchor] = useState<{ x: number; y: number } | null>(null);
+    const [isSheetOpen, setIsSheetOpen] = useState(false);
+
     if (totalPages <= 1) return null;
 
-    const maxVisible = 9; // Increased from 5 for better Desktop navigation
-    let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
-    let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+    const numberFormat = new Intl.NumberFormat();
+    const formattedPage = numberFormat.format(currentPage);
+    const formattedTotalPages = numberFormat.format(totalPages);
+    const firstItem = (currentPage - 1) * itemsPerPage + 1;
+    const lastItem = Math.min(currentPage * itemsPerPage, totalItems);
 
-    if (endPage - startPage + 1 < maxVisible) {
-        startPage = Math.max(1, endPage - maxVisible + 1);
-    }
+    const jumpTo = (page: number) => {
+        setPopoverAnchor(null);
+        setIsSheetOpen(false);
+        onChange(clampPage(page, totalItems, itemsPerPage));
+    };
 
-    // Helper to render page button
-    const renderPageButton = (page: number) => (
-        <button
-            key={page}
-            onClick={() => onChange(page)}
-            className={clsx(
-                "w-8 h-8 rounded-lg text-xs font-medium transition-colors flex items-center justify-center",
-                currentPage === page
-                    ? "bg-blue-600 text-white shadow-lg shadow-blue-900/50"
-                    : "bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white"
-            )}
-        >
-            {page}
-        </button>
-    );
+    const openPopover = (event: React.MouseEvent<HTMLButtonElement>) => {
+        const { left, top } = event.currentTarget.getBoundingClientRect();
+        setPopoverAnchor({ x: left, y: top });
+    };
+
+    const isFirst = currentPage <= FIRST_PAGE;
+    const isLast = currentPage >= totalPages;
+
+    const renderPageButton = (page: number) => {
+        const isActive = page === currentPage;
+        return (
+            <Button
+                key={page}
+                size="icon"
+                variant={isActive ? 'primary' : 'secondary'}
+                onClick={() => onChange(page)}
+                aria-current={isActive ? 'page' : undefined}
+                aria-label={strings.goToPageNumber(page)}
+                className={clsx(isActive && 'font-bold ring-2 ring-white/80 ring-offset-1 ring-offset-gray-900 underline underline-offset-4')}
+            >
+                {page}
+            </Button>
+        );
+    };
 
     return (
-        <div className="flex justify-between items-center w-full select-none">
+        <div className="flex items-center justify-between gap-4 w-full select-none">
+            <p className="hidden md:block text-xs text-gray-400 whitespace-nowrap" aria-live="polite">
+                <span className="font-medium text-gray-200">{strings.pageOf(formattedPage, formattedTotalPages)}</span>
+                <span className="mx-2 text-gray-600" aria-hidden="true">|</span>
+                {strings.itemRange(numberFormat.format(firstItem), numberFormat.format(lastItem), numberFormat.format(totalItems))}
+            </p>
 
-            {/* Left Controls */}
-            <div className="flex items-center gap-1">
-                <button
-                    onClick={() => onChange(1)}
-                    disabled={currentPage === 1}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-700 disabled:opacity-30 hover:bg-gray-600 disabled:hover:bg-gray-700 transition-colors text-gray-300"
-                    title="First Page"
+            <nav aria-label={strings.navigationLabel} className="flex items-center justify-between gap-2 md:gap-1 w-full md:w-auto">
+                <Button
+                    size="icon"
+                    variant="secondary"
+                    onClick={() => onChange(FIRST_PAGE)}
+                    disabled={isFirst}
+                    title={strings.firstPage}
+                    aria-label={strings.firstPage}
+                    className="hidden md:inline-flex"
                 >
-                    <ChevronsLeft size={16} />
-                </button>
-                <button
-                    onClick={() => onChange(Math.max(1, currentPage - 1))}
-                    disabled={currentPage === 1}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-700 disabled:opacity-30 hover:bg-gray-600 disabled:hover:bg-gray-700 transition-colors text-gray-300"
-                    title="Previous Page"
+                    <ChevronsLeft size={CONTROL_ICON_SIZE} />
+                </Button>
+                <Button
+                    size="icon"
+                    variant="secondary"
+                    onClick={() => onChange(currentPage - 1)}
+                    disabled={isFirst}
+                    title={strings.previousPage}
+                    aria-label={strings.previousPage}
                 >
-                    <ChevronLeft size={16} />
-                </button>
-            </div>
+                    <ChevronLeft size={CONTROL_ICON_SIZE} />
+                </Button>
 
-            {/* Page Numbers - Push to Center, Hide on Mobile if needed, or allow wrap */}
-            {/* "hidden md:flex" makes it disappear on very small screens to avoid overflow */}
-            <div className="flex-1 flex justify-center items-center gap-1 px-4 overflow-hidden">
-                <div className="hidden sm:flex items-center gap-1">
-                    {startPage > 1 && (
-                        <>
-                            {renderPageButton(1)}
-                            {startPage > 2 && <span className="text-gray-600 w-4 text-center">...</span>}
-                        </>
-                    )}
+                <Button
+                    variant="ghost"
+                    onClick={() => setIsSheetOpen(true)}
+                    aria-label={strings.openJumpToPage(formattedPage, formattedTotalPages)}
+                    aria-haspopup="dialog"
+                    className="md:hidden h-11 flex-1 min-w-0 text-sm text-gray-200 tabular-nums"
+                >
+                    <span className="max-[359px]:hidden" aria-hidden="true">{strings.pageOf(formattedPage, formattedTotalPages)}</span>
+                    <span className="min-[360px]:hidden" aria-hidden="true">{strings.compactPageOf(formattedPage, formattedTotalPages)}</span>
+                </Button>
 
-                    {Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i).map(i => renderPageButton(i))}
-
-                    {endPage < totalPages && (
-                        <>
-                            {endPage < totalPages - 1 && <span className="text-gray-600 w-4 text-center">...</span>}
-                            {renderPageButton(totalPages)}
-                        </>
-                    )}
+                <div className="hidden md:flex items-center gap-1">
+                    {buildPageSlots(currentPage, totalPages).map(slot => slot.kind === 'page'
+                        ? renderPageButton(slot.page)
+                        : (
+                            <Button
+                                key={slot.key}
+                                size="icon"
+                                variant="ghost"
+                                onClick={openPopover}
+                                title={strings.jumpToPage}
+                                aria-label={strings.jumpToPage}
+                                aria-haspopup="dialog"
+                            >
+                                ...
+                            </Button>
+                        ))}
                 </div>
 
-                {/* Mobile Info Text (Shown when numbers are hidden) */}
-                <div className="sm:hidden text-xs text-gray-400 font-mono">
-                    {currentPage} / {totalPages}
-                </div>
-            </div>
-
-            {/* Right Controls */}
-            <div className="flex items-center gap-1">
-                <button
-                    onClick={() => onChange(Math.min(totalPages, currentPage + 1))}
-                    disabled={currentPage === totalPages}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-700 disabled:opacity-30 hover:bg-gray-600 disabled:hover:bg-gray-700 transition-colors text-gray-300"
-                    title="Next Page"
+                <Button
+                    size="icon"
+                    variant="secondary"
+                    onClick={() => onChange(currentPage + 1)}
+                    disabled={isLast}
+                    title={strings.nextPage}
+                    aria-label={strings.nextPage}
                 >
-                    <ChevronRight size={16} />
-                </button>
-                <button
+                    <ChevronRight size={CONTROL_ICON_SIZE} />
+                </Button>
+                <Button
+                    size="icon"
+                    variant="secondary"
                     onClick={() => onChange(totalPages)}
-                    disabled={currentPage === totalPages}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-700 disabled:opacity-30 hover:bg-gray-600 disabled:hover:bg-gray-700 transition-colors text-gray-300"
-                    title="Last Page"
+                    disabled={isLast}
+                    title={strings.lastPage}
+                    aria-label={strings.lastPage}
+                    className="hidden md:inline-flex"
                 >
-                    <ChevronsRight size={16} />
-                </button>
-            </div>
+                    <ChevronsRight size={CONTROL_ICON_SIZE} />
+                </Button>
+            </nav>
 
+            {popoverAnchor && (
+                <AnchoredMenu
+                    anchor={popoverAnchor}
+                    onClose={() => setPopoverAnchor(null)}
+                    role="dialog"
+                    ariaLabel={strings.jumpTitle}
+                    className={POPOVER_WIDTH_CLASS}
+                >
+                    <PageJumpForm currentPage={currentPage} totalPages={totalPages} onJump={jumpTo} />
+                </AnchoredMenu>
+            )}
+
+            <BottomSheet isOpen={isSheetOpen} title={strings.jumpTitle} onClose={() => setIsSheetOpen(false)}>
+                <PageJumpForm currentPage={currentPage} totalPages={totalPages} onJump={jumpTo} withSlider />
+            </BottomSheet>
         </div>
     );
 };

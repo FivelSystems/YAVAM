@@ -9,6 +9,7 @@ interface SliderProps {
     label?: string; // e.g. "100px" or "50%"
     className?: string;
     disabled?: boolean;
+    ariaLabel?: string;
 }
 
 export const Slider = ({
@@ -19,7 +20,8 @@ export const Slider = ({
     onChange,
     label,
     className,
-    disabled = false
+    disabled = false,
+    ariaLabel
 }: SliderProps) => {
     return (
         <div className={clsx("flex items-center gap-4 w-full", className)}>
@@ -31,6 +33,7 @@ export const Slider = ({
                 value={value}
                 onChange={(e) => onChange(parseInt(e.target.value))}
                 disabled={disabled}
+                aria-label={ariaLabel}
                 className={clsx(
                     "flex-1 h-2 rounded-lg appearance-none cursor-pointer accent-blue-500 transition-all",
                     disabled ? "bg-gray-800 cursor-not-allowed accent-gray-600" : "bg-gray-700"

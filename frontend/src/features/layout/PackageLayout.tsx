@@ -242,7 +242,7 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
                 <ScanPendingNotice count={pendingCount} />
 
                 {/* CardGrid Container */}
-                <div ref={scrollContainerRef} className="flex-1 overflow-auto p-4 pb-32 md:pb-24 custom-scrollbar">
+                <div ref={scrollContainerRef} className="flex-1 overflow-auto p-4 custom-scrollbar">
                     {!hostLibrariesLoaded ? (libraryLoadFailed ? null : <LibrariesLoadingNotice />)
                     : libraries.length === 0 ? <NoLibrariesNotice onAddLibrary={canAddLibrary ? browseAndAdd : undefined} />
                     : scanSlots.phase === 'held' ? <ScanHoldNotice stages={scanStages} /> : <CardGrid
@@ -269,9 +269,8 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
                     />}
                 </div>
 
-                {/* Pagination Footer */}
                 {filteredPkgs.length > itemsPerPage && (
-                    <div className="absolute bottom-0 left-0 right-0 p-3 bg-gray-900/80 backdrop-blur-md border-t border-white/10 z-20 shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
+                    <div className="relative z-10 shrink-0 px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] bg-gray-900 border-t border-white/10">
                         <Pagination
                             currentPage={currentPage}
                             totalItems={filteredPkgs.length}
