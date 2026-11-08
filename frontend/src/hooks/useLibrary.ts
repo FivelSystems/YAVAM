@@ -45,7 +45,7 @@ export const useLibrary = () => {
         }
     }, [libraries]);
 
-    const addLibrary = useCallback((path: string) => {
+    const addLibrary = useCallback(async (path: string) => {
         if (!path) return;
 
         if (libraries.includes(path)) {
@@ -53,17 +53,25 @@ export const useLibrary = () => {
             return;
         }
 
-        const newLibs = [...libraries, path];
-        setLibraries(newLibs);
-        localStorage.setItem("savedLibraries", JSON.stringify(newLibs));
-        selectLibrary(path); // Select the new library
-
-        // Sync Backend
+        // The host refuses to scan a folder that is not a configured library,
+        // so it has to know the library before it becomes the active one.
         // @ts-ignore
         if (window.go && window.go.main && window.go.main.App) {
-            // @ts-ignore
-            window.go.main.App.AddConfiguredLibrary(path);
+            try {
+                // @ts-ignore
+                await window.go.main.App.AddConfiguredLibrary(path);
+            } catch (err) {
+                console.error("Failed to add library:", err);
+                return;
+            }
         }
+
+        const newLibs = [...libraries, path];
+        const active = { path, index: newLibs.length - 1 };
+        setLibraries(newLibs);
+        setActiveLibraryPath(active.path);
+        setActiveLibIndex(active.index);
+        rememberActiveLibrary(newLibs, active);
     }, [libraries, selectLibrary]);
 
     const removeLibrary = useCallback((path: string) => {
