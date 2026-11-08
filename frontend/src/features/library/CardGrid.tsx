@@ -1,7 +1,6 @@
 import { useRef } from 'react';
 import { VarPackage } from '../../types';
 import PackageCard from './PackageCard';
-import { motion } from 'framer-motion';
 import { PackageSearch, X } from 'lucide-react';
 
 interface CardGridProps {
@@ -26,9 +25,10 @@ interface CardGridProps {
      * list — lets the empty state offer an inline way out (#57). */
     isFiltered?: boolean;
     onClearFilters?: () => void;
+    isScanActive?: boolean;
 }
 
-const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, onRate, onToggleFavorite, onOpenActionSheet, selectedPkgId, selectedIds, viewMode, gridSize = 150, censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false, highlightedRequest, isFiltered = false, onClearFilters }: CardGridProps) => {
+const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, onRate, onToggleFavorite, onOpenActionSheet, selectedPkgId, selectedIds, viewMode, gridSize = 150, censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false, highlightedRequest, isFiltered = false, onClearFilters, isScanActive = false }: CardGridProps) => {
 
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -66,25 +66,10 @@ const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, 
         )
     }
 
-    // Animation Variants
-    const itemVariants = {
-        hidden: { opacity: 0, y: 20, scale: 0.95 },
-        visible: {
-            opacity: 1,
-            y: 0,
-            scale: 1,
-            transition: {
-                duration: 0.2, // Snappy uniform fade-in
-                ease: "easeOut"
-            }
-        },
-        exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } }
-    };
-
     return (
         <div ref={containerRef} className="h-full">
-            <motion.div
-                key={viewMode} // Forces re-mount on view switch to prevent morphing artifacts
+            <div
+                key={viewMode}
                 className={viewMode === 'list'
                     ? "flex flex-col gap-2 pb-20 p-4"
                     : "grid gap-4 pb-20 p-4"
@@ -93,20 +78,13 @@ const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, 
                     gridTemplateColumns: `repeat(auto-fill, minmax(${gridSize}px, 1fr))`
                 } : undefined}
             >
-                {packages.map((pkg, i) => (
-                    <motion.div
+                {packages.map((pkg) => (
+                    // min-w-0: grid items default to min-width: auto, so unbreakable card
+                    // content (long VaM filenames) would inflate a track past its minmax().
+                    <div
                         key={pkg.filePath}
                         id={`pkg-${pkg.filePath}`}
-                        custom={i} // Pass index for stagger delay
-                        variants={itemVariants}
-                        initial="hidden"
-                        animate="visible"
-                        exit="exit"
-                        // Grid items default to min-width: auto, so unbreakable card content
-                        // (long VaM filenames with no spaces) can inflate a track past its
-                        // minmax() size instead of wrapping/truncating within it.
                         className="min-w-0"
-                    // Removed layout prop for performance
                     >
                         <PackageCard
                             pkg={pkg}
@@ -124,10 +102,11 @@ const CardGrid = ({ packages, currentPath, totalCount, onContextMenu, onSelect, 
                             hideCreatorNames={hideCreatorNames}
                             isHighlighted={highlightedRequest?.id === pkg.filePath}
                             startAnimationTs={highlightedRequest?.id === pkg.filePath ? highlightedRequest.ts : undefined}
+                            isScanActive={isScanActive}
                         />
-                    </motion.div>
+                    </div>
                 ))}
-            </motion.div>
+            </div>
         </div>
     );
 

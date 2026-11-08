@@ -36,7 +36,7 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
     censorThumbnails, blurAmount, hidePackageNames, hideCreatorNames
 }) => {
     // Context Consumption
-    const { packages, scanError } = usePackageContext();
+    const { packages, scanError, loading: isScanActive } = usePackageContext();
     const {
         filteredPkgs, currentPage, itemsPerPage, setCurrentPage,
         searchQuery, setSearchQuery, clearFilters
@@ -268,6 +268,7 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
                         highlightedRequest={highlightedRequest}
                         isFiltered={searchQuery.trim().length > 0}
                         onClearFilters={clearFilters}
+                        isScanActive={isScanActive}
                     />
                 </div>
 

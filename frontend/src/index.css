@@ -77,6 +77,38 @@ body {
     animation: neon-flash 3s ease-out forwards;
 }
 
+/* Shared scan-progress shimmer. Applied only to cards still waiting on scan
+   data while a scan is active and the card is on screen. */
+@keyframes scan-shimmer {
+    from {
+        transform: translateX(-100%);
+    }
+
+    to {
+        transform: translateX(100%);
+    }
+}
+
+.scan-shimmer {
+    position: relative;
+    overflow: hidden;
+}
+
+.scan-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
+    animation: scan-shimmer 1.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .scan-shimmer::after {
+        animation: none;
+        display: none;
+    }
+}
+
 /* Popover / dropdown entrance */
 @keyframes fade-in {
     from {
