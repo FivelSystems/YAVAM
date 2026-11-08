@@ -18,6 +18,7 @@
 - **Dependencies**: Updated the Go backend (Wails 2.17, `x/crypto`, `x/net`, `x/text`, `x/sys`) and the frontend toolchain (Vite 7) to current patched releases.
 - **Local Database (Foundation)**: Package and library metadata is now indexed into a local SQLite database, laying the groundwork for faster startups, persistent ratings/favourites, and upcoming features. Your `config.json` remains the source of truth for configured library paths, so the change is fully backward-compatible.
 - **Dependency Version Fallback**: Clicking a dependency whose exact version isn't installed no longer dead-ends with "specific version not found". YAVAM now takes you to the newest available copy — locally or in another library — with a heads-up that the exact version wasn't found.
+- **Scan Progress on Package Cards**: Package cards no longer fade in when the grid loads or you change page. While a library scan is running, packages not yet fully read now show their name, creator and version with a subtle shimmer on the thumbnail, which turns off if your system prefers reduced motion.
 
 ### Fixed
 - **Escape Inside Text Fields ([#118](https://github.com/FivelSystems/YAVAM/issues/118))**: Pressing Escape while typing in a text field (for example the search bar) no longer triggers an unrelated keyboard shortcut such as the privacy toggle. Text fields now never fire app shortcuts.
