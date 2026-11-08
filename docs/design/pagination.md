@@ -307,6 +307,6 @@ Architecture review findings (recommended shape adopted):
 
 ## 8. Handoff
 
-Implementation goes to the web-developer. Sections 4.1 and 4.3-4.7 are decided and
+Implementation is frontend-only. Sections 4.1 and 4.3-4.7 are decided and
 ready to implement; 4.9 is decided and needs the architecture-reviewed reducer;
 sections 5 and 6 wait for their prerequisites.
