@@ -32,11 +32,23 @@ type ScanStageProgress struct {
 	Done    bool      `json:"done"`
 }
 
+type metadataParser func(filePath string, opts parser.ParseOptions) (models.MetaJSON, []byte, []string, error)
+
+func (o *scanOrchestrator) parseMetadata() metadataParser {
+	if o.parse != nil {
+		return o.parse
+	}
+	return parser.ParseVarMetadataWithOptions
+}
+
 // scanOrchestrator runs the three-phase scan for a single library path.
 type scanOrchestrator struct {
 	thumbCache  *cache.ThumbnailCache
 	db          *database.DB // nil = no persistence (e.g. legacy callers)
 	libraryPath string        // root path being scanned; used for DB operations
+
+	// parse is a test seam; nil means parser.ParseVarMetadataWithOptions.
+	parse metadataParser
 
 	// Priority queue for the Hard Pass.
 	highCh      chan string
@@ -45,12 +57,18 @@ type scanOrchestrator struct {
 	normalMu    sync.Mutex
 	bumpPaths   chan []string
 
+	// initialFocus is requested before registration; applied once the queue is built.
+	initialFocus []string
+
 	// Callbacks
 	onDiscovered   func(models.VarPackage)
 	onScanned      func(models.VarPackage)
 	onAnalysisDone func([]PackageAnalysis) // BATCH — called once after all analysis is complete
 	onStage        func(ScanStageProgress)
 }
+
+// workerStartHook lets tests act on a Hard Pass worker before it checks for cancellation.
+var workerStartHook func(filePath string)
 
 // runThreePhase executes all three phases sequentially and blocks until completion.
 func (o *scanOrchestrator) runThreePhase(ctx context.Context, rawPkgs []models.VarPackage) error {
@@ -90,14 +108,7 @@ func (o *scanOrchestrator) runThreePhase(ctx context.Context, rawPkgs []models.V
 	// touched by this scan, meaning the file no longer exists on disk.
 	scanStart := database.Now()
 
-	o.normalMu.Lock()
-	o.normalQueue = make([]string, 0, total)
-	o.pendingMap = make(map[string]bool, total)
-	for _, p := range discovered {
-		o.normalQueue = append(o.normalQueue, p.FilePath)
-		o.pendingMap[p.FilePath] = true
-	}
-	o.normalMu.Unlock()
+	o.fillQueue(discovered)
 
 	byPath := make(map[string]models.VarPackage, total)
 	for _, p := range discovered {
@@ -148,10 +159,20 @@ func (o *scanOrchestrator) runThreePhase(ctx context.Context, rawPkgs []models.V
 		}
 
 		wg.Add(1)
-		sem <- struct{}{}
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			wg.Done()
+			wg.Wait()
+			return ctx.Err()
+		}
 		go func(filePath string) {
 			defer wg.Done()
 			defer func() { <-sem }()
+
+			if workerStartHook != nil {
+				workerStartHook(filePath)
+			}
 
 			select {
 			case <-ctx.Done():
@@ -165,16 +186,15 @@ func (o *scanOrchestrator) runThreePhase(ctx context.Context, rawPkgs []models.V
 			// do NOT embed it in the emitted package. The frontend will request it
 			// lazily via GetPackageThumbnail → cache hit → fast disk read, not a zip open.
 			hasThumbnail := false
+			var cacheKeyInfo os.FileInfo
 			if o.thumbCache != nil {
-				info, err := os.Stat(filePath)
-				if err == nil {
-					if _, ok := o.thumbCache.Get(filePath, info.ModTime(), info.Size()); ok {
-						hasThumbnail = true
-					}
+				if info, err := os.Stat(filePath); err == nil {
+					cacheKeyInfo = info
+					hasThumbnail = o.thumbCache.Has(filePath, info.ModTime(), info.Size())
 				}
 			}
 
-			meta, freshThumb, categories, err := parser.ParseVarMetadata(filePath)
+			meta, freshThumb, categories, err := o.parseMetadata()(filePath, parser.ParseOptions{ExtractThumbnail: !hasThumbnail})
 			if err == nil {
 				// Preserve filename-inferred Creator and PackageName if the zip's meta.json is missing them.
 				if meta.Creator == "" {
@@ -209,11 +229,8 @@ func (o *scanOrchestrator) runThreePhase(ctx context.Context, rawPkgs []models.V
 				// Cache fresh thumbnail if we got one (and didn't already have a cache hit).
 				if !hasThumbnail && len(freshThumb) > 0 {
 					hasThumbnail = true
-					if o.thumbCache != nil {
-						info, err2 := os.Stat(filePath)
-						if err2 == nil {
-							_ = o.thumbCache.Set(filePath, info.ModTime(), info.Size(), freshThumb)
-						}
+					if cacheKeyInfo != nil {
+						_ = o.thumbCache.Set(filePath, cacheKeyInfo.ModTime(), cacheKeyInfo.Size(), freshThumb)
 					}
 				}
 
@@ -244,7 +261,12 @@ func (o *scanOrchestrator) runThreePhase(ctx context.Context, rawPkgs []models.V
 	close(stopBump)
 	<-bumpDone
 
-	o.onStage(ScanStageProgress{Stage: StageScanning, Current: total, Total: total, Done: true})
+	// A cancelled scan covers only part of the library, so absence from
+	// scannedPkgs says nothing about the file: upsert what was scanned, never prune.
+	cancelled := ctx.Err() != nil
+	if !cancelled {
+		o.onStage(ScanStageProgress{Stage: StageScanning, Current: total, Total: total, Done: true})
+	}
 
 	// ── DB persistence ────────────────────────────────────────────────────────
 	// Batch-upsert all scanned packages into the DB, then remove records for
@@ -262,10 +284,16 @@ func (o *scanOrchestrator) runThreePhase(ctx context.Context, rawPkgs []models.V
 			if err := o.db.UpsertPackages(dbRows); err != nil {
 				log.Printf("[Scanner] DB upsert error: %v", err)
 			}
-			if err := o.db.DeletePackagesOlderThan(libID, scanStart); err != nil {
-				log.Printf("[Scanner] DB orphan cleanup error: %v", err)
+			if !cancelled {
+				if err := o.db.DeletePackagesOlderThan(libID, scanStart); err != nil {
+					log.Printf("[Scanner] DB orphan cleanup error: %v", err)
+				}
 			}
 		}
+	}
+
+	if cancelled {
+		return ctx.Err()
 	}
 
 	// ── Phase 3: LINK PASS ────────────────────────────────────────────────────────
@@ -328,6 +356,20 @@ func persistDependencies(db *database.DB, pkgs []models.VarPackage) {
 	if err := db.ReplaceDependencies(dependentKeys, edges); err != nil {
 		log.Printf("[Scanner] DB dependency persist error: %v", err)
 	}
+}
+
+// fillQueue queues every discovered package, then moves the initial focus
+// ahead. Paths not discovered by this scan are ignored by prepend.
+func (o *scanOrchestrator) fillQueue(discovered []models.VarPackage) {
+	o.normalMu.Lock()
+	o.normalQueue = make([]string, 0, len(discovered))
+	o.pendingMap = make(map[string]bool, len(discovered))
+	for _, p := range discovered {
+		o.normalQueue = append(o.normalQueue, p.FilePath)
+		o.pendingMap[p.FilePath] = true
+	}
+	o.normalMu.Unlock()
+	o.prepend(o.initialFocus)
 }
 
 // nextPath returns the next path to scan, preferring highCh over normalQueue.

@@ -462,7 +462,7 @@ func (a *App) ScanPackages(vamPath string) error {
 			},
 		)
 
-		if err != nil && err != context.Canceled {
+		if err != nil && !errors.Is(err, context.Canceled) {
 			runtime.EventsEmit(a.ctx, "scan:error", err.Error())
 		} else if err == nil {
 			runtime.EventsEmit(a.ctx, "scan:complete", true)

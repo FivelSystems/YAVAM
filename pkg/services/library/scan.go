@@ -2,6 +2,7 @@ package library
 
 import (
 	"context"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -11,9 +12,51 @@ import (
 
 // activeScan holds state for the currently-running three-phase scan so that
 // SetCurrentPage / PrioritizePackage can inject priority bumps at any time.
+//
+// pendingFocus holds the latest focus requested while no scan was registered.
+// It is handed to the next scan whose root contains the paths, then dropped;
+// it is also dropped when a scan ends, so it never outlives the scan that
+// consumed it or leaks into a later one.
 type activeScan struct {
-	mu          sync.Mutex
+	mu           sync.Mutex
 	orchestrator *scanOrchestrator
+	pendingFocus []string
+}
+
+const maxPendingFocusPaths = 512
+
+func (a *activeScan) register(orc *scanOrchestrator) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.orchestrator = orc
+	orc.initialFocus = pathsUnderRoot(a.pendingFocus, orc.libraryPath)
+	a.pendingFocus = nil
+}
+
+func (a *activeScan) release() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.orchestrator = nil
+	a.pendingFocus = nil
+}
+
+func (a *activeScan) remember(paths []string) {
+	if len(paths) > maxPendingFocusPaths {
+		paths = paths[:maxPendingFocusPaths]
+	}
+	a.pendingFocus = append([]string(nil), paths...)
+}
+
+func pathsUnderRoot(paths []string, root string) []string {
+	var inside []string
+	for _, p := range paths {
+		rel, err := filepath.Rel(root, p)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			continue
+		}
+		inside = append(inside, p)
+	}
+	return inside
 }
 
 // ScanFull is the three-phase scan entry point.
@@ -42,25 +85,26 @@ func (s *defaultLibraryService) ScanFull(
 		onStage:        onStage,
 	}
 
-	s.active.mu.Lock()
-	s.active.orchestrator = orc
-	s.active.mu.Unlock()
-	defer func() {
-		s.active.mu.Lock()
-		s.active.orchestrator = nil
-		s.active.mu.Unlock()
-	}()
+	s.active.register(orc)
+	defer s.active.release()
 
 	return orc.runThreePhase(ctx, rawPkgs)
 }
 
 // Prioritize bumps the given paths to the front of the Hard Pass queue.
-// Safe to call at any time; no-op if no scan is running.
+// Safe to call at any time. With no scan registered yet, the latest request is
+// remembered and applied when the next scan registers.
 func (s *defaultLibraryService) Prioritize(paths []string) {
+	if len(paths) == 0 {
+		return
+	}
 	s.active.mu.Lock()
 	orc := s.active.orchestrator
+	if orc == nil {
+		s.active.remember(paths)
+	}
 	s.active.mu.Unlock()
-	if orc == nil || len(paths) == 0 {
+	if orc == nil {
 		return
 	}
 	select {

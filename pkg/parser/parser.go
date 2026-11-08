@@ -39,8 +39,21 @@ func decodeBytes(data []byte) []byte {
 	return []byte(strings.ToValidUTF8(string(data), "?"))
 }
 
-// ParseVarMetadata reads the meta.json file from a .var package (zip archive) and detects categories
+// ParseOptions tunes what ParseVarMetadataWithOptions extracts beyond metadata and categories.
+type ParseOptions struct {
+	// ExtractThumbnail controls whether the selected thumbnail's bytes are read and returned.
+	// Selection itself is unaffected; only the decompress/read is skipped when false.
+	ExtractThumbnail bool
+}
+
+// ParseVarMetadata reads the meta.json file from a .var package (zip archive), detects
+// categories, and extracts the cover thumbnail.
 func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error) {
+	return ParseVarMetadataWithOptions(filePath, ParseOptions{ExtractThumbnail: true})
+}
+
+// ParseVarMetadataWithOptions is ParseVarMetadata with control over thumbnail extraction.
+func ParseVarMetadataWithOptions(filePath string, opts ParseOptions) (models.MetaJSON, []byte, []string, error) {
 	var meta models.MetaJSON
 	var thumbBytes []byte
 	categorySet := make(map[string]bool)
@@ -271,7 +284,7 @@ func ParseVarMetadata(filePath string) (models.MetaJSON, []byte, []string, error
 	}
 
 	// Extract candidate if found
-	if candidate != nil {
+	if candidate != nil && opts.ExtractThumbnail {
 		rc, err := candidate.Open()
 		if err == nil {
 			// Limit thumbnail extraction to 20MB (generous but safe)
