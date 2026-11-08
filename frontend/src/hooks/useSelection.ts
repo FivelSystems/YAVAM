@@ -2,10 +2,10 @@ import { useState, useCallback } from 'react';
 import { VarPackage } from '../types';
 
 /** 'anchored': desktop right-click popover, positioned at (x, y).
- *  'sheet': mobile bottom sheet (long-press or the card's overflow button) — no position needed. */
+ *  'sheet': mobile bottom sheet (long-press or the card's overflow button) â€” no position needed. */
 export type SelectionTargetMode = 'anchored' | 'sheet';
 
-export const useSelection = (filteredPkgs: VarPackage[], itemsPerPage: number, setCurrentPage: (page: number) => void, currentPage: number) => {
+export const useSelection = (filteredPkgs: VarPackage[], itemsPerPage: number, goToPage: (page: number) => void, currentPage: number) => {
     // Selection State
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [selectedPackage, setSelectedPackage] = useState<VarPackage | null>(null);
@@ -73,7 +73,7 @@ export const useSelection = (filteredPkgs: VarPackage[], itemsPerPage: number, s
         });
     }, [selectedIds]);
 
-    // Handle Long-press / overflow-button — mobile's only entry point to
+    // Handle Long-press / overflow-button â€” mobile's only entry point to
     // package actions (no right-click equivalent on touch), so it opens the
     // same sheet regardless of which of the two triggered it.
     const handleLongPress = useCallback((pkg: VarPackage) => {
@@ -106,7 +106,7 @@ export const useSelection = (filteredPkgs: VarPackage[], itemsPerPage: number, s
         // Auto-switch page if needed
         const newPage = Math.floor(newIndex / itemsPerPage) + 1;
         if (newPage !== currentPage) {
-            setCurrentPage(newPage);
+            goToPage(newPage);
         }
 
         if (add) {
@@ -120,7 +120,7 @@ export const useSelection = (filteredPkgs: VarPackage[], itemsPerPage: number, s
         }
 
         if (!isDetailsPanelOpen) setIsDetailsPanelOpen(true);
-    }, [filteredPkgs, selectedPackage, itemsPerPage, currentPage, isDetailsPanelOpen]);
+    }, [filteredPkgs, selectedPackage, itemsPerPage, currentPage, isDetailsPanelOpen, goToPage]);
 
     const selectAllPage = useCallback(() => {
         const startIndex = (currentPage - 1) * itemsPerPage;

@@ -7,6 +7,8 @@ import { ScanSlots } from '../utils/slotLedger';
 
 interface PackageContextType {
     packages: VarPackage[];
+    /** The library `packages` was loaded for; differs from the active library while a switch is loading. */
+    loadedLibraryPath: string;
     setPackages: (pkgs: VarPackage[]) => void;
     filteredPkgs: VarPackage[];
     setFilteredPkgs: (pkgs: VarPackage[]) => void;

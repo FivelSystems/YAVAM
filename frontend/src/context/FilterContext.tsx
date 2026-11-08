@@ -1,9 +1,22 @@
 import React, { createContext, useContext } from 'react';
 import { useFilters } from '../hooks/useFilters';
 import { usePackageContext } from './PackageContext';
+import { useLibraryContext } from './LibraryContext';
+import { useToasts } from './ToastContext';
 import { VarPackage } from '../types';
 import { useKeybindSubscription } from './KeybindContext';
-import { FIRST_PAGE, clampPage } from '../utils/pagination';
+import {
+    FIRST_PAGE, INITIAL_PAGE_INTENT, PageView, pageIntentReducer, pageOf, resolvePageIntent,
+} from '../utils/pagination';
+import { isSamePath } from '../utils/normalizePath';
+
+const DEFAULT_ITEMS_PER_PAGE = 50;
+
+export interface ResolvedLocate {
+    filePath: string;
+    /** Changes on every resolution so locating the same package twice highlights it twice. */
+    timestamp: number;
+}
 
 interface FilterContextType {
     searchQuery: string;
@@ -19,7 +32,14 @@ interface FilterContextType {
     isSortDropdownOpen: boolean;
     setIsSortDropdownOpen: (v: boolean) => void;
     currentPage: number;
-    setCurrentPage: (p: number) => void;
+    goToPage: (page: number) => void;
+    /**
+     * Shows the page that holds `filePath` once the view of `libraryPath` is ready.
+     * Dispatch it before switching to that library; a manual library change discards it.
+     */
+    locatePackage: (filePath: string, libraryPath: string) => void;
+    /** Set when a locate lands on its page, so the grid can highlight the package. */
+    resolvedLocate: ResolvedLocate | null;
     itemsPerPage: number;
     setItemsPerPage: (v: number) => void;
 }
@@ -27,35 +47,85 @@ interface FilterContextType {
 const FilterContext = createContext<FilterContextType | undefined>(undefined);
 
 export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const { packages, scanSlots } = usePackageContext();
+    const { packages, loadedLibraryPath, loading: isScanActive, scanSlots, prioritizePackages } = usePackageContext();
+    const { activeLibraryPath } = useLibraryContext();
+    const { addToast } = useToasts();
     const filterLogic = useFilters(packages, scanSlots);
+    const { searchQuery, setSearchQuery, filteredPkgs } = filterLogic;
 
-    // Pagination State (Added to FilterContext)
-    const [requestedPage, setCurrentPage] = React.useState(FIRST_PAGE);
-    const [itemsPerPage, setItemsPerPage] = React.useState(() => parseInt(localStorage.getItem("itemsPerPage") || "50"));
+    const [pageIntent, dispatchPageIntent] = React.useReducer(pageIntentReducer, INITIAL_PAGE_INTENT);
+    const [itemsPerPage, setItemsPerPage] = React.useState(() =>
+        parseInt(localStorage.getItem("itemsPerPage") || String(DEFAULT_ITEMS_PER_PAGE)));
+    const [resolvedLocate, setResolvedLocate] = React.useState<ResolvedLocate | null>(null);
 
-    // Derived during render so a shrunken page count never produces an out-of-range frame.
-    const currentPage = clampPage(requestedPage, filterLogic.filteredPkgs.length, itemsPerPage);
-    if (currentPage !== requestedPage) setCurrentPage(currentPage);
+    const latestRef = React.useRef({ pageIntent, addToast });
+    latestRef.current = { pageIntent, addToast };
+
+    const isGridHeld = scanSlots.phase === 'held';
+    const pageView: PageView = {
+        renderedList: filteredPkgs,
+        loadedPackages: packages,
+        loadedLibraryPath,
+        itemsPerPage,
+        isGridHeld,
+        isScanActive,
+        hasSearch: searchQuery.trim().length > 0,
+    };
+    const resolution = resolvePageIntent(pageIntent, pageView);
+    const currentPage = pageOf(resolution);
+
+    const goToPage = React.useCallback((page: number) => dispatchPageIntent({ type: 'goToPage', page }), []);
+    const locatePackage = React.useCallback((filePath: string, libraryPath: string) =>
+        dispatchPageIntent({ type: 'locate', filePath, libraryPath }), []);
 
     const handleSetItemsPerPage = (val: number) => {
         setItemsPerPage(val);
         localStorage.setItem("itemsPerPage", val.toString());
-        setCurrentPage(1); // Reset page on size change
+        goToPage(FIRST_PAGE);
     };
 
-    // Reset page when filters change
     React.useEffect(() => {
-        setCurrentPage(1);
-    }, [filterLogic.searchQuery]);
+        const { pageIntent: intent, addToast: notify } = latestRef.current;
+        if (intent.kind === 'locate' && !isSamePath(intent.libraryPath, activeLibraryPath)) {
+            notify("Locate cancelled: the library changed before the package loaded.", "info");
+        }
+        dispatchPageIntent({ type: 'libraryChanged', libraryPath: activeLibraryPath });
+    }, [activeLibraryPath]);
 
-    // Notify the backend Hard Pass about the current page so it gets priority.
-    const { prioritizePackages } = usePackageContext();
+    React.useEffect(() => {
+        dispatchPageIntent({ type: 'searchChanged', libraryPath: activeLibraryPath });
+    }, [searchQuery]);
+
+    const isClampWritable = !isGridHeld && isSamePath(loadedLibraryPath, activeLibraryPath);
+    const resolvedPage = pageOf(resolution);
+    React.useEffect(() => {
+        const { pageIntent: intent, addToast: notify } = latestRef.current;
+        switch (resolution.status) {
+            case 'located':
+                if (intent.kind !== 'locate') return;
+                setResolvedLocate({ filePath: intent.filePath, timestamp: Date.now() });
+                goToPage(resolution.page);
+                return;
+            case 'hidden-by-search':
+                setSearchQuery("");
+                return;
+            case 'missing':
+                notify("Package not found in its library.", "warning");
+                goToPage(FIRST_PAGE);
+                return;
+            case 'page':
+                if (intent.kind === 'page' && isClampWritable && intent.page !== resolution.page) goToPage(resolution.page);
+                return;
+            case 'waiting':
+                return;
+        }
+    }, [resolution.status, resolvedPage, pageIntent, isClampWritable, goToPage, setSearchQuery]);
+
     const lastSentPageRef = React.useRef('');
     React.useEffect(() => {
-        if (filterLogic.filteredPkgs.length === 0) return;
+        if (filteredPkgs.length === 0) return;
         const start = (currentPage - 1) * itemsPerPage;
-        const pagePaths = filterLogic.filteredPkgs
+        const pagePaths = filteredPkgs
             .slice(start, start + itemsPerPage)
             .map(p => p.filePath);
         if (pagePaths.length === 0) return;
@@ -63,28 +133,17 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (pageSignature === lastSentPageRef.current) return;
         lastSentPageRef.current = pageSignature;
         prioritizePackages(pagePaths);
-    }, [currentPage, itemsPerPage, filterLogic.filteredPkgs, scanSlots.epoch, prioritizePackages]);
+    }, [currentPage, itemsPerPage, filteredPkgs, scanSlots.epoch, prioritizePackages]);
 
-
-    // Keybind: Focus Search
     useKeybindSubscription('focus_search', (e) => {
         e.preventDefault();
-        // We need a ref to the input, but we don't have it here. 
-        // We dispatch an event or use a global ID?
-        // The SearchInput component listens to this? 
-        // Actually FilterToolbar should handle this?
-        // Ah, FilterContext logic just exposes state. 
-        // Let's assume FilterToolbar handles the focus via effect or similar.
-        // Wait, if this callback does nothing useful or relies on external side effects...
-        // The implementation here:
-        const el = document.getElementById('search-input');
-        if (el) el.focus();
+        document.getElementById('search-input')?.focus();
     }, []);
 
     return (
         <FilterContext.Provider value={{
             ...filterLogic,
-            currentPage, setCurrentPage,
+            currentPage, goToPage, locatePackage, resolvedLocate,
             itemsPerPage, setItemsPerPage: handleSetItemsPerPage
         }}>
             {children}

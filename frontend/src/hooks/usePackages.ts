@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { VarPackage, PackageAnalysis, ScanStageProgress, ScanStages } from '../types';
 import { IDLE_SLOTS, ScanSlots } from '../utils/slotLedger';
 import { fetchWithAuth } from '../services/api';
+import { normalizePath } from '../utils/normalizePath';
 
 const EMPTY_STAGES: ScanStages = {
     discovery: { current: 0, total: 0, done: false },
@@ -65,10 +66,10 @@ const applyAnalysis = (p: VarPackage, a: PackageAnalysis): VarPackage => {
     return pkgSignature(p) === pkgSignature(merged) ? p : merged;
 };
 
-const normPath = (p: string) => p.replace(/\\/g, '/').toLowerCase();
-
 export const usePackages = (activeLibraryPath: string) => {
     const [packages, setPackages] = useState<VarPackage[]>([]);
+    /** The library `packages` belongs to; lags behind the active library until its scan starts. */
+    const [loadedLibraryPath, setLoadedLibraryPath] = useState('');
     const [scanError, setScanError] = useState<string | null>(null);
     const [filteredPkgs, setFilteredPkgs] = useState<VarPackage[]>([]);
     const [availableTags, setAvailableTags] = useState<string[]>([]);
@@ -121,7 +122,7 @@ export const usePackages = (activeLibraryPath: string) => {
      * Called by FilterContext when the page changes, and by PackageCard on click.
      */
     const prioritizePackages = useCallback((paths: string[]) => {
-        visiblePathsRef.current = new Set(paths.map(normPath));
+        visiblePathsRef.current = new Set(paths.map(normalizePath));
         if (!window.go || paths.length === 0) return;
         window.go.main.App.SetCurrentPage(paths).catch(() => { /* non-fatal */ });
     }, []);
@@ -139,6 +140,7 @@ export const usePackages = (activeLibraryPath: string) => {
             await cancelScan();
             setScanError(null);
             setPackages([]);
+            setLoadedLibraryPath('');
             setFilteredPkgs([]);
             setAvailableTags([]);
             setScanStages(EMPTY_STAGES);
@@ -175,7 +177,7 @@ export const usePackages = (activeLibraryPath: string) => {
             if (scanSessionId.current !== currentId) return;
 
             if (cached && cached.length > 0) {
-                cached.forEach(p => knownPathsRef.current.add(normPath(p.filePath)));
+                cached.forEach(p => knownPathsRef.current.add(normalizePath(p.filePath)));
                 cacheSeededRef.current = true;
                 setPackages(cached.map(p => ({ ...p, scanPhase: 'analyzed' as const })));
                 placeSlots();
@@ -185,6 +187,7 @@ export const usePackages = (activeLibraryPath: string) => {
         } else {
             setPackages([]);
         }
+        setLoadedLibraryPath(activeLibraryPath);
         setFilteredPkgs([]);
 
         let isGridHeld = !cacheSeededRef.current && !!window.runtime;
@@ -243,7 +246,7 @@ export const usePackages = (activeLibraryPath: string) => {
                 // Updaters run twice under StrictMode, so the ref is settled out here.
                 const newRows: VarPackage[] = [];
                 for (const p of toDiscover) {
-                    const norm = normPath(p.filePath);
+                    const norm = normalizePath(p.filePath);
                     if (knownPathsRef.current.has(norm)) continue;
                     knownPathsRef.current.add(norm);
                     if (!norm.includes(libNorm)) continue;
@@ -322,8 +325,8 @@ export const usePackages = (activeLibraryPath: string) => {
             // @ts-ignore
             window.runtime.EventsOn('package:discovered', (data: VarPackage) => {
                 if (scanSessionId.current !== currentId) return;
-                seenThisScanRef.current.add(normPath(data.filePath));
-                enumeratedPaths.add(normPath(data.filePath));
+                seenThisScanRef.current.add(normalizePath(data.filePath));
+                enumeratedPaths.add(normalizePath(data.filePath));
                 discoveredBuffer.push(data);
                 reholdIfPlacedEmpty();
                 releaseGridWhenEnumerated();
@@ -336,8 +339,8 @@ export const usePackages = (activeLibraryPath: string) => {
             // @ts-ignore
             window.runtime.EventsOn('package:scanned', (data: VarPackage) => {
                 if (scanSessionId.current !== currentId) return;
-                seenThisScanRef.current.add(normPath(data.filePath));
-                if (visiblePathsRef.current.has(normPath(data.filePath))) {
+                seenThisScanRef.current.add(normalizePath(data.filePath));
+                if (visiblePathsRef.current.has(normalizePath(data.filePath))) {
                     visibleScannedBuffer.push(data);
                     scheduleFrameFlush();
                     return;
@@ -398,7 +401,7 @@ export const usePackages = (activeLibraryPath: string) => {
                     // seen-set means the scan was interrupted/cancelled, and pruning
                     // would wrongly wipe the cache-painted grid.
                     const reconciled = (cacheSeededRef.current && seenThisScanRef.current.size > 0)
-                        ? prev.filter(p => seenThisScanRef.current.has(normPath(p.filePath)))
+                        ? prev.filter(p => seenThisScanRef.current.has(normalizePath(p.filePath)))
                         : prev;
                     const tags = new Set<string>();
                     reconciled.forEach(p => p.tags?.forEach(t => tags.add(t)));
@@ -491,6 +494,7 @@ export const usePackages = (activeLibraryPath: string) => {
 
     return {
         packages,
+        loadedLibraryPath,
         setPackages,
         scanError,
         scanSlots,
