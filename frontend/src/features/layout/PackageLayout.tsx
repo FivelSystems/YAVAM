@@ -13,6 +13,7 @@ import { useLibraryContext } from '../../context/LibraryContext';
 import { useActionContext } from '../../context/ActionContext';
 import { useToasts } from '../../context/ToastContext';
 import { hasToken, toggleToken } from '../../utils/search';
+import { isSamePath, normalizePath } from '../../utils/normalizePath';
 
 interface PackageLayoutProps {
     // View State (Dashboard controlled)
@@ -21,7 +22,7 @@ interface PackageLayoutProps {
 
     // Locating
     highlightedRequest?: { id: string; ts: number } | null;
-    onLocatePackage: (pkg: VarPackage, opts?: { select?: boolean }) => void;
+    onLocatePackage: (pkg: VarPackage) => void;
     scrollContainerRef: React.RefObject<HTMLDivElement>;
 
     // Privacy
@@ -39,7 +40,7 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
     // Context Consumption
     const { packages, scanError, loading: isScanActive, scanSlots, scanStages } = usePackageContext();
     const {
-        filteredPkgs, pendingCount, currentPage, itemsPerPage, setCurrentPage,
+        filteredPkgs, pendingCount, currentPage, itemsPerPage, goToPage, locatePackage,
         searchQuery, setSearchQuery, clearFilters
     } = useFilterContext();
     const {
@@ -58,22 +59,6 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
 
     // Local UI State
     const [activeTab, setActiveTab] = useState<"details" | "contents">("details");
-
-    // Deferred locate target: set when we switch libraries to reach a cross-library
-    // dependency; the effect below selects it once that library's packages load.
-    const pendingLocateRef = React.useRef<string | null>(null);
-    const normPath = (p: string) => p.replace(/\\/g, '/').toLowerCase();
-
-    React.useEffect(() => {
-        if (!pendingLocateRef.current) return;
-        const match = packages.find(p => normPath(p.filePath) === pendingLocateRef.current);
-        if (match) {
-            pendingLocateRef.current = null;
-            // Locate + highlight in the grid. Keep the current selection/sidebar —
-            // select:false stops the locate logic from focusing the jumped-to package.
-            onLocatePackage(match, { select: false });
-        }
-    }, [packages, onLocatePackage]);
 
     const handleSidebarContextMenu = React.useCallback((e: React.MouseEvent, pkg: VarPackage) => {
         e.preventDefault();
@@ -127,11 +112,11 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
                     addToast(`Not found in any library: ${displayName}`, "error");
                     return;
                 }
-                if (normPath(loc.libraryPath) === normPath(activeLibraryPath)) {
+                if (isSamePath(loc.libraryPath, activeLibraryPath)) {
                     addToast(`Package not found in library: ${displayName}`, "error");
                     return;
                 }
-                pendingLocateRef.current = normPath(loc.filePath);
+                locatePackage(loc.filePath, loc.libraryPath);
                 selectLibrary(loc.libraryPath);
                 const versionNote = expectedVersion && (loc.version || "").toLowerCase() !== expectedVersion.toLowerCase()
                     ? ` — exact version not found, showing v${loc.version}`
@@ -148,7 +133,7 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
     const handleLocate = (target: VarPackage) => {
         const targetId = `${target.meta.creator}.${target.meta.packageName}.${target.meta.version}`.toLowerCase();
         const inLibrary = packages.find(p =>
-            normPath(p.filePath) === normPath(target.filePath) ||
+            isSamePath(p.filePath, target.filePath) ||
             `${p.meta.creator}.${p.meta.packageName}.${p.meta.version}`.toLowerCase() === targetId
         );
         if (inLibrary) {
@@ -159,11 +144,11 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
     };
 
     const handleDependencyClick = (depId: string) => {
-        const cleanDep = depId.replace(/\\/g, '/').toLowerCase();
+        const cleanDep = normalizePath(depId);
         let requestedVersion = ""; // explicit numeric version, if one was asked for
 
         // 1. Try Path Match First (For "Used By" lookups where path is known)
-        let found = packages.find(p => p.filePath.replace(/\\/g, '/').toLowerCase() === cleanDep);
+        let found = packages.find(p => normalizePath(p.filePath) === cleanDep);
 
         // 2. Try Exact ID Match (For "Dependency" lookups)
         if (!found) {
@@ -257,7 +242,7 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
                 <ScanPendingNotice count={pendingCount} />
 
                 {/* CardGrid Container */}
-                <div ref={scrollContainerRef} className="flex-1 overflow-auto p-4 pb-32 md:pb-24 custom-scrollbar">
+                <div ref={scrollContainerRef} className="flex-1 overflow-auto p-4 custom-scrollbar">
                     {!hostLibrariesLoaded ? (libraryLoadFailed ? null : <LibrariesLoadingNotice />)
                     : libraries.length === 0 ? <NoLibrariesNotice onAddLibrary={canAddLibrary ? browseAndAdd : undefined} />
                     : scanSlots.phase === 'held' ? <ScanHoldNotice stages={scanStages} /> : <CardGrid
@@ -284,14 +269,13 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
                     />}
                 </div>
 
-                {/* Pagination Footer */}
                 {filteredPkgs.length > itemsPerPage && (
-                    <div className="absolute bottom-0 left-0 right-0 p-3 bg-gray-900/80 backdrop-blur-md border-t border-white/10 z-20 shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
+                    <div className="relative z-10 shrink-0 px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] bg-gray-900 border-t border-white/10">
                         <Pagination
                             currentPage={currentPage}
                             totalItems={filteredPkgs.length}
                             itemsPerPage={itemsPerPage}
-                            onChange={setCurrentPage}
+                            onChange={goToPage}
                         />
                     </div>
                 )}

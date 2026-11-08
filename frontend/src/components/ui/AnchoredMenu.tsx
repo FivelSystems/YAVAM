@@ -16,6 +16,9 @@ interface AnchoredMenuProps {
     children: React.ReactNode;
     /** Width stays caller-defined (56 vs 40 Tailwind units today). */
     className?: string;
+    /** `dialog` for popovers holding form controls; `menu` (default) for item lists. */
+    role?: 'menu' | 'dialog';
+    ariaLabel?: string;
 }
 
 const MenuCloseContext = createContext<() => void>(() => {});
@@ -28,7 +31,7 @@ const MenuCloseContext = createContext<() => void>(() => {});
  * `ContextMenu` and `SidebarGroupMenu` compose {@link MenuItem} and
  * {@link MenuDivider} as children.
  */
-export const AnchoredMenu = ({ anchor, onClose, children, className }: AnchoredMenuProps) => {
+export const AnchoredMenu = ({ anchor, onClose, children, className, role = 'menu', ariaLabel }: AnchoredMenuProps) => {
     const ref = useRef<HTMLDivElement>(null);
     const [position, setPosition] = useState({ top: anchor.y, left: anchor.x });
     const [maxHeight, setMaxHeight] = useState(() => window.innerHeight - 2 * EDGE_INSET_PX);
@@ -60,7 +63,8 @@ export const AnchoredMenu = ({ anchor, onClose, children, className }: AnchoredM
         <MenuCloseContext.Provider value={onClose}>
             <div
                 ref={ref}
-                role="menu"
+                role={role}
+                aria-label={ariaLabel}
                 className={clsx('fixed z-50 bg-gray-800 border border-gray-700 rounded-lg shadow-xl py-1 text-sm overflow-y-auto', className)}
                 style={{ top: position.top, left: position.left, maxHeight }}
             >

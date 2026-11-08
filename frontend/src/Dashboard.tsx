@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import TitleBar from './components/layout/TitleBar';
 import Sidebar from './features/library/Sidebar';
 import { SidebarContainer } from './features/layout/SidebarContainer';
@@ -26,6 +26,8 @@ import { VarPackage } from './types';
 import { useDragDrop } from './hooks/useDragDrop';
 import { usePrivacySettings } from './hooks/usePrivacySettings';
 import { useLayoutSettings } from './hooks/useLayoutSettings';
+
+const HIGHLIGHT_DURATION_MS = 3000;
 
 const DashboardContent = () => {
     // -- UI State (View & Settings) --
@@ -122,8 +124,8 @@ const DashboardContent = () => {
         activeLibraryPath, needsSetup, setNeedsSetup, addLibrary
     } = useLibraryContext();
     const {
-        itemsPerPage, setItemsPerPage, sortMode,
-        filteredPkgs, setSearchQuery, setCurrentPage, currentPage
+        itemsPerPage, setItemsPerPage,
+        filteredPkgs, locatePackage, resolvedLocate
     } = useFilterContext();
     const {
         clearSelection, contextMenu, setContextMenu, selectedIds, selectedPackage, setSelectedPackage, setIsDetailsPanelOpen
@@ -141,102 +143,37 @@ const DashboardContent = () => {
         uploadQueue, setUploadQueue, handleDrop, handleWebDrop
     } = useDragDrop(activeLibraryPath);
 
-    // -- Logic: Scroll to Package --
-    // -- Logic: Scroll to Package --
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const [highlightedRequest, setHighlightedRequest] = useState<{ id: string; ts: number } | null>(null);
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const handleLocatePackage = (targetPkg: VarPackage, opts?: { select?: boolean }) => {
-        // select defaults true (locating usually implies focusing). Cross-library
-        // jumps pass select:false so the sidebar keeps its current selection.
-        const allowSelect = opts?.select !== false;
-        let finalPkg = targetPkg;
-
-        // 1. Check if visible in current filter
-        let isVisible = filteredPkgs.some(p => p.filePath === finalPkg.filePath);
-
-        // 1b. Fallback: ID Match (Cross-Library Support)
-        // If strictly path-matching fails, checking if we have the "same" package (by ID) in the current library.
-        if (!isVisible) {
-            const targetId = `${targetPkg.meta.creator}.${targetPkg.meta.packageName}.${targetPkg.meta.version}`;
-            // Find equivalent in the FULL loaded list
-            const equivalent = packages.find(p => `${p.meta.creator}.${p.meta.packageName}.${p.meta.version}` === targetId);
-
-            if (equivalent) {
-                // Switch target to the local instance
-                finalPkg = equivalent;
-
-                // Update selection to match local instance (Fixes "Ghost Selection" from other lib)
-                if (allowSelect && selectedPackage?.filePath !== equivalent.filePath) {
-                    setSelectedPackage(equivalent);
-                }
-                // Re-check visibility
-                isVisible = filteredPkgs.some(p => p.filePath === finalPkg.filePath);
-            }
-        }
-
-        if (!isVisible) {
-            // 2. if not visible, CLEAR ALL FILTERS (Reset to "All Packages" view).
-            // The tokenised query is the single filter source, so one reset suffices.
-            setSearchQuery("");
-
-            // 3. Find where the package WOULD be in the full list (sorted)
-            // We replicate the sort logic here to find the index immediately
-            const allPkgs = [...packages];
-            allPkgs.sort((a, b) => {
-                let cmp = 0;
-                switch (sortMode) {
-                    case 'name-asc': cmp = (a.fileName || "").localeCompare(b.fileName || ""); break;
-                    case 'name-desc': cmp = (b.fileName || "").localeCompare(a.fileName || ""); break;
-                    case 'size-asc': cmp = a.size - b.size; break;
-                    case 'size-desc': cmp = b.size - a.size; break;
-                    // @ts-ignore
-                    case 'date-newest': cmp = new Date(b.creationDate || 0).getTime() - new Date(a.creationDate || 0).getTime(); break;
-                    // @ts-ignore
-                    case 'date-oldest': cmp = new Date(a.creationDate || 0).getTime() - new Date(b.creationDate || 0).getTime(); break;
-                    default: cmp = 0;
-                }
-                if (cmp === 0) return a.filePath.localeCompare(b.filePath);
-                return cmp;
-            });
-
-            const index = allPkgs.findIndex(p => p.filePath === finalPkg.filePath);
-            if (index !== -1) {
-                const targetPage = Math.ceil((index + 1) / itemsPerPage);
-                setCurrentPage(targetPage);
-            } else {
-                setCurrentPage(1); // Should not happen if package exists
-            }
-        } else {
-            // 3. If Visible (in filtered list), check Pagination
-            const index = filteredPkgs.findIndex(p => p.filePath === finalPkg.filePath);
-            if (index !== -1) {
-                const targetPage = Math.ceil((index + 1) / itemsPerPage);
-                if (targetPage !== currentPage) {
-                    setCurrentPage(targetPage);
-                }
-            }
-        }
-
-        // 4. Highlight & Scroll
-        const id = finalPkg.filePath;
-
-        // INTERRUPT LOGIC: Clear existing timer to prevent premature "off" switch
-        if (timerRef.current) {
-            clearTimeout(timerRef.current);
-        }
-
-        // Set new request with current timestamp (Forces animation restart via key change)
-        setHighlightedRequest({ id, ts: Date.now() });
-
-        // Auto-clear highlight after 3 seconds (animation duration)
+    const highlightPackage = useCallback((filePath: string) => {
+        if (timerRef.current) clearTimeout(timerRef.current);
+        setHighlightedRequest({ id: filePath, ts: Date.now() });
         timerRef.current = setTimeout(() => {
             setHighlightedRequest(null);
             timerRef.current = null;
-        }, 3000);
-    };
+        }, HIGHLIGHT_DURATION_MS);
+    }, []);
 
+    useEffect(() => {
+        if (resolvedLocate) highlightPackage(resolvedLocate.filePath);
+    }, [resolvedLocate, highlightPackage]);
+
+    const handleLocatePackage = (targetPkg: VarPackage) => {
+        const targetId = `${targetPkg.meta.creator}.${targetPkg.meta.packageName}.${targetPkg.meta.version}`;
+        const isLoaded = packages.some(p => p.filePath === targetPkg.filePath);
+        const localInstance = isLoaded
+            ? undefined
+            : packages.find(p => `${p.meta.creator}.${p.meta.packageName}.${p.meta.version}` === targetId);
+        const finalPkg = localInstance ?? targetPkg;
+
+        // A selection left over from another library points at a package this library does not hold.
+        if (localInstance && selectedPackage?.filePath !== localInstance.filePath) {
+            setSelectedPackage(localInstance);
+        }
+        locatePackage(finalPkg.filePath, activeLibraryPath);
+    };
     // -- Keybinds --
     useKeybindSubscription('toggle_sidebar', () => setIsSidebarOpen(prev => !prev), [setIsSidebarOpen]);
     useKeybindSubscription('toggle_settings', () => setIsSettingsOpen(prev => !prev), [setIsSettingsOpen]);

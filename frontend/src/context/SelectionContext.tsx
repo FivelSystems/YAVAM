@@ -24,8 +24,8 @@ interface SelectionContextType {
 const SelectionContext = createContext<SelectionContextType | undefined>(undefined);
 
 export const SelectionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const { filteredPkgs, itemsPerPage, setCurrentPage, currentPage } = useFilterContext();
-    const selectionLogic = useSelection(filteredPkgs, itemsPerPage, setCurrentPage, currentPage);
+    const { filteredPkgs, itemsPerPage, goToPage, currentPage } = useFilterContext();
+    const selectionLogic = useSelection(filteredPkgs, itemsPerPage, goToPage, currentPage);
 
     // Keybinds
 
@@ -47,18 +47,16 @@ export const SelectionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     useKeybindSubscription('select_next_add', (e) => { e.preventDefault(); selectionLogic.navigate(1, true); }, [selectionLogic]);
     useKeybindSubscription('select_prev_add', (e) => { e.preventDefault(); selectionLogic.navigate(-1, true); }, [selectionLogic]);
 
-    // Page Navigation via keys? 
-    // Dashboard had check('prev_page') -> setCurrentPage
     useKeybindSubscription('prev_page', (e) => {
         e.preventDefault();
-        if (currentPage > 1) setCurrentPage(currentPage - 1);
-    }, [currentPage, setCurrentPage]);
+        if (currentPage > 1) goToPage(currentPage - 1);
+    }, [currentPage, goToPage]);
 
     useKeybindSubscription('next_page', (e) => {
         e.preventDefault();
         const maxPage = Math.ceil(filteredPkgs.length / itemsPerPage);
-        if (currentPage < maxPage) setCurrentPage(currentPage + 1);
-    }, [currentPage, filteredPkgs.length, itemsPerPage, setCurrentPage]);
+        if (currentPage < maxPage) goToPage(currentPage + 1);
+    }, [currentPage, filteredPkgs.length, itemsPerPage, goToPage]);
 
     return (
         <SelectionContext.Provider value={selectionLogic}>
