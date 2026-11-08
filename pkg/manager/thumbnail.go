@@ -1,12 +1,9 @@
 package manager
 
-import "yavam/pkg/parser"
-
-// GetThumbnail extracts the thumbnail from a package
+// GetThumbnail returns a package's thumbnail, served through the thumbnail cache.
 func (m *Manager) GetThumbnail(filePath string) ([]byte, error) {
-	_, thumbBytes, _, err := parser.ParseVarMetadata(filePath)
-	if err != nil {
+	if err := m.ValidatePath(filePath); err != nil {
 		return nil, err
 	}
-	return thumbBytes, nil
+	return m.library.GetThumbnail(filePath)
 }

@@ -29,6 +29,7 @@
 - **Smoother Scanning**: The grid no longer flickers or feels sluggish while a scan runs. Cards only update when their data actually changes, so you can browse uninterrupted as content fills in the background.
 - **Test Isolation**: Automated tests no longer write fixture libraries (e.g. `C:\Allowed`) into the real application database.
 - **No More Console Flash on Copy**: Copying a package (`CTRL+C` or the context menu) no longer briefly pops up a console window. File copying now uses the native Windows clipboard directly instead of launching PowerShell in the background.
+- **Faster Thumbnails ([#129](https://github.com/FivelSystems/YAVAM/issues/129))**: Package thumbnails now load from the thumbnail cache instead of re-reading each package, so browsing images is faster.
 - **Local Database Settings ([#132](https://github.com/FivelSystems/YAVAM/issues/132))**: The local index database now actually runs in write-ahead (WAL) mode with foreign keys enforced, so saves are faster and deleting a library or pocket removes its dependent rows. Stray rows left behind by older builds are cleaned up on launch.
 
 ### Security
