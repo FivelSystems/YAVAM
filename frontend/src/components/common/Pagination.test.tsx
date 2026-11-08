@@ -1,6 +1,7 @@
 ﻿import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { Pagination } from './Pagination';
+import { clampPage } from '../../utils/pagination';
 
 const renderPagination = (overrides: Partial<React.ComponentProps<typeof Pagination>> = {}) => {
     const onChange = vi.fn();
@@ -151,5 +152,130 @@ describe('Pagination jump (mobile sheet)', () => {
         openSheet();
         fireEvent.keyDown(window, { key: 'Escape' });
         expect(onChange).not.toHaveBeenCalled();
+    });
+});
+
+const pageNumbers = () =>
+    screen.getAllByRole('button', { name: /^Go to page \d+$/ }).map(button => Number(button.textContent));
+const gapButtons = () => screen.queryAllByRole('button', { name: 'Jump to page' });
+
+describe('Pagination edge states', () => {
+    it('renders nothing and no controls for an empty result', () => {
+        const { container } = render(<Pagination currentPage={1} totalItems={0} itemsPerPage={50} onChange={vi.fn()} />);
+        expect(container).toBeEmptyDOMElement();
+        expect(screen.queryByRole('navigation')).toBeNull();
+    });
+
+    it('renders nothing when the items exactly fill one page', () => {
+        const { container } = render(<Pagination currentPage={1} totalItems={50} itemsPerPage={50} onChange={vi.fn()} />);
+        expect(container).toBeEmptyDOMElement();
+    });
+
+    it('shows a second page as soon as one item overflows', () => {
+        renderPagination({ currentPage: 1, totalItems: 51 });
+        expect(pageNumbers()).toEqual([1, 2]);
+    });
+
+    it('disables forward controls and enables backward ones on the last page', () => {
+        renderPagination({ currentPage: 25 });
+        expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Last page' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Previous page' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'First page' })).toBeEnabled();
+    });
+
+    it('does not call onChange when a disabled control is clicked', () => {
+        const onChange = renderPagination({ currentPage: 1 });
+        fireEvent.click(screen.getByRole('button', { name: 'Previous page' }));
+        fireEvent.click(screen.getByRole('button', { name: 'First page' }));
+        expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('clicking a numbered button reports that page', () => {
+        const onChange = renderPagination({ currentPage: 2, totalItems: 200 });
+        fireEvent.click(screen.getByRole('button', { name: 'Go to page 4' }));
+        expect(onChange).toHaveBeenCalledWith(4);
+    });
+});
+
+describe('Pagination page numbers and ellipsis', () => {
+    it('shows every number and no ellipsis for a small page count', () => {
+        renderPagination({ currentPage: 3, totalItems: 250 });
+        expect(pageNumbers()).toEqual([1, 2, 3, 4, 5]);
+        expect(gapButtons()).toHaveLength(0);
+    });
+
+    it('shows every number and no ellipsis at exactly the visible limit', () => {
+        renderPagination({ currentPage: 5, totalItems: 450 });
+        expect(pageNumbers()).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        expect(gapButtons()).toHaveLength(0);
+    });
+
+    it('does not insert an ellipsis for a single hidden page', () => {
+        renderPagination({ currentPage: 1, totalItems: 500 });
+        expect(pageNumbers()).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+        expect(gapButtons()).toHaveLength(0);
+    });
+
+    it('keeps the last page and one trailing ellipsis on the first page of many', () => {
+        renderPagination({ currentPage: 1, totalItems: 1000 });
+        expect(pageNumbers()).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 20]);
+        expect(gapButtons()).toHaveLength(1);
+    });
+
+    it('keeps the first page and one leading ellipsis on the last page of many', () => {
+        renderPagination({ currentPage: 20, totalItems: 1000 });
+        expect(pageNumbers()).toEqual([1, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
+        expect(gapButtons()).toHaveLength(1);
+    });
+
+    it('shows first, last, the current neighbours and two ellipses in the middle', () => {
+        renderPagination({ currentPage: 10, totalItems: 1000 });
+        expect(pageNumbers()).toEqual([1, 6, 7, 8, 9, 10, 11, 12, 13, 14, 20]);
+        expect(gapButtons()).toHaveLength(2);
+        expect(screen.getByRole('button', { name: 'Go to page 10' })).toHaveAttribute('aria-current', 'page');
+    });
+});
+
+describe('Pagination out-of-range page', () => {
+    it('clampPage brings a page past the end back to the last valid page', () => {
+        expect(clampPage(9, 120, 50)).toBe(3);
+        expect(clampPage(26, 1234, 50)).toBe(25);
+    });
+
+    it('clampPage brings a page below the first back to the first', () => {
+        expect(clampPage(0, 1234, 50)).toBe(1);
+        expect(clampPage(-3, 1234, 50)).toBe(1);
+    });
+
+    it('clampPage returns page 1 for an empty result', () => {
+        expect(clampPage(7, 0, 50)).toBe(1);
+    });
+
+    it('clampPage leaves a valid page untouched', () => {
+        expect(clampPage(2, 120, 50)).toBe(2);
+    });
+
+    it('follows the page the parent passes after the list shrinks and the page is clamped', () => {
+        const onChange = vi.fn();
+        const { rerender } = render(<Pagination currentPage={25} totalItems={1234} itemsPerPage={50} onChange={onChange} />);
+        const shrunkTotal = 120;
+        const clamped = clampPage(25, shrunkTotal, 50);
+        rerender(<Pagination currentPage={clamped} totalItems={shrunkTotal} itemsPerPage={50} onChange={onChange} />);
+        expect(screen.getByRole('button', { name: 'Go to page 3' })).toHaveAttribute('aria-current', 'page');
+        expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled();
+        expect(screen.getByText(/101-120 of 120/)).toBeInTheDocument();
+    });
+
+    it('collapses to nothing when the list shrinks to a single page', () => {
+        const { container, rerender } = render(<Pagination currentPage={5} totalItems={1234} itemsPerPage={50} onChange={vi.fn()} />);
+        rerender(<Pagination currentPage={1} totalItems={20} itemsPerPage={50} onChange={vi.fn()} />);
+        expect(container).toBeEmptyDOMElement();
+    });
+
+    it('the component itself does not clamp: a stale page past the end enables Previous and disables Next', () => {
+        renderPagination({ currentPage: 30, totalItems: 120 });
+        expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Previous page' })).toBeEnabled();
     });
 });
