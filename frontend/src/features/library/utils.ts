@@ -3,6 +3,27 @@ import { PACKAGE_STATUS } from "../../constants";
 
 export type PackageStatus = typeof PACKAGE_STATUS[keyof typeof PACKAGE_STATUS];
 
+export type CardState = 'reserved' | 'listed' | 'identified' | 'settled' | 'failed';
+
+/**
+ * Single derived value the card components render from, so they never branch
+ * on `scanPhase` directly. `settled` covers both linked and cache-known rows.
+ * Without a row the slot is `reserved`.
+ */
+export const getCardState = (pkg: VarPackage | undefined): CardState => {
+    if (!pkg) return 'reserved';
+    if (pkg.isCorrupt) return 'failed';
+    switch (pkg.scanPhase) {
+        case 'discovered': return 'listed';
+        case 'scanned': return 'identified';
+        default: return 'settled';
+    }
+};
+
+/** States that still wait on scan data and may show the shimmer. */
+export const isPendingCardState = (state: CardState): boolean =>
+    state === 'reserved' || state === 'listed';
+
 /**
  * Determines the logical status of a package for UI display.
  * Prioritizes critical issues (Corrupt/Missing) over warnings (Duplicate/Obsolete).

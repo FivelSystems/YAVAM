@@ -8,6 +8,9 @@ import { formatBytes } from '../../utils/format';
 import { RatingFavoriteControl } from '../../components/ui/RatingFavoriteControl';
 import { useLongPress } from '../../hooks/useLongPress';
 import { getStoredToken } from '../../services/auth';
+import { useInViewport } from '../../hooks/useInViewport';
+import PackageSkeleton from './components/PackageSkeleton';
+import { getCardState, isPendingCardState } from './utils';
 
 /** Passive rating/favourite pill — the only persistent sign of either on the
  * card itself (previously only visible via the context menu that set them, #54).
@@ -136,11 +139,15 @@ interface PackageCardProps {
     hideCreatorNames?: boolean;
     isHighlighted?: boolean;
     startAnimationTs?: number; // Timestamp to force animation restart (used as key)
+    isScanActive?: boolean;
 }
 
-const PackageCard = memo(({ pkg, onContextMenu, onSelect, onRate, onToggleFavorite, onOpenActionSheet, isSelected, isAnchor, viewMode = 'grid', censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false, isHighlighted = false, startAnimationTs }: PackageCardProps) => {
+const PackageCard = memo(({ pkg, onContextMenu, onSelect, onRate, onToggleFavorite, onOpenActionSheet, isSelected, isAnchor, viewMode = 'grid', censorThumbnails = false, blurAmount = 10, hidePackageNames = false, hideCreatorNames = false, isHighlighted = false, startAnimationTs, isScanActive = false }: PackageCardProps) => {
     const cardRef = useRef<HTMLDivElement>(null);
     const longPress = useLongPress(() => onOpenActionSheet(pkg));
+    const cardState = getCardState(pkg);
+    const isListed = cardState === 'listed';
+    const isShimmerVisible = useInViewport(cardRef, isScanActive && isPendingCardState(cardState));
 
     // ── All hooks must be declared unconditionally (Rules of Hooks) ───────────
     // Do NOT add early returns before these declarations.
@@ -162,8 +169,7 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, onRate, onToggleFavori
 
     // Lazy Loading Logic
     useEffect(() => {
-        // Skip for skeleton phase — the zip hasn't been opened yet
-        if (pkg.scanPhase === 'discovered') return;
+        if (isListed) return;
 
         if (!window.go) {
             // Web Mode: Use API URL directly
@@ -186,10 +192,10 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, onRate, onToggleFavori
 
         if (cardRef.current) observer.observe(cardRef.current);
         return () => observer.disconnect();
-    }, [pkg.filePath, pkg.hasThumbnail, pkg.scanPhase, thumbSrc]);
+    }, [pkg.filePath, pkg.hasThumbnail, isListed, thumbSrc]);
 
     useEffect(() => {
-        if (pkg.scanPhase === 'discovered') return;
+        if (isListed) return;
         if (window.go && isVisible && pkg.hasThumbnail && !thumbSrc) {
             window.go.main.App.GetPackageThumbnail(pkg.filePath)
                 .then((b64: string) => {
@@ -197,7 +203,7 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, onRate, onToggleFavori
                 })
                 .catch((e: any) => console.error('Thumb load failed:', e));
         }
-    }, [isVisible, pkg.hasThumbnail, pkg.filePath, pkg.scanPhase, thumbSrc]);
+    }, [isVisible, pkg.hasThumbnail, pkg.filePath, isListed, thumbSrc]);
 
     // ── Click handler ─────────────────────────────────────────────────────────
     const handleClick = (e: React.MouseEvent) => {
@@ -206,7 +212,7 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, onRate, onToggleFavori
         if (longPress.consumeLongPress()) return;
 
         // Bump this package to the front of the Hard Pass queue on any click.
-        if (pkg.scanPhase !== 'analyzed' && window.go) {
+        if ((isListed || cardState === 'identified') && window.go) {
             // @ts-ignore
             window.go.main.App.PrioritizePackage(pkg.filePath).catch(() => {});
         }
@@ -267,6 +273,30 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, onRate, onToggleFavori
         statusClass = "border-pink-500 animate-neon-flash shadow-xl z-20 grayscale-0 scale-[1.05]";
     }
 
+    if (isListed) {
+        const hasInteractionState = isAnchor || isSelected || isHighlighted;
+        return (
+            <div
+                key={startAnimationTs}
+                id={`package-${pkg.filePath}`}
+                ref={cardRef}
+                onClick={handleClick}
+                onContextMenu={(e) => onContextMenu(e, pkg)}
+                className="cursor-pointer min-w-0"
+                {...longPressHandlers}
+            >
+                <PackageSkeleton
+                    pkg={pkg}
+                    viewMode={viewMode}
+                    hidePackageNames={hidePackageNames}
+                    hideCreatorNames={hideCreatorNames}
+                    shimmering={isShimmerVisible}
+                    className={hasInteractionState ? statusClass : "border-gray-700"}
+                />
+            </div>
+        );
+    }
+
     if (viewMode === 'list') {
         return (
             <div
@@ -298,8 +328,6 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, onRate, onToggleFavori
                         <div className={clsx("w-full h-full flex items-center justify-center border", pkg.isCorrupt ? "bg-red-900/40 border-red-500/30 text-red-500" : "text-gray-700 border-gray-700")}>
                             {pkg.isCorrupt ? (
                                 <span className="text-[10px] font-bold rotate-[-15deg]">ERROR</span>
-                            ) : pkg.scanPhase === 'discovered' ? (
-                                <div className="w-4 h-4 border-2 border-gray-600 border-t-gray-400 rounded-full animate-spin" />
                             ) : (
                                 <span className="text-[8px] font-bold">{pkg.hasThumbnail ? "..." : "NO IMG"}</span>
                             )}
@@ -341,15 +369,10 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, onRate, onToggleFavori
 
     // Default Grid View
     return (
-        <motion.div
+        <div
             key={startAnimationTs} // Force re-render on new highlight request to restart animation
-            // Removed layout prop for performance
             id={`package-${pkg.filePath}`}
             ref={cardRef}
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            transition={{ duration: 0.2 }}
             onClick={handleClick}
             onContextMenu={(e) => onContextMenu(e, pkg)}
             className={clsx(
@@ -377,8 +400,6 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, onRate, onToggleFavori
                             <div className="flex flex-col items-center justify-center text-red-500 font-bold opacity-80 rotate-[-15deg] border-4 border-red-500/50 p-2 rounded-xl">
                                 <span className="text-2xl tracking-widest">CORRUPT</span>
                             </div>
-                        ) : pkg.scanPhase === 'discovered' ? (
-                            <div className="w-10 h-10 border-4 border-gray-600 border-t-gray-400 rounded-full animate-spin" />
                         ) : (
                             <span className="text-4xl font-bold text-gray-700 select-none opacity-50">{pkg.hasThumbnail ? "..." : "VAR"}</span>
                         )}
@@ -445,7 +466,7 @@ const PackageCard = memo(({ pkg, onContextMenu, onSelect, onRate, onToggleFavori
                     )}
                 </div>
             </div>
-        </motion.div>
+        </div>
     );
 });
 
