@@ -13,6 +13,7 @@ import (
 	"yavam/pkg/database"
 	"yavam/pkg/models"
 	"yavam/pkg/parser"
+	"yavam/pkg/utils"
 )
 
 // ScanStage identifies which phase of the three-phase scan is active.
@@ -285,8 +286,11 @@ func (o *scanOrchestrator) runThreePhase(ctx context.Context, rawPkgs []models.V
 	// DB errors are logged but non-fatal: a broken DB must not break scans.
 	if o.db != nil {
 		// Resolve the library's surrogate id once; every file row references it.
-		if libID, err := o.db.EnsureLibrary(o.libraryPath); err != nil {
-			log.Printf("[Scanner] DB ensure-library error: %v", err)
+		// A library removed while this scan ran has no id, and must stay removed.
+		if libID, found, err := o.db.LibraryID(o.libraryPath); err != nil {
+			log.Printf("[Scanner] DB library lookup error: %v", err)
+		} else if !found {
+			log.Printf("[Scanner] Library no longer configured, results not persisted: %s", utils.SanitizeForLog(o.libraryPath))
 		} else {
 			dbRows := make([]database.PackageRow, 0, len(scannedPkgs))
 			for _, p := range scannedPkgs {

@@ -2,6 +2,7 @@ package database
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/url"
 	"path/filepath"
@@ -264,6 +265,21 @@ func (db *DB) GetLibraryPaths() ([]string, error) {
 		paths = append(paths, p)
 	}
 	return paths, rows.Err()
+}
+
+// LibraryID returns the id of the configured library at path, and false when no
+// such library exists. Unlike EnsureLibrary it never creates one, so work that
+// outlives a library's removal cannot bring it back.
+func (db *DB) LibraryID(path string) (int64, bool, error) {
+	var id int64
+	err := db.conn.QueryRow(`SELECT id FROM libraries WHERE path_norm = ?`, utils.CanonPath(path)).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	return id, true, nil
 }
 
 // EnsureLibrary inserts the library at path (with default permissions) if no row

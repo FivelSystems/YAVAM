@@ -148,6 +148,31 @@ func TestAPI_ExplicitPathSecurity(t *testing.T) {
 		t.Errorf("Expected 403 Forbidden for unsafe path, got %d", w.Code)
 	}
 }
+func TestAPI_SubfolderOfALibraryIsRefusedWithoutCancellingTheRunningScan(t *testing.T) {
+	mockAuth := &MockAuthService{validToken: "valid"}
+	mgr := manager.NewManager(nil, nil, &TestServerConfigService{libraries: []string{"C:/Allowed"}})
+	s := NewServer(context.Background(), mgr, mockAuth, mockAssets, "1.0.0", func() {})
+	s.SkipEvents = true
+	s.Start("127.0.0.1", "0", []string{"C:/Allowed"})
+
+	runningScanCancelled := false
+	s.scanMu.Lock()
+	s.scanCancel = func() { runningScanCancelled = true }
+	s.scanMu.Unlock()
+
+	req := newTestRequest("GET", "/api/packages?path=C:/Allowed/sub", nil)
+	req.Header.Set("Authorization", "Bearer valid")
+	w := httptest.NewRecorder()
+	s.httpSrv.Handler.ServeHTTP(w, req)
+
+	if w.Code != 403 {
+		t.Fatalf("subfolder of a library: got %d, want 403. Body: %s", w.Code, w.Body.String())
+	}
+	if runningScanCancelled {
+		t.Fatal("a refused request cancelled the scan that was already running")
+	}
+}
+
 func TestAPI_Config_SetupDone(t *testing.T) {
 	mockAuth := &MockAuthService{validToken: "valid"}
 	

@@ -472,16 +472,12 @@ func (s *Server) Start(bindHost, port string, libraries []string) error {
 			return
 		}
 
-		if targetPath == "" {
-			s.writeError(w, "No library path selected", 400)
-			return
-		}
-
 		s.log(fmt.Sprintf("Client requested packages for: %s", utils.SanitizeForLog(targetPath)))
 
-		// Security: Ensure targetPath is in allowed libraries
-		if err := s.manager.ValidatePath(targetPath); err != nil {
-			s.log(fmt.Sprintf("Access denied. Target: %s. Error: %s", utils.SanitizeForLog(targetPath), utils.SanitizeForLog(err.Error())))
+		// Refused before the running scan is cancelled and without a scan:error
+		// broadcast, so one bad request cannot disturb every connected client.
+		if !s.manager.IsConfiguredLibrary(targetPath) {
+			s.log(fmt.Sprintf("Access denied. Target is not a configured library: %s", utils.SanitizeForLog(targetPath)))
 			s.writeError(w, "Access denied to this library path", 403)
 			return
 		}

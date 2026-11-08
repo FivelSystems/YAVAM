@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"yavam/pkg/database"
 	"yavam/pkg/models"
@@ -188,6 +189,9 @@ func TestScanFullRefusesUnconfiguredPathWithoutRegisteringIt(t *testing.T) {
 	}
 	if err := scan(configured); err != nil {
 		t.Fatalf("scan of a configured library: %v", err)
+	}
+	if err := scan(strings.ToUpper(configured) + string(os.PathSeparator)); err != nil {
+		t.Fatalf("scan of a configured library spelled with other casing and a trailing separator: %v", err)
 	}
 }
 

@@ -108,15 +108,15 @@ func (m *Manager) ScanFull(
 	onAnalysisDone func([]library.PackageAnalysis),
 	onStage func(library.ScanStageProgress),
 ) error {
-	if !m.isConfiguredLibrary(rootPath) {
+	if !m.IsConfiguredLibrary(rootPath) {
 		return ErrPathNotAllowed
 	}
 	return m.library.ScanFull(ctx, rootPath, onDiscovered, onScanned, onAnalysisDone, onStage)
 }
 
-// isConfiguredLibrary requires the exact library root, not a path inside one:
-// scanning registers the path it is given, so a subfolder would become a library.
-func (m *Manager) isConfiguredLibrary(path string) bool {
+// IsConfiguredLibrary requires the exact library root, not a path inside one:
+// a scan indexes the folder it is given as a whole library.
+func (m *Manager) IsConfiguredLibrary(path string) bool {
 	target := utils.CanonPath(path)
 	for _, library := range m.GetLibraries() {
 		if utils.CanonPath(library) == target {

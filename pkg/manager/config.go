@@ -26,9 +26,8 @@ func (m *Manager) GetLibraries() []string {
 	return paths
 }
 
-// SetLibraries replaces the entire library list in the DB with the given paths,
-// preserving any existing per-library settings (label, permissions, etc.).
-// Paths not in the new list are removed. This is used for reordering.
+// SetLibraries reorders the configured libraries to match paths. It neither adds
+// nor removes libraries and leaves their per-library settings untouched.
 func (m *Manager) SetLibraries(paths []string) error {
 	if m.db == nil {
 		return fmt.Errorf("database not available")

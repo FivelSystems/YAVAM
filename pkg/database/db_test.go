@@ -435,6 +435,26 @@ func TestUserMetadata(t *testing.T) {
 
 // TestGetLibrariesWithNullPassword guards a NULL-scan bug: libraries are inserted
 // without a password_hash (NULL), and GetLibraries must still read them.
+func TestLibraryIDFindsConfiguredLibrariesWithoutCreatingAny(t *testing.T) {
+	db := tempDB(t)
+
+	if _, found, err := db.LibraryID(`D:\Lib`); err != nil || found {
+		t.Fatalf("LibraryID on empty DB = found %v, err %v; want not found", found, err)
+	}
+	if libs, _ := db.GetLibraryPaths(); len(libs) != 0 {
+		t.Fatalf("LibraryID created a library: %v", libs)
+	}
+
+	want, err := db.EnsureLibrary(`D:\Lib`)
+	if err != nil {
+		t.Fatalf("EnsureLibrary: %v", err)
+	}
+	got, found, err := db.LibraryID(`d:\lib\`)
+	if err != nil || !found || got != want {
+		t.Fatalf("LibraryID(`d:\\lib\\`) = %d, %v, %v; want %d, true, nil", got, found, err, want)
+	}
+}
+
 func TestGetLibrariesWithNullPassword(t *testing.T) {
 	db := tempDB(t)
 	if _, err := db.EnsureLibrary(`D:\Lib`); err != nil {
