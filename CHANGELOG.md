@@ -29,6 +29,7 @@
 - **Smoother Scanning**: The grid no longer flickers or feels sluggish while a scan runs. Cards only update when their data actually changes, so you can browse uninterrupted as content fills in the background.
 - **Test Isolation**: Automated tests no longer write fixture libraries (e.g. `C:\Allowed`) into the real application database.
 - **No More Console Flash on Copy**: Copying a package (`CTRL+C` or the context menu) no longer briefly pops up a console window. File copying now uses the native Windows clipboard directly instead of launching PowerShell in the background.
+- **Faster Thumbnails ([#129](https://github.com/FivelSystems/YAVAM/issues/129))**: Package thumbnails now load from the thumbnail cache instead of re-reading each package, so browsing images is faster.
 
 ### Security
 - **Library Optimization Hardening**: Removed an unused internal endpoint that could permanently delete files without going through the Recycle Bin ([#112](https://github.com/FivelSystems/YAVAM/issues/112)). Deleting to the Recycle Bin during Library Optimization now correctly distinguishes "already gone" from "successfully moved to the Recycle Bin" instead of counting both as freed space, and refuses to delete on network or removable drives (where Windows generally has no Recycle Bin and the delete would otherwise be silently permanent) ([#110](https://github.com/FivelSystems/YAVAM/issues/110), [#111](https://github.com/FivelSystems/YAVAM/issues/111)).
