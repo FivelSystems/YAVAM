@@ -82,15 +82,13 @@ func NewManager(sys system.SystemService, lib library.LibraryService, cfg config
 		DataPath: dataPath,
 	}
 
-	// One-time migration: copy libraries from config.json into the DB.
-	// This is idempotent (ON CONFLICT DO NOTHING) — safe to call on every launch.
+	// Imports the library list left in config.json by builds that predate the
+	// database; the DB is the only home of the list from then on.
 	if db != nil && cfg != nil {
 		if c := cfg.Get(); c != nil && len(c.Libraries) > 0 {
 			if err := db.MigrateLibrariesFromConfig(c.Libraries); err != nil {
 				log.Printf("[Manager] Library migration warning: %v", err)
 			} else {
-				// Zero out the config.json libraries array so the DB is the
-				// single source of truth going forward.
 				_ = cfg.Update(func(c *config.Config) {
 					c.Libraries = []string{}
 				})
@@ -110,7 +108,22 @@ func (m *Manager) ScanFull(
 	onAnalysisDone func([]library.PackageAnalysis),
 	onStage func(library.ScanStageProgress),
 ) error {
+	if !m.isConfiguredLibrary(rootPath) {
+		return ErrPathNotAllowed
+	}
 	return m.library.ScanFull(ctx, rootPath, onDiscovered, onScanned, onAnalysisDone, onStage)
+}
+
+// isConfiguredLibrary requires the exact library root, not a path inside one:
+// scanning registers the path it is given, so a subfolder would become a library.
+func (m *Manager) isConfiguredLibrary(path string) bool {
+	target := utils.CanonPath(path)
+	for _, library := range m.GetLibraries() {
+		if utils.CanonPath(library) == target {
+			return true
+		}
+	}
+	return false
 }
 
 // Prioritize bumps the given paths to the front of the Hard Pass queue.
