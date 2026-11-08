@@ -1,8 +1,12 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { VarPackage } from '../types';
 import { parseSearchQuery, buildMatcher } from '../utils/search';
+import {
+    EMPTY_SLOT_VIEW, IDLE_SLOTS, ScanSlots, SlotLedger, SlotView,
+    computeLedgerView, computeLiveView, dependsOnIdentifiedContent, openLedger,
+} from '../utils/slotLedger';
 
-export const useFilters = (packages: VarPackage[]) => {
+export const useFilters = (packages: VarPackage[], scanSlots: ScanSlots = IDLE_SLOTS) => {
     // The tokenised query is the single source of truth for filtering. The
     // sidebar composes it (status:/creator:/type: tokens) exactly like the
     // searchbar chips do, so there is no parallel filter state to keep in sync.
@@ -19,51 +23,34 @@ export const useFilters = (packages: VarPackage[]) => {
         setIsSortDropdownOpen(false);
     };
 
-    const filteredPkgs = useMemo(() => {
-        let res = [...packages];
+    const ledgerRef = useRef<SlotLedger | null>(null);
+
+    const slotView = useMemo((): SlotView => {
+        if (scanSlots.phase === 'held') {
+            ledgerRef.current = null;
+            return EMPTY_SLOT_VIEW;
+        }
 
         // Tokenised search: creator:, type:, tag:, status:, size:, +/- operators.
         // A bare word falls back to a name/creator substring.
-        if (searchQuery.trim()) {
-            const matches = buildMatcher(parseSearchQuery(searchQuery));
-            res = res.filter(matches);
+        const query = searchQuery.trim() ? parseSearchQuery(searchQuery) : null;
+        const matches = query ? buildMatcher(query) : null;
+
+        if (scanSlots.phase !== 'placed') {
+            ledgerRef.current = null;
+            return computeLiveView({ packages, matches, sortMode });
         }
 
-        res.sort((a, b) => {
-            let cmp = 0;
-            switch (sortMode) {
-                case 'name-asc':
-                    cmp = (a.fileName || "").localeCompare(b.fileName || "");
-                    break;
-                case 'name-desc':
-                    cmp = (b.fileName || "").localeCompare(a.fileName || "");
-                    break;
-                case 'size-asc':
-                    cmp = a.size - b.size;
-                    break;
-                case 'size-desc':
-                    cmp = b.size - a.size;
-                    break;
-                case 'date-newest':
-                    // @ts-ignore
-                    cmp = new Date(b.creationDate || 0).getTime() - new Date(a.creationDate || 0).getTime();
-                    break;
-                case 'date-oldest':
-                    // @ts-ignore
-                    cmp = new Date(a.creationDate || 0).getTime() - new Date(b.creationDate || 0).getTime();
-                    break;
-                default:
-                    cmp = 0;
-            }
-            // Deterministic Tie-Breaker: filePath is unique
-            if (cmp === 0) {
-                return a.filePath.localeCompare(b.filePath);
-            }
-            return cmp;
+        if (ledgerRef.current?.epoch !== scanSlots.epoch) {
+            ledgerRef.current = openLedger(scanSlots.epoch, packages);
+        }
+        return computeLedgerView({
+            packages, matches, sortMode,
+            ledger: ledgerRef.current,
+            query: searchQuery,
+            contentDependent: dependsOnIdentifiedContent(query),
         });
-
-        return res;
-    }, [packages, searchQuery, sortMode]);
+    }, [packages, searchQuery, sortMode, scanSlots]);
 
     const clearFilters = useCallback(() => setSearchQuery(""), []);
 
@@ -72,7 +59,8 @@ export const useFilters = (packages: VarPackage[]) => {
         sortMode, setSortMode,
         isSortDropdownOpen, setIsSortDropdownOpen,
         handleSortChange,
-        filteredPkgs,
+        filteredPkgs: slotView.packages,
+        pendingCount: slotView.pendingCount,
         clearFilters
     };
 };

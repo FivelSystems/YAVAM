@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { VarPackage, PackageAnalysis, ScanStageProgress, ScanStages } from '../types';
+import { IDLE_SLOTS, ScanSlots } from '../utils/slotLedger';
 import { fetchWithAuth } from '../services/api';
 
 const EMPTY_STAGES: ScanStages = {
@@ -88,6 +89,11 @@ export const usePackages = (activeLibraryPath: string) => {
 
     const normPath = (p: string) => p.replace(/\\/g, '/').toLowerCase();
 
+    const [slotsState, setScanSlots] = useState<ScanSlots>(IDLE_SLOTS);
+    const slotsEpochRef = useRef(0);
+    const placeSlots = () => setScanSlots({ phase: 'placed', epoch: ++slotsEpochRef.current });
+    const scanSlots = loading ? slotsState : IDLE_SLOTS;
+
     // ── Cancel ────────────────────────────────────────────────────────────────
     const cancelScan = useCallback(async (options: { resetLoading?: boolean } = {}) => {
         const { resetLoading = true } = options;
@@ -137,6 +143,7 @@ export const usePackages = (activeLibraryPath: string) => {
         }
 
         const currentId = ++scanSessionId.current;
+        setScanSlots(IDLE_SLOTS);
         setLoading(true);
         setScanError(null);
         setScanStages(EMPTY_STAGES);
@@ -164,6 +171,7 @@ export const usePackages = (activeLibraryPath: string) => {
                 cached.forEach(p => knownPathsRef.current.add(normPath(p.filePath)));
                 cacheSeededRef.current = true;
                 setPackages(cached.map(p => ({ ...p, scanPhase: 'analyzed' as const })));
+                placeSlots();
             } else {
                 setPackages([]);
             }
@@ -171,6 +179,9 @@ export const usePackages = (activeLibraryPath: string) => {
             setPackages([]);
         }
         setFilteredPkgs([]);
+
+        let isGridHeld = !cacheSeededRef.current && !!window.runtime;
+        if (isGridHeld) setScanSlots({ phase: 'held', epoch: ++slotsEpochRef.current });
 
         if (window.runtime) {
             // Remove stale listeners
@@ -238,12 +249,32 @@ export const usePackages = (activeLibraryPath: string) => {
                 });
             };
 
+            const enumeratedPaths = new Set<string>();
+            let enumerationTotal = 0;
+            let isEnumerationDone = false;
+
+            // Releases the held grid in the same batch as the final enumeration flush,
+            // so the full ordered set appears at once. Arrival order is irrelevant:
+            // slots come from sorting the whole set.
+            const releaseGridWhenEnumerated = () => {
+                if (!isGridHeld) return;
+                const isTotalKnown = enumerationTotal > 0 || isEnumerationDone;
+                if (!isTotalKnown || enumeratedPaths.size < enumerationTotal) return;
+                isGridHeld = false;
+                if (flushTimer) clearTimeout(flushTimer);
+                flushTimer = null;
+                batchFlush();
+                placeSlots();
+            };
+
             // Phase 1 — Light Pass
             // @ts-ignore
             window.runtime.EventsOn('package:discovered', (data: VarPackage) => {
                 if (scanSessionId.current !== currentId) return;
                 seenThisScanRef.current.add(normPath(data.filePath));
+                enumeratedPaths.add(normPath(data.filePath));
                 discoveredBuffer.push(data);
+                if (isGridHeld) releaseGridWhenEnumerated();
                 const now = Date.now();
                 if (now - lastFlush > 200) scheduleFlush(true);
                 else scheduleFlush();
@@ -288,6 +319,11 @@ export const usePackages = (activeLibraryPath: string) => {
                     ...prev,
                     [sp.stage]: { current: sp.current, total: sp.total, done: sp.done },
                 }));
+                if (sp.stage === 'discovery') {
+                    enumerationTotal = sp.total;
+                    isEnumerationDone = sp.done;
+                    releaseGridWhenEnumerated();
+                }
             });
 
             // Scan complete
@@ -400,6 +436,7 @@ export const usePackages = (activeLibraryPath: string) => {
         packages,
         setPackages,
         scanError,
+        scanSlots,
         filteredPkgs,
         setFilteredPkgs,
         availableTags,
