@@ -1,3 +1,4 @@
+import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { usePackages } from './usePackages';
@@ -379,6 +380,24 @@ describe('re-adding an indexed library with no cached rows', () => {
         streamDiscovery(result);
         emit('scan:complete');
         expect(names(result)).toEqual(allNames);
+        expect(result.current.filters.pendingCount).toBe(0);
+    });
+});
+
+describe('cold scan under React.StrictMode', () => {
+    const strictWrapper = ({ children }: { children: React.ReactNode }) =>
+        React.createElement(React.StrictMode, null, children);
+
+    it('places every discovered package even though state updaters run twice', async () => {
+        const { result } = renderHook(useGrid, { wrapper: strictWrapper });
+        await startScan(result);
+
+        discoveryStage(0, 3);
+        ['Charlie', 'Alpha', 'Bravo'].forEach(name => emit('package:discovered', buildPackage(name)));
+        advanceBatch();
+
+        expect(result.current.packageLogic.scanSlots.phase).toBe('placed');
+        expect(names(result)).toEqual(['Alpha', 'Bravo', 'Charlie']);
         expect(result.current.filters.pendingCount).toBe(0);
     });
 });

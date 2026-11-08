@@ -236,16 +236,22 @@ export const usePackages = (activeLibraryPath: string) => {
             const applyBatch = (toDiscover: VarPackage[], toScan: VarPackage[]) => {
                 if (toDiscover.length === 0 && toScan.length === 0) return;
 
+                // Updaters run twice under StrictMode, so the ref is settled out here.
+                const newRows: VarPackage[] = [];
+                for (const p of toDiscover) {
+                    const norm = normPath(p.filePath);
+                    if (knownPathsRef.current.has(norm)) continue;
+                    knownPathsRef.current.add(norm);
+                    if (!norm.includes(libNorm)) continue;
+                    newRows.push({ ...p, isEnabled: p.filePath.endsWith('.var'), scanPhase: 'discovered' });
+                }
+
                 setPackages(prev => {
                     const map = new Map<string, VarPackage>(prev.map(p => [p.filePath, p]));
                     let changed = false;
 
-                    for (const p of toDiscover) {
-                        const norm = normPath(p.filePath);
-                        if (knownPathsRef.current.has(norm)) continue;
-                        knownPathsRef.current.add(norm);
-                        if (!norm.includes(libNorm)) continue;
-                        map.set(p.filePath, { ...p, isEnabled: p.filePath.endsWith('.var'), scanPhase: 'discovered' });
+                    for (const row of newRows) {
+                        map.set(row.filePath, row);
                         changed = true;
                     }
 
