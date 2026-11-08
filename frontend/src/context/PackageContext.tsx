@@ -54,9 +54,7 @@ export const PackageProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     // Auto-scan when library changes
     useEffect(() => {
-        if (activeLibraryPath) {
-            packageLogic.scanPackages();
-        }
+        packageLogic.scanPackages();
     }, [activeLibraryPath]);
 
     return (
