@@ -9,7 +9,6 @@ declare global {
                     ScanPackages(vamPath: string): Promise<any>;
                     TogglePackage(pkgPath: string, enable: boolean, vamPath: string): Promise<string>;
                     InstallFiles(files: string[], vamPath: string): Promise<string[]>;
-                    GetFilters(vamPath: string): Promise<string[]>;
                 };
             };
         };

@@ -37,8 +37,6 @@ export function CutFileToClipboard(arg1:string):Promise<void>;
 
 export function DeleteFileToRecycleBin(arg1:string):Promise<void>;
 
-export function DisableOldVersions(arg1:string,arg2:string,arg3:string):Promise<void>;
-
 export function DownloadPackage(arg1:string,arg2:string):Promise<void>;
 
 export function ExportSettings():Promise<string>;
@@ -58,8 +56,6 @@ export function GetConfiguredLibraries():Promise<Array<string>>;
 export function GetDiskSpace(arg1:string):Promise<manager.DiskSpaceInfo>;
 
 export function GetFileDetails(arg1:Array<string>):Promise<Array<models.FileDetail>>;
-
-export function GetFilters(arg1:string):Promise<Array<string>>;
 
 export function GetLibraryCounts(arg1:Array<string>):Promise<Record<string, number>>;
 

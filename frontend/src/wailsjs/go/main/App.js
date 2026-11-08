@@ -62,10 +62,6 @@ export function DeleteFileToRecycleBin(arg1) {
   return window['go']['main']['App']['DeleteFileToRecycleBin'](arg1);
 }
 
-export function DisableOldVersions(arg1, arg2, arg3) {
-  return window['go']['main']['App']['DisableOldVersions'](arg1, arg2, arg3);
-}
-
 export function DownloadPackage(arg1, arg2) {
   return window['go']['main']['App']['DownloadPackage'](arg1, arg2);
 }
@@ -104,10 +100,6 @@ export function GetDiskSpace(arg1) {
 
 export function GetFileDetails(arg1) {
   return window['go']['main']['App']['GetFileDetails'](arg1);
-}
-
-export function GetFilters(arg1) {
-  return window['go']['main']['App']['GetFilters'](arg1);
 }
 
 export function GetLibraryCounts(arg1) {
