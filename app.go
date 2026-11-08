@@ -472,50 +472,11 @@ func (a *App) ScanPackages(vamPath string) error {
 	return nil
 }
 
-// GetFilters returns the list of unique tags/creators found
-func (a *App) GetFilters(vamPath string) ([]string, error) {
-	var pkgs []models.VarPackage
-	err := a.manager.ScanAndAnalyze(a.ctx, vamPath, func(p models.VarPackage) {
-		pkgs = append(pkgs, p)
-	}, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	// Extract tags
-	tagSet := make(map[string]bool)
-	for _, p := range pkgs {
-		for _, t := range p.Tags {
-			tagSet[t] = true
-		}
-	}
-	var tags []string
-	for t := range tagSet {
-		tags = append(tags, t)
-	}
-	return tags, nil
-}
-
 // TogglePackage enables or disables a package
 func (a *App) TogglePackage(pkgPath string, enable bool, vamPath string, merge bool) (string, error) {
 	// For this call we don't strictly need the full list if we trust the path,
 	// passing nil for list for now as implementation above didn't use it except to search validation which we removed.
 	return a.manager.TogglePackage(nil, pkgPath, enable, vamPath, merge)
-}
-
-// DisableOldVersions removes older versions of a package
-func (a *App) DisableOldVersions(creator string, pkgName string, vamPath string) error {
-	// We need the latest state, so we scan first? Or trust frontend?
-	// The manager method implementation needs the package list.
-	// For efficiency, let's scan internally.
-	var pkgs []models.VarPackage
-	err := a.manager.ScanAndAnalyze(a.ctx, vamPath, func(p models.VarPackage) {
-		pkgs = append(pkgs, p)
-	}, nil)
-	if err != nil {
-		return err
-	}
-	return a.manager.DisableOldVersions(pkgs, creator, pkgName, vamPath)
 }
 
 // InstallFiles handles dropped files

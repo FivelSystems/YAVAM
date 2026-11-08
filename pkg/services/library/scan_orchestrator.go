@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 	"yavam/pkg/cache"
 	"yavam/pkg/database"
 	"yavam/pkg/models"
@@ -256,8 +255,6 @@ func (o *scanOrchestrator) runThreePhase(ctx context.Context, rawPkgs []models.V
 				o.onStage(ScanStageProgress{Stage: StageScanning, Current: current, Total: total})
 			}
 		}(path)
-
-		time.Sleep(time.Microsecond)
 	}
 
 	wg.Wait()

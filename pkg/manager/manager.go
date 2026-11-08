@@ -101,11 +101,6 @@ func NewManager(sys system.SystemService, lib library.LibraryService, cfg config
 	return m
 }
 
-// ScanAndAnalyze delegates to LibraryService (legacy)
-func (m *Manager) ScanAndAnalyze(ctx context.Context, rootPath string, onPackage func(models.VarPackage), onProgress func(int, int)) error {
-	return m.library.Scan(ctx, rootPath, onPackage, onProgress)
-}
-
 // ScanFull runs the three-phase scan and delegates to LibraryService.
 func (m *Manager) ScanFull(
 	ctx context.Context,
@@ -155,24 +150,6 @@ func (m *Manager) SetPackageRating(family string, rating int) error {
 // SetPackageFavorite marks/unmarks a package family ("Creator.Name") as a favourite.
 func (m *Manager) SetPackageFavorite(family string, favorite bool) error {
 	return m.library.SetFavorite(family, favorite)
-}
-
-// DisableOldVersions disables all versions of a package except the latest
-// DisableOldVersions delegates to LibraryService
-func (m *Manager) DisableOldVersions(pkgs []models.VarPackage, creator string, packageName string, vamPath string) error {
-	if err := m.ValidatePath(vamPath); err != nil {
-		return err
-	}
-	if !isPlainPackageNamePart(creator) || !isPlainPackageNamePart(packageName) {
-		return fmt.Errorf("invalid package identifier")
-	}
-	return m.library.DisableOldVersions(creator, packageName, vamPath)
-}
-
-// isPlainPackageNamePart rejects identifiers that could alter the file pattern
-// built from them (separators, wildcards, parent references).
-func isPlainPackageNamePart(part string) bool {
-	return part != "" && !strings.ContainsAny(part, `/\*?[]`) && !strings.Contains(part, "..")
 }
 
 // TogglePackage delegates to LibraryService to rename packages between .var and .var.disabled

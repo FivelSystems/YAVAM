@@ -20,20 +20,16 @@ type PackageAnalysis struct {
 
 // LinkPass runs full dependency, duplicate and orphan analysis over all scanned packages.
 //
-// resolvers are tried in order for dependency resolution; the first one that resolves a dep wins.
-// Pass a LocalResolver as the first argument. Future callers may append a MultiLibraryResolver or
-// OnlineResolver — no changes to this function are needed.
+// Dependencies are resolved against the packages in pkgs themselves.
 //
 // This function is intentionally pure: it takes a slice and returns analysis results without
 // mutating the input packages. The caller (scan_orchestrator) applies them back.
-func LinkPass(pkgs []models.VarPackage, resolvers ...DependencyResolver) []PackageAnalysis {
+func LinkPass(pkgs []models.VarPackage) []PackageAnalysis {
 	if len(pkgs) == 0 {
 		return nil
 	}
 
-	// ── Build ID sets for dependency resolution ──────────────────────────────
-	// Collect all package IDs once; resolvers use these internally.
-	// (LocalResolver is already built — this step is for orphan/duplicate detection.)
+	resolver := newLocalResolver(pkgs)
 
 	// ── Group packages by "Creator.PackageName" for duplicate detection ──────
 	type group struct {
@@ -186,7 +182,7 @@ func LinkPass(pkgs []models.VarPackage, resolvers ...DependencyResolver) []Packa
 			}
 		}
 
-		// Missing dependency detection — uses supplied resolvers in order
+		// Missing dependency detection
 		if p.IsEnabled && !p.IsCorrupt && p.Meta.Dependencies != nil {
 			for depID := range p.Meta.Dependencies {
 				dLower := strings.ToLower(depID)
@@ -196,37 +192,8 @@ func LinkPass(pkgs []models.VarPackage, resolvers ...DependencyResolver) []Packa
 					continue
 				}
 
-				resolved := false
-				for _, r := range resolvers {
-					if r.ResolveExact(depID) || r.ResolveBase(depID) {
-						resolved = true
-						break
-					}
-					// .latest resolution
-					if strings.HasSuffix(dLower, ".latest") {
-						base := dLower[:len(dLower)-7]
-						if r.ResolveBase(base) {
-							resolved = true
-							break
-						}
-					}
-					// Recursive base lookup (handles multi-dot package names)
-					temp := dLower
-					for strings.Contains(temp, ".") {
-						last := strings.LastIndex(temp, ".")
-						temp = temp[:last]
-						if r.ResolveBase(temp) {
-							resolved = true
-							break
-						}
-					}
-					if resolved {
-						break
-					}
-				}
-
-				if !resolved {
-					a.MissingDeps = append(a.MissingDeps, depID)
+					if !resolver.resolves(depID) {
+						a.MissingDeps = append(a.MissingDeps, depID)
 				}
 			}
 		}
@@ -254,8 +221,7 @@ func LinkPass(pkgs []models.VarPackage, resolvers ...DependencyResolver) []Packa
 // CheckDependencies analyzes packages for missing dependencies.
 // This is preserved for backward compatibility; internally it now uses LinkPass.
 func (s *defaultLibraryService) CheckDependencies(pkgs []models.VarPackage) []models.VarPackage {
-	resolver := NewLocalResolver(pkgs)
-	analyses := LinkPass(pkgs, resolver)
+	analyses := LinkPass(pkgs)
 	byPath := make(map[string]PackageAnalysis, len(analyses))
 	for _, a := range analyses {
 		byPath[a.FilePath] = a
