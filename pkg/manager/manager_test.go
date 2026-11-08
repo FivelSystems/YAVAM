@@ -1,10 +1,14 @@
 package manager
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"yavam/pkg/database"
+	"yavam/pkg/models"
 	"yavam/pkg/services/config"
 	"yavam/pkg/services/library"
 	"yavam/pkg/services/system"
@@ -156,6 +160,38 @@ func TestLibraryCRUDViaManager(t *testing.T) {
 	libs = m.GetLibraries()
 	if len(libs) != 2 || libs[0] != "/lib/gamma" {
 		t.Fatalf("after SetLibraries, expected gamma first, got %v", libs)
+	}
+}
+
+func TestScanFullRefusesUnconfiguredPathWithoutRegisteringIt(t *testing.T) {
+	m, cleanup := testManagerWithDB(t)
+	defer cleanup()
+	configured := t.TempDir()
+	unconfigured := t.TempDir()
+	if err := m.AddLibrary(configured); err != nil {
+		t.Fatalf("AddLibrary: %v", err)
+	}
+	noop := func(models.VarPackage) {}
+	scan := func(path string) error {
+		return m.ScanFull(context.Background(), path, noop, noop, func([]library.PackageAnalysis) {}, func(library.ScanStageProgress) {})
+	}
+
+	for name, path := range map[string]string{
+		"unknown root":     unconfigured,
+		"inside a library": filepath.Join(configured, "sub"),
+	} {
+		if err := scan(path); !errors.Is(err, ErrPathNotAllowed) {
+			t.Errorf("%s: got %v, want ErrPathNotAllowed", name, err)
+		}
+	}
+	if libs := m.GetLibraries(); len(libs) != 1 {
+		t.Fatalf("scan registered a library: %v", libs)
+	}
+	if err := scan(configured); err != nil {
+		t.Fatalf("scan of a configured library: %v", err)
+	}
+	if err := scan(strings.ToUpper(configured) + string(os.PathSeparator)); err != nil {
+		t.Fatalf("scan of a configured library spelled with other casing and a trailing separator: %v", err)
 	}
 }
 

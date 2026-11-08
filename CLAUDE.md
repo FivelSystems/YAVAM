@@ -82,12 +82,13 @@ fatal.
 - No native `alert`/`confirm`; use the Modal/Toast components.
 
 ### Data model (important)
-- **`config.json` is the source of truth** for configured library paths and
-  host-level settings.
-- **SQLite is an index/cache** rebuilt from disk scans, plus a small amount of
-  genuinely new data (ratings/favourites/notes in `user_metadata`). Library paths
-  are mirrored *from* config.json into the DB on launch, so an older build that
-  predates the DB still works off config.json.
+- **`config.json` holds host-level settings only.**
+- **SQLite is an index/cache for package data** rebuilt from disk scans, but the
+  database file is **not disposable**: it is also the source of truth for the
+  configured library list (`libraries` table) and the only home of ratings,
+  favourites and notes (`user_metadata`). A `libraries` array left in config.json by
+  a pre-DB build is imported once and cleared. Never delete `yavam.db` without a
+  verified backup.
 - **Settings split:** host/system settings → `config.json` (backend). Per-device
   view preferences (grid size, sort) → `localStorage` (client). Rule of thumb: if
   a mobile user needs a different value than the desktop user, it's `localStorage`.
