@@ -50,6 +50,12 @@ func (c *ThumbnailCache) Get(pkgPath string, modTime time.Time, size int64) ([]b
 	return data, true
 }
 
+// Has reports whether a thumbnail is cached for the given package identity without reading it.
+func (c *ThumbnailCache) Has(pkgPath string, modTime time.Time, size int64) bool {
+	info, err := os.Stat(c.cachePath(c.cacheKey(pkgPath, modTime, size)))
+	return err == nil && info.Mode().IsRegular()
+}
+
 // Set writes thumbnail bytes to disk for the given package identity.
 // Errors are non-fatal — a cache write failure just means the next scan will re-parse the zip.
 func (c *ThumbnailCache) Set(pkgPath string, modTime time.Time, size int64, data []byte) error {

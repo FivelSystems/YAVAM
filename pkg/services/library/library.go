@@ -6,6 +6,7 @@ import (
 	"yavam/pkg/cache"
 	"yavam/pkg/database"
 	"yavam/pkg/fs"
+	"yavam/pkg/parser"
 	"yavam/pkg/scanner"
 	"yavam/pkg/services/system"
 )
@@ -16,6 +17,8 @@ type defaultLibraryService struct {
 	fs         fs.FileSystem
 	thumbCache *cache.ThumbnailCache
 	db         *database.DB // nil = no persistence (tests / legacy callers)
+
+	extractThumbnail func(pkgPath string) ([]byte, error)
 
 	// active holds state for the currently-running scan so priority bumps
 	// from SetCurrentPage / Prioritize can reach the orchestrator.
@@ -44,5 +47,12 @@ func NewLibraryService(sys system.SystemService, fileSystem fs.FileSystem, db *d
 		fs:         fileSystem,
 		thumbCache: tc,
 		db:         db,
+
+		extractThumbnail: extractThumbnailFromPackage,
 	}
+}
+
+func extractThumbnailFromPackage(pkgPath string) ([]byte, error) {
+	_, thumbBytes, _, err := parser.ParseVarMetadata(pkgPath)
+	return thumbBytes, err
 }
