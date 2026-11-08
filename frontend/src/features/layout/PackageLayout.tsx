@@ -5,6 +5,7 @@ import { VarPackage, DependencyLocation } from '../../types';
 import CardGrid from '../library/CardGrid';
 import { Pagination } from '../../components/common/Pagination';
 import RightSidebar from '../library/RightSidebar';
+import { ScanHoldNotice, ScanPendingNotice } from '../library/ScanGridNotices';
 import { usePackageContext } from '../../context/PackageContext';
 import { useFilterContext } from '../../context/FilterContext';
 import { useSelectionContext } from '../../context/SelectionContext';
@@ -36,9 +37,9 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
     censorThumbnails, blurAmount, hidePackageNames, hideCreatorNames
 }) => {
     // Context Consumption
-    const { packages, scanError, loading: isScanActive } = usePackageContext();
+    const { packages, scanError, loading: isScanActive, scanSlots, scanStages } = usePackageContext();
     const {
-        filteredPkgs, currentPage, itemsPerPage, setCurrentPage,
+        filteredPkgs, pendingCount, currentPage, itemsPerPage, setCurrentPage,
         searchQuery, setSearchQuery, clearFilters
     } = useFilterContext();
     const {
@@ -246,9 +247,11 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
                     </div>
                 )}
 
+                <ScanPendingNotice count={pendingCount} />
+
                 {/* CardGrid Container */}
                 <div ref={scrollContainerRef} className="flex-1 overflow-auto p-4 pb-32 md:pb-24 custom-scrollbar">
-                    <CardGrid
+                    {scanSlots.phase === 'held' ? <ScanHoldNotice stages={scanStages} /> : <CardGrid
                         packages={currentSlice}
                         currentPath={activeLibraryPath}
                         totalCount={packages.length}
@@ -269,7 +272,7 @@ export const PackageLayout: React.FC<PackageLayoutProps> = ({
                         isFiltered={searchQuery.trim().length > 0}
                         onClearFilters={clearFilters}
                         isScanActive={isScanActive}
-                    />
+                    />}
                 </div>
 
                 {/* Pagination Footer */}

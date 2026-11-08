@@ -9,8 +9,7 @@ import (
 func newTestOrchestrator(root string) *scanOrchestrator {
 	return &scanOrchestrator{
 		libraryPath: root,
-		highCh:      make(chan string, 512),
-		bumpPaths:   make(chan []string, 64),
+		bumpPaths:   make(chan priorityRequest, 64),
 	}
 }
 
@@ -135,7 +134,7 @@ func TestPrioritizeDuringActiveScanGoesToBumpChannel(t *testing.T) {
 
 	select {
 	case got := <-orc.bumpPaths:
-		if len(got) != 1 || got[0] != target {
+		if len(got.paths) != 1 || got.paths[0] != target || got.replace {
 			t.Fatalf("unexpected bump %v", got)
 		}
 	default:

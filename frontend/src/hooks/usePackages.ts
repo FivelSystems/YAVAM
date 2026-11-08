@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { VarPackage, PackageAnalysis, ScanStageProgress, ScanStages } from '../types';
+import { IDLE_SLOTS, ScanSlots } from '../utils/slotLedger';
 import { fetchWithAuth } from '../services/api';
 
 const EMPTY_STAGES: ScanStages = {
@@ -64,6 +65,8 @@ const applyAnalysis = (p: VarPackage, a: PackageAnalysis): VarPackage => {
     return pkgSignature(p) === pkgSignature(merged) ? p : merged;
 };
 
+const normPath = (p: string) => p.replace(/\\/g, '/').toLowerCase();
+
 export const usePackages = (activeLibraryPath: string) => {
     const [packages, setPackages] = useState<VarPackage[]>([]);
     const [scanError, setScanError] = useState<string | null>(null);
@@ -86,7 +89,12 @@ export const usePackages = (activeLibraryPath: string) => {
     const seenThisScanRef = useRef(new Set<string>());
     const cacheSeededRef = useRef(false);
 
-    const normPath = (p: string) => p.replace(/\\/g, '/').toLowerCase();
+    const visiblePathsRef = useRef(new Set<string>());
+
+    const [slotsState, setScanSlots] = useState<ScanSlots>(IDLE_SLOTS);
+    const slotsEpochRef = useRef(0);
+    const placeSlots = () => setScanSlots({ phase: 'placed', epoch: ++slotsEpochRef.current });
+    const scanSlots = loading ? slotsState : IDLE_SLOTS;
 
     // ── Cancel ────────────────────────────────────────────────────────────────
     const cancelScan = useCallback(async (options: { resetLoading?: boolean } = {}) => {
@@ -113,6 +121,7 @@ export const usePackages = (activeLibraryPath: string) => {
      * Called by FilterContext when the page changes, and by PackageCard on click.
      */
     const prioritizePackages = useCallback((paths: string[]) => {
+        visiblePathsRef.current = new Set(paths.map(normPath));
         if (!window.go || paths.length === 0) return;
         window.go.main.App.SetCurrentPage(paths).catch(() => { /* non-fatal */ });
     }, []);
@@ -137,6 +146,7 @@ export const usePackages = (activeLibraryPath: string) => {
         }
 
         const currentId = ++scanSessionId.current;
+        setScanSlots(IDLE_SLOTS);
         setLoading(true);
         setScanError(null);
         setScanStages(EMPTY_STAGES);
@@ -164,6 +174,7 @@ export const usePackages = (activeLibraryPath: string) => {
                 cached.forEach(p => knownPathsRef.current.add(normPath(p.filePath)));
                 cacheSeededRef.current = true;
                 setPackages(cached.map(p => ({ ...p, scanPhase: 'analyzed' as const })));
+                placeSlots();
             } else {
                 setPackages([]);
             }
@@ -171,6 +182,9 @@ export const usePackages = (activeLibraryPath: string) => {
             setPackages([]);
         }
         setFilteredPkgs([]);
+
+        let isGridHeld = !cacheSeededRef.current && !!window.runtime;
+        if (isGridHeld) setScanSlots({ phase: 'held', epoch: ++slotsEpochRef.current });
 
         if (window.runtime) {
             // Remove stale listeners
@@ -186,8 +200,26 @@ export const usePackages = (activeLibraryPath: string) => {
             // ── Buffered batch flush for discovered/scanned ───────────────────
             let discoveredBuffer: VarPackage[] = [];
             let scannedBuffer: VarPackage[] = [];
+            let visibleScannedBuffer: VarPackage[] = [];
             let lastFlush = Date.now();
             let flushTimer: ReturnType<typeof setTimeout> | null = null;
+            let frameHandle: number | null = null;
+
+            const cancelFrameFlush = () => {
+                if (frameHandle === null) return;
+                cancelAnimationFrame(frameHandle);
+                frameHandle = null;
+            };
+
+            // Visible-page results skip the 200 ms batch: one flush per frame, in
+            // arrival order, so on-screen cards turn identified as results come in.
+            const scheduleFrameFlush = () => {
+                if (frameHandle !== null) return;
+                frameHandle = requestAnimationFrame(() => {
+                    frameHandle = null;
+                    flushVisible();
+                });
+            };
 
             const scheduleFlush = (immediate = false) => {
                 if (flushTimer) clearTimeout(flushTimer);
@@ -201,24 +233,25 @@ export const usePackages = (activeLibraryPath: string) => {
 
             const libNorm = currentScanPath.replace(/\\/g, '/').toLowerCase();
 
-            const batchFlush = () => {
-                if (scanSessionId.current !== currentId) return;
-
-                const toDiscover = discoveredBuffer.splice(0);
-                const toScan = scannedBuffer.splice(0);
-
+            const applyBatch = (toDiscover: VarPackage[], toScan: VarPackage[]) => {
                 if (toDiscover.length === 0 && toScan.length === 0) return;
+
+                // Updaters run twice under StrictMode, so the ref is settled out here.
+                const newRows: VarPackage[] = [];
+                for (const p of toDiscover) {
+                    const norm = normPath(p.filePath);
+                    if (knownPathsRef.current.has(norm)) continue;
+                    knownPathsRef.current.add(norm);
+                    if (!norm.includes(libNorm)) continue;
+                    newRows.push({ ...p, isEnabled: p.filePath.endsWith('.var'), scanPhase: 'discovered' });
+                }
 
                 setPackages(prev => {
                     const map = new Map<string, VarPackage>(prev.map(p => [p.filePath, p]));
                     let changed = false;
 
-                    for (const p of toDiscover) {
-                        const norm = normPath(p.filePath);
-                        if (knownPathsRef.current.has(norm)) continue;
-                        knownPathsRef.current.add(norm);
-                        if (!norm.includes(libNorm)) continue;
-                        map.set(p.filePath, { ...p, isEnabled: p.filePath.endsWith('.var'), scanPhase: 'discovered' });
+                    for (const row of newRows) {
+                        map.set(row.filePath, row);
                         changed = true;
                     }
 
@@ -238,12 +271,58 @@ export const usePackages = (activeLibraryPath: string) => {
                 });
             };
 
+            const batchFlush = () => {
+                if (scanSessionId.current !== currentId) return;
+                cancelFrameFlush();
+                const toScan = [...scannedBuffer.splice(0), ...visibleScannedBuffer.splice(0)];
+                applyBatch(discoveredBuffer.splice(0), toScan);
+            };
+
+            // Discovered rows always go first: a result must never land before its row.
+            const flushVisible = () => {
+                if (scanSessionId.current !== currentId) return;
+                applyBatch(discoveredBuffer.splice(0), visibleScannedBuffer.splice(0));
+            };
+
+            const enumeratedPaths = new Set<string>();
+            let enumerationTotal = 0;
+            let isEnumerationDone = false;
+            let hasPlacedEmptySnapshot = false;
+
+            // Releases the held grid in the same batch as the final enumeration flush,
+            // so the full ordered set appears at once. Arrival order is irrelevant:
+            // slots come from sorting the whole set.
+            const releaseGridWhenEnumerated = () => {
+                if (!isGridHeld) return;
+                const isTotalKnown = enumerationTotal > 0 || isEnumerationDone;
+                if (!isTotalKnown || enumeratedPaths.size < enumerationTotal) return;
+                isGridHeld = false;
+                hasPlacedEmptySnapshot = enumeratedPaths.size === 0;
+                if (flushTimer) clearTimeout(flushTimer);
+                flushTimer = null;
+                batchFlush();
+                placeSlots();
+            };
+
+            // A "finished, empty" enumeration followed by files can only be a stale
+            // stage event; placing on it would turn the whole library into pending.
+            const reholdIfPlacedEmpty = () => {
+                if (!hasPlacedEmptySnapshot) return;
+                hasPlacedEmptySnapshot = false;
+                isGridHeld = true;
+                isEnumerationDone = false;
+                setScanSlots({ phase: 'held', epoch: ++slotsEpochRef.current });
+            };
+
             // Phase 1 — Light Pass
             // @ts-ignore
             window.runtime.EventsOn('package:discovered', (data: VarPackage) => {
                 if (scanSessionId.current !== currentId) return;
                 seenThisScanRef.current.add(normPath(data.filePath));
+                enumeratedPaths.add(normPath(data.filePath));
                 discoveredBuffer.push(data);
+                reholdIfPlacedEmpty();
+                releaseGridWhenEnumerated();
                 const now = Date.now();
                 if (now - lastFlush > 200) scheduleFlush(true);
                 else scheduleFlush();
@@ -254,6 +333,11 @@ export const usePackages = (activeLibraryPath: string) => {
             window.runtime.EventsOn('package:scanned', (data: VarPackage) => {
                 if (scanSessionId.current !== currentId) return;
                 seenThisScanRef.current.add(normPath(data.filePath));
+                if (visiblePathsRef.current.has(normPath(data.filePath))) {
+                    visibleScannedBuffer.push(data);
+                    scheduleFrameFlush();
+                    return;
+                }
                 scannedBuffer.push(data);
                 const now = Date.now();
                 if (now - lastFlush > 200) scheduleFlush(true);
@@ -288,6 +372,11 @@ export const usePackages = (activeLibraryPath: string) => {
                     ...prev,
                     [sp.stage]: { current: sp.current, total: sp.total, done: sp.done },
                 }));
+                if (sp.stage === 'discovery') {
+                    enumerationTotal = sp.total;
+                    isEnumerationDone = sp.done;
+                    releaseGridWhenEnumerated();
+                }
             });
 
             // Scan complete
@@ -400,6 +489,7 @@ export const usePackages = (activeLibraryPath: string) => {
         packages,
         setPackages,
         scanError,
+        scanSlots,
         filteredPkgs,
         setFilteredPkgs,
         availableTags,

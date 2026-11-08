@@ -3,6 +3,7 @@ import { usePackages } from '../hooks/usePackages';
 import { useLibraryContext } from './LibraryContext';
 import { useKeybindSubscription } from './KeybindContext';
 import { VarPackage, ScanStages } from '../types';
+import { ScanSlots } from '../utils/slotLedger';
 
 interface PackageContextType {
     packages: VarPackage[];
@@ -14,6 +15,9 @@ interface PackageContextType {
     loading: boolean;
     setLoading: (loading: boolean) => void;
     scanError: string | null;
+
+    /** Whether the grid is held, placed or live relative to the running scan. */
+    scanSlots: ScanSlots;
 
     /** Per-phase progress for the stacked progress bar. */
     scanStages: ScanStages;

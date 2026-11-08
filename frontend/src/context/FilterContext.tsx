@@ -12,6 +12,8 @@ interface FilterContextType {
     sortMode: string;
     setSortMode: (s: string) => void;
     filteredPkgs: VarPackage[]; // The RESULT of filtering
+    /** Matching packages held back until the running scan completes. */
+    pendingCount: number;
     clearFilters: () => void;
     handleSortChange: (m: string) => void;
     isSortDropdownOpen: boolean;
@@ -25,8 +27,8 @@ interface FilterContextType {
 const FilterContext = createContext<FilterContextType | undefined>(undefined);
 
 export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const { packages } = usePackageContext();
-    const filterLogic = useFilters(packages);
+    const { packages, scanSlots } = usePackageContext();
+    const filterLogic = useFilters(packages, scanSlots);
 
     // Pagination State (Added to FilterContext)
     const [requestedPage, setCurrentPage] = React.useState(FIRST_PAGE);
@@ -49,16 +51,19 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     // Notify the backend Hard Pass about the current page so it gets priority.
     const { prioritizePackages } = usePackageContext();
+    const lastSentPageRef = React.useRef('');
     React.useEffect(() => {
         if (filterLogic.filteredPkgs.length === 0) return;
         const start = (currentPage - 1) * itemsPerPage;
         const pagePaths = filterLogic.filteredPkgs
             .slice(start, start + itemsPerPage)
             .map(p => p.filePath);
-        if (pagePaths.length > 0) {
-            prioritizePackages(pagePaths);
-        }
-    }, [currentPage, itemsPerPage, filterLogic.filteredPkgs, prioritizePackages]);
+        if (pagePaths.length === 0) return;
+        const pageSignature = `${scanSlots.epoch}\n${pagePaths.join('\n')}`;
+        if (pageSignature === lastSentPageRef.current) return;
+        lastSentPageRef.current = pageSignature;
+        prioritizePackages(pagePaths);
+    }, [currentPage, itemsPerPage, filterLogic.filteredPkgs, scanSlots.epoch, prioritizePackages]);
 
 
     // Keybind: Focus Search

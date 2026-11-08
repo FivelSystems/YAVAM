@@ -41,6 +41,13 @@ func (o *scanOrchestrator) parseMetadata() metadataParser {
 	return parser.ParseVarMetadataWithOptions
 }
 
+// priorityRequest is a focus change sent to a running scan. replace marks a page
+// focus that supersedes earlier priority paths; otherwise paths are appended.
+type priorityRequest struct {
+	paths   []string
+	replace bool
+}
+
 // scanOrchestrator runs the three-phase scan for a single library path.
 type scanOrchestrator struct {
 	thumbCache  *cache.ThumbnailCache
@@ -51,11 +58,15 @@ type scanOrchestrator struct {
 	parse metadataParser
 
 	// Priority queue for the Hard Pass.
-	highCh      chan string
-	normalQueue []string
-	pendingMap  map[string]bool
-	normalMu    sync.Mutex
-	bumpPaths   chan []string
+	// All queue state below is guarded by normalMu. priorityQueue is a slice
+	// rather than a channel so replacing the focus can reorder it and a large
+	// page can never overflow it; its size is bounded by the pending paths.
+	priorityQueue []string
+	prioritized   map[string]bool
+	normalQueue   []string
+	pendingMap    map[string]bool
+	normalMu      sync.Mutex
+	bumpPaths     chan priorityRequest
 
 	// initialFocus is requested before registration; applied once the queue is built.
 	initialFocus []string
@@ -139,8 +150,8 @@ func (o *scanOrchestrator) runThreePhase(ctx context.Context, rawPkgs []models.V
 				return
 			case <-stopBump:
 				return
-			case paths := <-o.bumpPaths:
-				o.prepend(paths)
+			case request := <-o.bumpPaths:
+				o.prioritize(request.paths, request.replace)
 			}
 		}
 	}()
@@ -368,72 +379,95 @@ func (o *scanOrchestrator) fillQueue(discovered []models.VarPackage) {
 		o.normalQueue = append(o.normalQueue, p.FilePath)
 		o.pendingMap[p.FilePath] = true
 	}
+	o.priorityQueue = nil
+	o.prioritized = nil
 	o.normalMu.Unlock()
-	o.prepend(o.initialFocus)
+	o.prioritize(o.initialFocus, true)
 }
 
-// nextPath returns the next path to scan, preferring highCh over normalQueue.
+// nextPath returns the next path to scan, preferring the priority queue over normalQueue.
 func (o *scanOrchestrator) nextPath() string {
-	for {
-		select {
-		case p := <-o.highCh:
-			o.normalMu.Lock()
-			if o.pendingMap[p] {
-				delete(o.pendingMap, p)
-				o.normalMu.Unlock()
-				return p
-			}
-			o.normalMu.Unlock()
-			// Already dispatched; ignore and loop.
-		default:
-			o.normalMu.Lock()
-			if len(o.normalQueue) == 0 {
-				o.normalMu.Unlock()
-				return ""
-			}
-			p := o.normalQueue[0]
-			o.normalQueue = o.normalQueue[1:]
-			if o.pendingMap[p] {
-				delete(o.pendingMap, p)
-				o.normalMu.Unlock()
-				return p
-			}
-			o.normalMu.Unlock()
-			// Should be rare, but loop just in case.
+	o.normalMu.Lock()
+	defer o.normalMu.Unlock()
+	for len(o.priorityQueue) > 0 {
+		p := o.priorityQueue[0]
+		o.priorityQueue = o.priorityQueue[1:]
+		delete(o.prioritized, p)
+		if o.pendingMap[p] {
+			delete(o.pendingMap, p)
+			return p
 		}
 	}
+	for len(o.normalQueue) > 0 {
+		p := o.normalQueue[0]
+		o.normalQueue = o.normalQueue[1:]
+		if o.pendingMap[p] {
+			delete(o.pendingMap, p)
+			return p
+		}
+	}
+	return ""
 }
 
-// prepend moves the given paths to the front of the high-priority channel.
-func (o *scanOrchestrator) prepend(paths []string) {
-	set := make(map[string]bool, len(paths))
-	var toPush []string
-
+// prioritize queues the given paths ahead of the normal queue, in the given
+// order. With replace, priority paths of an earlier request that no worker has
+// started yet are first returned to the front of the normal queue, so a new page
+// focus is never delayed by the previous one. Without replace the paths are
+// appended behind the current priority set. Paths not pending in this scan are
+// ignored, and the priority queue never holds more than the pending paths.
+func (o *scanOrchestrator) prioritize(paths []string, replace bool) {
 	o.normalMu.Lock()
+	defer o.normalMu.Unlock()
+
+	if replace {
+		o.demotePriorityQueue()
+	}
+
+	accepted := make(map[string]bool, len(paths))
+	var ordered []string
 	for _, p := range paths {
+		if !o.pendingMap[p] || o.prioritized[p] || accepted[p] {
+			continue
+		}
+		accepted[p] = true
+		ordered = append(ordered, p)
+	}
+	if len(ordered) == 0 {
+		return
+	}
+
+	remaining := o.normalQueue[:0]
+	for _, p := range o.normalQueue {
+		if !accepted[p] {
+			remaining = append(remaining, p)
+		}
+	}
+	o.normalQueue = remaining
+
+	if o.prioritized == nil {
+		o.prioritized = make(map[string]bool, len(ordered))
+	}
+	for _, p := range ordered {
+		o.prioritized[p] = true
+	}
+	o.priorityQueue = append(o.priorityQueue, ordered...)
+}
+
+// demotePriorityQueue moves not-yet-dispatched priority paths back to the front
+// of the normal queue, keeping their relative order. Caller holds normalMu.
+func (o *scanOrchestrator) demotePriorityQueue() {
+	if len(o.priorityQueue) == 0 {
+		return
+	}
+	demoted := make([]string, 0, len(o.priorityQueue)+len(o.normalQueue))
+	for _, p := range o.priorityQueue {
 		if o.pendingMap[p] {
-			toPush = append(toPush, p)
-			set[p] = true
+			demoted = append(demoted, p)
 		}
 	}
-
-	if len(toPush) > 0 {
-		filtered := o.normalQueue[:0]
-		for _, p := range o.normalQueue {
-			if !set[p] {
-				filtered = append(filtered, p)
-			}
-		}
-		o.normalQueue = filtered
-	}
-	o.normalMu.Unlock()
-
-	for _, p := range toPush {
-		select {
-		case o.highCh <- p:
-		default:
-		}
-	}
+	o.normalQueue = append(demoted, o.normalQueue...)
+	o.priorityQueue = nil
+	o.prioritized = nil
 }
 
 // packageToRow converts a scanned VarPackage into a database.PackageRow for the
