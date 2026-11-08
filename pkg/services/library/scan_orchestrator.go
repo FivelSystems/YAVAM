@@ -58,6 +58,9 @@ type scanOrchestrator struct {
 	normalMu    sync.Mutex
 	bumpPaths   chan []string
 
+	// initialFocus is requested before registration; applied once the queue is built.
+	initialFocus []string
+
 	// Callbacks
 	onDiscovered   func(models.VarPackage)
 	onScanned      func(models.VarPackage)
@@ -106,14 +109,7 @@ func (o *scanOrchestrator) runThreePhase(ctx context.Context, rawPkgs []models.V
 	// touched by this scan, meaning the file no longer exists on disk.
 	scanStart := database.Now()
 
-	o.normalMu.Lock()
-	o.normalQueue = make([]string, 0, total)
-	o.pendingMap = make(map[string]bool, total)
-	for _, p := range discovered {
-		o.normalQueue = append(o.normalQueue, p.FilePath)
-		o.pendingMap[p.FilePath] = true
-	}
-	o.normalMu.Unlock()
+	o.fillQueue(discovered)
 
 	byPath := make(map[string]models.VarPackage, total)
 	for _, p := range discovered {
@@ -363,6 +359,20 @@ func persistDependencies(db *database.DB, pkgs []models.VarPackage) {
 	if err := db.ReplaceDependencies(dependentKeys, edges); err != nil {
 		log.Printf("[Scanner] DB dependency persist error: %v", err)
 	}
+}
+
+// fillQueue queues every discovered package, then moves the initial focus
+// ahead. Paths not discovered by this scan are ignored by prepend.
+func (o *scanOrchestrator) fillQueue(discovered []models.VarPackage) {
+	o.normalMu.Lock()
+	o.normalQueue = make([]string, 0, len(discovered))
+	o.pendingMap = make(map[string]bool, len(discovered))
+	for _, p := range discovered {
+		o.normalQueue = append(o.normalQueue, p.FilePath)
+		o.pendingMap[p.FilePath] = true
+	}
+	o.normalMu.Unlock()
+	o.prepend(o.initialFocus)
 }
 
 // nextPath returns the next path to scan, preferring highCh over normalQueue.

@@ -29,6 +29,7 @@
 - **Smoother Scanning**: The grid no longer flickers or feels sluggish while a scan runs. Cards only update when their data actually changes, so you can browse uninterrupted as content fills in the background.
 - **Test Isolation**: Automated tests no longer write fixture libraries (e.g. `C:\Allowed`) into the real application database.
 - **No More Console Flash on Copy**: Copying a package (`CTRL+C` or the context menu) no longer briefly pops up a console window. File copying now uses the native Windows clipboard directly instead of launching PowerShell in the background.
+- **Visible Packages First on Re-scan ([#133](https://github.com/FivelSystems/YAVAM/issues/133))**: On a library re-scan, the packages visible on screen are now identified first, instead of the page focus being lost when it arrived before the scan started.
 - **Cancelled Scans Keep Your Library ([#131](https://github.com/FivelSystems/YAVAM/issues/131))**: Cancelling a library scan no longer removes packages from the library index or shows the scan as completed.
 - **Faster Repeat Scans ([#130](https://github.com/FivelSystems/YAVAM/issues/130))**: Library scans are faster on repeat runs: cached thumbnails are no longer read back or re-extracted from each package.
 - **Faster Thumbnails ([#129](https://github.com/FivelSystems/YAVAM/issues/129))**: Package thumbnails now load from the thumbnail cache instead of re-reading each package, so browsing images is faster.
