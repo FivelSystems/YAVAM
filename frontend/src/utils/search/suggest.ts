@@ -5,6 +5,7 @@ export interface SearchVocabulary {
     creators: string[];
     types: string[];
     tags: string[];
+    licenses: string[];
 }
 
 export interface Suggestion {
@@ -28,6 +29,7 @@ export const SEARCHABLE_FIELDS: { field: TokenField; hint: string }[] = [
     { field: 'rating', hint: '1–5 stars, or >=4' },
     { field: 'favorite', hint: 'true / false' },
     { field: 'size', hint: '>100mb, 10mb..1gb' },
+    { field: 'license', hint: 'cc-by, pc, fc…' },
 ];
 
 const STATUS_VALUES = ['enabled', 'disabled', 'missing', 'corrupt', 'duplicate', 'removable', 'standalone'];
@@ -53,6 +55,7 @@ const valuePool = (field: TokenField, vocab: SearchVocabulary): string[] | null 
         case 'rating': return RATING_VALUES;
         case 'favorite': return FAVORITE_VALUES;
         case 'size': return SIZE_TEMPLATES;
+        case 'license': return vocab.licenses;
         default: return null;
     }
 };

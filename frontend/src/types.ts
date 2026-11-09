@@ -19,6 +19,8 @@ export interface VarPackage {
     isDuplicate: boolean;
     isExactDuplicate: boolean;
     type?: string;
+    /** License declared in the package's meta.json (e.g. "CC BY", "PC EA"); empty when absent. */
+    licenseType?: string;
     categories: string[];
     tags?: string[];
     isCorrupt?: boolean;

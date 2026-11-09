@@ -92,9 +92,42 @@ describe('combining semantics', () => {
         expect(run('creator:callimohu -status:corrupt', [scene, corrupt])).toEqual([scene]);
     });
 
-    it('matches tags OR-ed with a required license... but license is inert', () => {
-        // tag:dress OR tag:clothing, license ignored (no data yet) → both callimohu items
-        expect(run('tag:dress +tag:clothing license:cc-by', all)).toEqual([scene, look]);
+    it('ANDs a license with the OR-ed tag group', () => {
+        const ccBy = pkg({ tags: ['dress'], licenseType: 'CC BY' });
+        const pc = pkg({ tags: ['clothing'], licenseType: 'PC' });
+        expect(run('tag:dress +tag:clothing license:cc-by', [ccBy, pc])).toEqual([ccBy]);
+    });
+});
+
+describe('license matching', () => {
+    const fc = pkg({ licenseType: 'FC' });
+    const ccBy = pkg({ licenseType: 'CC BY' });
+    const ccBySa = pkg({ licenseType: 'CC BY-SA' });
+    const ccByNcNd = pkg({ licenseType: 'CC BY-NC-ND' });
+    const pc = pkg({ licenseType: 'PC' });
+    const pcEa = pkg({ licenseType: 'PC EA' });
+    const undeclared = pkg({ licenseType: '' });
+    const all = [fc, ccBy, ccBySa, ccByNcNd, pc, pcEa, undeclared];
+
+    it('matches cc-by exactly, not the CC BY-* family', () => {
+        expect(run('license:cc-by', all)).toEqual([ccBy]);
+    });
+
+    it('maps spaces to hyphens and ignores case', () => {
+        expect(run('license:pc-ea', all)).toEqual([pcEa]);
+        expect(run('license:PC', all)).toEqual([pc]);
+    });
+
+    it('ORs several licenses', () => {
+        expect(run('license:pc +license:pc-ea', all)).toEqual([pc, pcEa]);
+    });
+
+    it('excludes with the - operator', () => {
+        expect(run('-license:pc -license:pc-ea', [pc, pcEa, fc])).toEqual([fc]);
+    });
+
+    it('treats a missing licenseType as unspecified', () => {
+        expect(run('license:unspecified', all)).toEqual([undeclared]);
     });
 });
 
