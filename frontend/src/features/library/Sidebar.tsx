@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Layers, Package, Settings, Trash2, GripVertical, Heart, Boxes, Users, Tags, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Layers, Package, Settings, Trash2, GripVertical, Heart, Boxes, Users, Tags, Scale, X } from 'lucide-react';
 import clsx from 'clsx';
 import { useMemo, useState, useEffect } from 'react';
 import { Reorder, useDragControls } from "framer-motion";
@@ -6,7 +6,7 @@ import { usePackageContext } from '../../context/PackageContext';
 import { useFilterContext } from '../../context/FilterContext';
 import { useLibraryContext } from '../../context/LibraryContext';
 import { STATUS_FILTERS } from '../../constants';
-import { hasToken, toggleToken, getRating, setRating } from '../../utils/search';
+import { hasToken, toggleToken, getRating, setRating, licenseSlug, isNonRedistributableLicense, UNSPECIFIED_LICENSE } from '../../utils/search';
 import { FilterDropdown, FilterOption, badgeTone } from '../../components/ui/FilterDropdown';
 import { Toggle } from '../../components/ui/Toggle';
 import { RatingStars } from '../../components/ui/RatingStars';
@@ -148,6 +148,25 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
             .sort((a, b) => a[0].localeCompare(b[0]))
             .map(([value, count]) => ({ value, label: value, count, tone: creatorStatus[value] }));
     }, [packages, creatorStatus]);
+
+    const licenseOptions = useMemo<FilterOption[]>(() => {
+        const buckets = new Map<string, FilterOption>();
+        packages.forEach(p => {
+            const value = licenseSlug(p.licenseType);
+            const bucket = buckets.get(value);
+            if (bucket) {
+                bucket.count = (bucket.count ?? 0) + 1;
+                return;
+            }
+            buckets.set(value, {
+                value,
+                label: value === UNSPECIFIED_LICENSE ? 'Unspecified' : (p.licenseType ?? '').trim(),
+                count: 1,
+                tone: isNonRedistributableLicense(value) ? 'warning' : undefined,
+            });
+        });
+        return Array.from(buckets.values()).sort((a, b) => (b.count ?? 0) - (a.count ?? 0));
+    }, [packages]);
 
     const statusCounts = useMemo(() => {
         const validPkgs = packages.filter(p => !p.isCorrupt);
@@ -318,6 +337,15 @@ const Sidebar = ({ onOpenSettings }: SidebarProps) => {
                         searchable
                         searchPlaceholder="Filter categories…"
                         onOptionContextMenu={(value, e) => handleContextMenu(e, 'type', value)}
+                    />
+                    <FilterDropdown
+                        label="License"
+                        icon={<Scale size={16} />}
+                        options={licenseOptions}
+                        isSelected={(v) => hasToken(searchQuery, 'license', v)}
+                        onToggle={(v) => setSearchQuery(toggleToken(searchQuery, 'license', v))}
+                        searchable
+                        searchPlaceholder="Filter licenses…"
                     />
                 </div>
 

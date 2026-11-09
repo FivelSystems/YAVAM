@@ -5,6 +5,7 @@ const vocab: SearchVocabulary = {
     creators: ['AcidBubbles', 'dnaddr', 'shaper', 'Long Name'],
     types: ['scene', 'look', 'clothing'],
     tags: ['dress', 'hair', 'clothing'],
+    licenses: ['cc-by', 'cc-by-sa', 'pc', 'pc-ea'],
 };
 
 describe('getSuggestions', () => {
@@ -53,10 +54,13 @@ describe('getSuggestions', () => {
 
     it('lists all searchable fields when empty', () => {
         const s = getSuggestions('', vocab);
-        expect(s.map(x => x.field)).toEqual(['creator', 'type', 'tag', 'status', 'rating', 'favorite', 'size']);
+        expect(s.map(x => x.field)).toEqual(['creator', 'type', 'tag', 'status', 'rating', 'favorite', 'size', 'license']);
     });
 
-    it('returns nothing for an inert field prefix', () => {
-        expect(getSuggestions('license:cc', vocab)).toEqual([]);
+    it('suggests license values after the field prefix', () => {
+        expect(getSuggestions('license:cc', vocab).map(x => x.insertText)).toEqual([
+            'license:cc-by',
+            'license:cc-by-sa',
+        ]);
     });
 });

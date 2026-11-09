@@ -1,8 +1,8 @@
 # Design: Tokenised search syntax
 
 > **Status:** Partially implemented — `status`, `creator`, `type`, `tag`, `size`,
-> `rating`, `favorite` are backed and filter live; `license` is parsed but not
-> yet backed (see issue #59); `^` and `library:` are not yet implemented.
+> `rating`, `favorite`, `license` are backed and filter live; `^` and `library:`
+> are not yet implemented.
 > **Roadmap:** [Smart search](../roadmap/search.md).
 
 The smart searchbar parses a space-separated list of tokens. Combining rule:
@@ -117,13 +117,21 @@ installed in more than one library. It generalises to any field but only pays of
 where an identity can appear on both sides. It depends on the `library:` token,
 which itself waits on the scan/validation rework that switching libraries needs.
 
+## License matching
+
+`license:` compares the package's declared `licenseType` after normalising it:
+lower-cased, whitespace replaced by `-` (`CC BY-SA` → `cc-by-sa`, `PC EA` →
+`pc-ea`). The match is **exact**: `license:cc-by` does not match `CC BY-SA`,
+`CC BY-NC` or any other variant, because each license grants different rights
+and the filter is a safeguarding signal. To cover several, OR them
+(`license:cc-by +license:cc-by-sa`). A package with no declared license
+matches `license:unspecified`.
+
 ## Not-yet-backed tokens
 
-`license:` is parsed and shown as a chip but does not filter until license data
-is surfaced; it is an inert no-op until then. `status:hidden` and
-`status:visible` likewise wait on the dependency-visibility mode.
-`status:standalone`, `status:removable`, `rating:`, and `favorite:` are backed
-and filter live. Ratings/favourites are joined onto each package from the
+`status:hidden` and `status:visible` wait on the dependency-visibility mode.
+`status:standalone`, `status:removable`, `rating:`, `favorite:`, and `license:`
+are backed and filter live. Ratings/favourites are joined onto each package from the
 `user_metadata` store (keyed by family) on the cache-first read path; they are
 written on desktop through the package right-click menu and the sidebar controls.
 

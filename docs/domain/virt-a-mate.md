@@ -175,9 +175,9 @@ the Hub's current policy.
 - The scanner already stores the declared value (`licenseType`) per package and per
   dependency; the values above are the set to expect, plus any free-text value an
   author typed.
-- A `license:` filter and any UI grouping must decide how the Creative Commons values
-  combine (for example whether one token matches only `CC BY` or every `CC BY-*`
-  variant). That decision is tracked with the filter work.
+- The `license:` filter matches each declared value exactly: `license:cc-by` does not
+  include `CC BY-SA` or the other `CC BY-*` variants, since each grants different
+  rights. See [search-syntax](../design/search-syntax.md#license-matching).
 - License is a safeguarding signal for local libraries: `PC` and `PC EA` content cannot
   be re-acquired from the Hub for free, so it deserves more protection from deletion
   than `FC` or `CC BY` content.

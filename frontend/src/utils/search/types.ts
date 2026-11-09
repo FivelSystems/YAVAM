@@ -15,8 +15,8 @@ export type TokenOp = 'require' | 'exclude';
  * matched as a substring against name/creator/package name.
  *
  * `rating` and `favorite` are backed by the user_metadata store (joined onto each
- * package by family). `license` is recognised by the grammar but has no backing
- * data yet; the matcher treats it as inert (see design/search-syntax.md).
+ * package by family). `license` matches the declared license exactly (see
+ * `licenseSlug`).
  */
 export type TokenField =
     | 'text'
@@ -28,9 +28,6 @@ export type TokenField =
     | 'rating'
     | 'favorite'
     | 'license';
-
-/** Fields whose tokens cannot be evaluated yet (no data on VarPackage). */
-export const INERT_FIELDS: readonly TokenField[] = ['license'];
 
 export interface SearchToken {
     field: TokenField;

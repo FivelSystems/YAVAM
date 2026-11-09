@@ -6,7 +6,8 @@ import { useFilterContext } from '../../../context/FilterContext';
 import { usePackageContext } from '../../../context/PackageContext';
 import { parseSearchQuery, buildQueryString } from '../../../utils/search';
 import { getSuggestions, SearchVocabulary, Suggestion } from '../../../utils/search/suggest';
-import { INERT_FIELDS, SearchToken } from '../../../utils/search/types';
+import { licenseSlug } from '../../../utils/search/license';
+import { SearchToken } from '../../../utils/search/types';
 
 interface SearchBarProps {
     /** Rendered at the right edge inside the pill (e.g. the sort control). */
@@ -15,7 +16,6 @@ interface SearchBarProps {
 
 const tokenTone = (token: SearchToken): string => {
     if (token.op === 'exclude') return 'bg-red-500/15 text-red-300 border-red-500/30';
-    if (INERT_FIELDS.includes(token.field)) return 'bg-gray-600/40 text-gray-400 border-gray-500/30 line-through decoration-gray-500';
     return 'bg-blue-500/15 text-blue-300 border-blue-500/30';
 };
 
@@ -65,7 +65,9 @@ export const SearchBar: React.FC<SearchBarProps> = ({ trailing }) => {
             else if (p.type) typeSet.add(p.type);
         });
 
-        return { creators, types: Array.from(typeSet).sort(), tags: availableTags };
+        const licenses = Array.from(new Set(packages.map(p => licenseSlug(p.licenseType)))).sort();
+
+        return { creators, types: Array.from(typeSet).sort(), tags: availableTags, licenses };
     }, [packages, availableTags]);
 
     // Publish chips + free text as one query. Free text filters live as typed;
@@ -176,7 +178,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ trailing }) => {
                                 'inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-md border text-xs font-medium max-w-full',
                                 tokenTone(token),
                             )}
-                            title={INERT_FIELDS.includes(token.field) ? `${token.field}: has no data yet` : token.raw}
+                            title={token.raw}
                         >
                             <span className="truncate">{token.raw}</span>
                             <button

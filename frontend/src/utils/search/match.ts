@@ -1,5 +1,6 @@
 import { VarPackage } from '../../types';
-import { INERT_FIELDS, PackagePredicate, ParsedQuery, SearchToken } from './types';
+import { licenseSlug } from './license';
+import { PackagePredicate, ParsedQuery, SearchToken } from './types';
 
 const SIZE_UNITS: Record<string, number> = {
     b: 1,
@@ -116,6 +117,7 @@ const tokenMatches = (token: SearchToken, pkg: VarPackage): boolean => {
         case 'rating': return matchRating(token.value, pkg);
         // `favorite:true` keeps favourites; `favorite:false` keeps the rest.
         case 'favorite': return !!pkg.isFavorite === (token.value !== 'false');
+        case 'license': return licenseSlug(pkg.licenseType) === token.value;
         default: return true;
     }
 };
@@ -126,14 +128,12 @@ const tokenMatches = (token: SearchToken, pkg: VarPackage): boolean => {
  * - each free-text word is its own AND clause (a search box expects "red dress"
  *   to mean both, not either).
  * - `exclude` tokens drop any package they match.
- * - inert fields (license) do not constrain until their data lands.
  */
 export const buildMatcher = (query: ParsedQuery): PackagePredicate => {
     const requireGroups = new Map<string, SearchToken[]>();
     const excludes: SearchToken[] = [];
 
     query.tokens.forEach((token, index) => {
-        if (INERT_FIELDS.includes(token.field)) return;
         if (token.op === 'exclude') {
             excludes.push(token);
             return;
